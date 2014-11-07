@@ -1,0 +1,7 @@
+# Basic makefile rules
+-include $(OBJS:.o=.d)
+
+%.o : %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) -MM $(CFLAGS) $^ > $*.d
+	sed -i -e "s#^$(@F)#$@#" $*.d
