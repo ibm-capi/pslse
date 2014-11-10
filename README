@@ -1,18 +1,23 @@
-+----------------------------------------+
++---------------------------------------+
 | Power Service Layer Simulation Engine |
-+----------------------------------------+
++---------------------------------------+
 
-This repository contains code for both simulation and real hardware connection and testing of a customer designed
-Accelerated Functional Unit (AFU) to a Power Service Layer (PSL) as part of IBM's CAPI interconnect on Power8 systems.
-The repository is broken into 2 directories.  The "libcxl" directory contains abstraction layer code that interfaces
-with kernel level "cxl" code for communicating with an AFU in real hardware.  This code serves 2 purposes.  First, it
-provides a simple interface to write code to for interfacing with AFU devices.  Second, if code is written using this
-abstraction layer then the same code can be compiled with an alternate version of libcxl.c that exists in the "pslse"
-directory for co-simulation with the AFU on most industry standard Verilog simulators.  The "pslse" directory contains 
-the code to interface with a Verilog simulator.
+This repository contains code for both simulation and real hardware connection
+and testing of a customer designed Accelerated Functional Unit (AFU) to the
+Power Service Layer (PSL) as part of IBM's CAPI interconnect on Power8 systems.
+The repository is broken into 2 directories.  The "libcxl" directory contains
+abstraction layer code that interfaces with kernel level "cxl" code for
+communicating with an AFU in real hardware.  This code serves two purposes.
+First, it provides a simple interface to write code to for interfacing with AFU
+devices.  Second, if code is written using this abstraction layer then the same
+code can be compiled with an alternate version of libcxl.c that exists in the
+"pslse" directory for co-simulation with the AFU on most industry standard
+Verilog simulators.  The "pslse" directory contains the code to interface with
+a Verilog simulator.
 
-First is should be noted that only a handful of functions are currently supported in the both environments.  This list
-should grow but in programming of applications should focus only on using the currently supported functions.  
+First is should be noted that only a handful of functions are currently
+supported in the both environments.  This list should grow but in programming
+of applications should focus only on using the currently supported functions.
 
 Functions currenty supported in both "libcxl" and "pslse":
 - struct cxl_afu_h * cxl_afu_open_dev (char *path);
@@ -25,18 +30,26 @@ Functions currenty supported in both "libcxl" and "pslse":
 - void cxl_mmio_write32 (struct cxl_afu_h *afu, uint64_t offset, uint632t data);
 - uint32_t cxl_mmio_read32 (struct cxl_afu_h *afu, uint64_t offset);
 
-The "pslse" directory contains the replacement libcxl.c file in addition to a shim_host.dat file and the two
-directories afu_driver and psl_interface.  When compiling for simulation the libcxl.c would replace the real hardware
-version of libcxl.c during code compilation.  During compile the file in psl_interface will be needed as well in
-support of this version of libcxl.c.  psl_interface contains the code for abstracting the PSL-AFU interface into a
-network socket connection so that two different programs, the application and the Verilog simulator, can communicate
-with each other in terms of PSL interface transactions.  The afu_driver code contains the code that will be needed by
-the Verilog simulator.  The afu_driver code is also dependent on the code in psl_interface.
+The "pslse" directory contains the replacement libcxl.c file in addition to a
+shim_host.dat file and the two directories afu_driver and psl_interface.
+When compiling for simulation the libcxl.c would replace the real hardware
+version of libcxl.c during code compilation.  During compile the file in
+psl_interface will be needed as well in support of this version of libcxl.c.
+The directory psl_interface contains the code for abstracting the PSL-AFU
+interface into a network socket connection so that two different programs,
+the application and the Verilog simulator, can communicate with each other in
+terms of PSL interface transactions.  The afu_driver code contains the code
+that will be needed by the Verilog simulator.  The afu_driver code is also
+dependent on the code in psl_interface.
 
-The afu_driver directory contains two directories src and verilog.  The verilog directory contains the file top.v
-which is a top level wrapper that will instantiate your AFU Verilog code.  The src directory contains afu_driver.c
-which works hand in hand with top.v.  You'll need to modify the Makefile in src to set VPI_USER_H_DIR to point to
-the directory that contains the file vpi_user.h necessary for the Verilog PLI 2.0 interface.  This file should be
-part of the simulator installation and is completely seperate from this code.  Once this modification has been made
-then you should be able to "make" the afu_driver.sl using gcc.  This is the shared code that the Verilog simulator 
-use for the Verilog PSI 2.0 interface with top.v.  The exact setup details depend on which simulator you are using.
+The afu_driver directory contains two directories src and verilog.  The verilog
+directory contains the file top.v which is a top level wrapper that will
+instantiate your AFU Verilog code.  The src directory contains afu_driver.c
+which works hand in hand with top.v.  You'll need to modify the Makefile in
+src to set VPI_USER_H_DIR to point to the directory that contains the file
+vpi_user.h necessary for the Verilog PLI 2.0 interface.  This file should be
+part of the simulator installation and is completely seperate from this code.
+Once this modification has been made then you should be able to "make" the
+afu_driver.sl using gcc.  This is the shared code that the Verilog simulator
+use for the Verilog PSI 2.0 interface with top.v.  The exact setup details
+depend on which simulator you are using.
