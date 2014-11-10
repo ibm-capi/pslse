@@ -10,10 +10,10 @@ abstraction layer code that interfaces with kernel level "cxl" code for
 communicating with an AFU in real hardware.  This code serves two purposes.
 First, it provides a simple interface to write code to for interfacing with AFU
 devices.  Second, if code is written using this abstraction layer then the same
-code can be compiled with an alternate version of libcxl.c that exists in the
-"pslse" directory for co-simulation with the AFU on most industry standard
-Verilog simulators.  The "pslse" directory contains the code to interface with
-a Verilog simulator.
+code can be compiled with an alternate version of libcxl.c and libcxl.h that
+exists in the "pslse" directory for co-simulation with the AFU on most
+industry standard Verilog simulators.  The "pslse" directory contains the code
+to interface with a Verilog simulator.
 
 First is should be noted that only a handful of functions are currently
 supported in the both environments.  This list should grow but in programming
