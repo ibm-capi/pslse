@@ -17,8 +17,8 @@
 #ifndef _LIBCXL_H
 #define _LIBCXL_H
 
-//#include <misc/cxl.h>
 #include <linux/types.h>
+//#include <misc/cxl.h>
 #include <stdbool.h>
 #include <stdint.h>
 
