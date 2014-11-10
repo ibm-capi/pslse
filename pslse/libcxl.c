@@ -36,7 +36,9 @@
 
 #define PAGED_RANDOMIZER 50	// Setting to smaller values means more
 				// frequent paged responses.
-				// 0 and 1 are illegal values.
+				// 0 disables all paged responses.
+				// 1 is an illegal value as every response
+				// would be paged.
 
 #define RESP_RANDOMIZER 10	// Setting to 1 achieves fastest responses,
 				// Large values increase response delays
