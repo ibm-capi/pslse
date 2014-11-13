@@ -535,6 +535,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	psl_event_reset (status.event);
 
 	// Connect to AFU server
+	short_delay();
 	fp = fopen ("shim_host.dat", "r");
 	if (!fp) {
 		perror ("fopen shim_host.dat");
@@ -671,6 +672,8 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
 	afu->desc.AFU_EB_offset = be64toh(status.mmio.data);
+
+	status.mmio.desc = 0;
 
 	return afu;
 }
