@@ -1183,8 +1183,11 @@ psl_afu_command (struct AFU_EVENT *event,
     {
       event->command_valid = 1;
       event->command_tag = tag;
+      event->command_tag_parity = tag_parity;
       event->command_code = code;
+      event->command_code_parity = code_parity;
       event->command_address = address;
+      event->command_address_parity = address_parity;
       event->command_size = size;
       event->command_abort = abort;
       event->command_handle = handle;
@@ -1229,6 +1232,7 @@ psl_afu_read_buffer_data (struct AFU_EVENT *event,
     {
       event->buffer_rdata_valid = 1;
       memcpy (event->buffer_rdata, read_data, length);
+      event->buffer_read_length = length;
       memcpy (event->buffer_rparity, read_parity, length / 64);
       return PSL_SUCCESS;
     }
