@@ -459,7 +459,7 @@ static void *psl(void *ptr) {
 	while (status.psl_state != PSL_DONE) {
 	        if (status.psl_state == PSL_INIT) {
 			psl_signal_afu_model (status.event);
-	        	status.psl_state == PSL_RUNNING;
+	        	status.psl_state = PSL_RUNNING;
 		}
 		if (status.cmd.request==AFU_REQUEST) {
 			if (psl_job_control (status.event, status.cmd.code,
@@ -845,6 +845,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 #ifdef DEBUG
 	printf ("MMIO write complete\n");
 #endif /* #ifdef DEBUG */
+	return 0;
 }
 
 int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data) {
