@@ -27,14 +27,9 @@
 #include "libcxl.h"
 #include "psl_interface/psl_interface.h"
 
-#define MAX_LINE_CHARS 1024
-#define CACHELINE_BYTES 128
-#define DWORDS_PER_CACHELINE 16
-#define BYTES_PER_DWORD 8
-
 #define ODD_PARITY 1		// 1=Odd parity, 0=Even parity
 
-#define PAGED_RANDOMIZER 50	// Setting to smaller values means more
+#define PAGED_RANDOMIZER 0	// Setting to smaller values means more
 				// frequent paged responses.
 				// 0 disables all paged responses.
 				// 1 is an illegal value as every response
@@ -43,6 +38,13 @@
 #define RESP_RANDOMIZER 10	// Setting to 1 achieves fastest responses,
 				// Large values increase response delays
 				// Zero is an illegal value
+
+// System constants
+#define MAX_LINE_CHARS 1024
+#define CACHELINE_BYTES 128
+#define DWORDS_PER_CACHELINE 16
+#define BYTES_PER_DWORD 8
+#define WORD_OFFSET 4
 
 struct afu_descriptor {
 	uint16_t num_ints_per_process;
@@ -63,8 +65,9 @@ struct afu_descriptor {
 struct cxl_afu_h {
 	const char *id;
 	pthread_t thread;
-	volatile __u32 flags;
+	volatile __u32 mmio_flags;
 	volatile int started;
+	volatile int attached;
 	volatile size_t mapped;
 	volatile struct afu_descriptor desc;
 };
@@ -76,6 +79,7 @@ struct afu_command {
 };
 
 enum PSL_STATE {
+	PSL_INIT,
 	PSL_RUNNING,
 	PSL_FLUSHING,
 	PSL_DONE
@@ -453,6 +457,10 @@ static void *psl(void *ptr) {
 	struct cxl_afu_h *afu = (struct cxl_afu_h *)ptr;
 
 	while (status.psl_state != PSL_DONE) {
+	        if (status.psl_state == PSL_INIT) {
+			psl_signal_afu_model (status.event);
+	        	status.psl_state == PSL_RUNNING;
+		}
 		if (status.cmd.request==AFU_REQUEST) {
 			if (psl_job_control (status.event, status.cmd.code,
 			    status.cmd.addr) == PSL_SUCCESS) {
@@ -535,7 +543,6 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	psl_event_reset (status.event);
 
 	// Connect to AFU server
-	short_delay();
 	fp = fopen ("shim_host.dat", "r");
 	if (!fp) {
 		perror ("fopen shim_host.dat");
@@ -593,7 +600,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	}
 
 	// Start PSL thread
-	status.psl_state = PSL_RUNNING;
+	status.psl_state = PSL_INIT;
 	status.event_occurred = 0;
 	status.credits = 64;
 	status.first_br = NULL;
@@ -601,6 +608,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	afu->id = afu_id;
 	afu->started = 0;
 	afu->mapped = 0;
+	afu->attached = 0;
 	pthread_create(&(afu->thread), NULL, psl, (void *) afu);
 
 	psl_aux1_change (status.event, status.credits);
@@ -699,6 +707,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		// FIXME: Timeout
 		short_delay();
 	}
+	afu->attached = 1;
 
 	return 0;
 }
@@ -725,19 +734,26 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 }
 
 int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
-	afu->flags = flags;
-	afu->mapped = 0;
-	if (afu->desc.req_prog_model && 0x0010) {
-		// Dedicated Process AFU
-		afu->mapped = 0x4000000; // 64MB, AFU Maximum
-	}
-	else {
-		// Only dedicated mode supported for now
-		errno = ENOSYS;
-		return -1;
+
+	if (flags & ~(CXL_MMIO_FLAGS_FULL))
+		goto err;
+	if (!afu->attached) {
+		fprintf (stderr, "ERROR:cxl_mmio_map:Must attach AFU first!\n");
+		goto err;
 	}
 
+	afu->mmio_flags = flags;
+	// Dedicated Process AFU
+	if (afu->desc.req_prog_model && 0x0010)
+		afu->mapped = 0x4000000; // 64MB, AFU Maximum
+	// Only dedicated mode supported for now
+	else
+		goto err;
+
 	return 0;
+err:
+	errno = ENODEV;
+	return -1;
 }
 
 int cxl_mmio_unmap(struct cxl_afu_h *afu) {
@@ -745,23 +761,23 @@ int cxl_mmio_unmap(struct cxl_afu_h *afu) {
 
 	return 0;
 }
-void cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
-	if (!afu->started)
-		return;
+
+int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
+	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped))
+		return -1;
+	if (offset % 2) {
+		fprintf(stderr, "cxl_mmio_write64: illegal offset of %d\n",
+			(int) offset);
+		return -1;
+	}
 
 #ifdef DEBUG
 	printf ("Sending MMIO read double word to AFU\n");
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 0;
 	status.mmio.dw = 1;
-	offset -= (offset % 2);
 	status.mmio.addr = offset;
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
-		status.mmio.data = htole64(data);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
-		status.mmio.data = htobe64(data);
-	else
-		status.mmio.data = data;
+	status.mmio.data = data;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
 	printf ("Waiting for MMIO ack from AFU\n");
@@ -771,12 +787,18 @@ void cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
 #ifdef DEBUG
 	printf ("MMIO write complete\n");
 #endif /* #ifdef DEBUG */
+	return 0;
 }
 
-uint64_t cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset) {
-	uint64_t value;
-	if (!afu->started || ((offset*4)>=afu->mapped)) {
-		value = 0xfeedb00ffeedb00full;
+int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
+	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped)) {
+		*data = 0xfeedb00ffeedb00full;
+		return -1;
+	}
+	if (offset % 2) {
+		fprintf(stderr, "cxl_mmio_write64: illegal offset of %d\n",
+			(int) offset);
+		return -1;
 	}
 
 #ifdef DEBUG
@@ -784,7 +806,6 @@ uint64_t cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset) {
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 1;
 	status.mmio.dw = 1;
-	offset -= (offset % 2);
 	status.mmio.addr = offset;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
@@ -792,22 +813,18 @@ uint64_t cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset) {
 #endif /* #ifdef DEBUG */
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
+	*data = status.mmio.data;
 #ifdef DEBUG
 	printf ("MMIO read complete\n");
 #endif /* #ifdef DEBUG */
-	value = status.mmio.data;
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
-		value = le64toh(value);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
-		value = be64toh(value);
-	return value;
+	return 0;
 }
 
-void cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
+int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 	uint64_t value;
 
-	if (!afu->started)
-		return;
+	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped))
+		return -1;
 
 	value = data;
 	value <<= 32;
@@ -818,12 +835,7 @@ void cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 	status.mmio.rnw = 0;
 	status.mmio.dw = 0;
 	status.mmio.addr = offset;
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
-		status.mmio.data = htole64(value);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
-		status.mmio.data = htobe64(value);
-	else
-		status.mmio.data = value;
+	status.mmio.data = value;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
 	printf ("Waiting for MMIO ack from AFU\n");
@@ -835,10 +847,10 @@ void cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 #endif /* #ifdef DEBUG */
 }
 
-uint32_t cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset) {
-	uint32_t data;
-	if (!afu->started || ((offset*4)>=afu->mapped)) {
-		return 0xfeedb00f;
+int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data) {
+	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped)) {
+		*data = 0xfeedb00f;
+		return -1;
 	}
 
 #ifdef DEBUG
@@ -853,13 +865,9 @@ uint32_t cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset) {
 #endif /* #ifdef DEBUG */
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
+	*data = (uint32_t) status.mmio.data;
 #ifdef DEBUG
 	printf ("MMIO read complete\n");
 #endif /* #ifdef DEBUG */
-	data = (uint32_t) status.mmio.data;
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
-		data = htole32(data);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
-		data = htobe32(data);
-	return data;
+	return 0;
 }

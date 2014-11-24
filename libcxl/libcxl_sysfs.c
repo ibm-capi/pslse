@@ -15,16 +15,18 @@
  */
 
 #define _GNU_SOURCE
-#include <fcntl.h>
-#include <misc/cxl.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <misc/cxl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include "libcxl.h"
+#include "libcxl_internal.h"
 
 enum cxl_sysfs_attr {
 	/* AFU */
@@ -168,7 +170,8 @@ static int scan_image(char *attr_str, long *majorp, long *minorp)
 	return (count == 0);
 }
 
-static char *cxl_sysfs_attr_name(enum cxl_sysfs_attr attr) {
+static char *sysfs_attr_name(enum cxl_sysfs_attr attr)
+{
 	if (OUT_OF_RANGE(attr))
 		return NULL;
 	return sysfs_entry[attr].name;
@@ -176,33 +179,68 @@ static char *cxl_sysfs_attr_name(enum cxl_sysfs_attr attr) {
 
 #define BUFLEN 256
 
-static char *cxl_read_sysfs_str(char *devname, enum cxl_sysfs_attr attr)
+static char *sysfs_get_path(char *path, enum cxl_sysfs_attr attr)
 {
-	char *sysfs_path;
+	char *attr_path, *new_path;
+	struct stat sb;
 	char *attr_name;
+
+	attr_name = sysfs_attr_name(attr);
+	if (attr_name == NULL)
+		return NULL;
+
+	path = strdup(path);
+	if (path == NULL)
+		return NULL;
+
+	/*
+	 * Try to open the attribute in sysfs.  If it doesn't exist, keep
+	 * following "device/" path down until we find it.
+	 */
+	while (stat(path, &sb) != -1) {
+		if (asprintf(&attr_path, "%s/%s", path, attr_name) == -1)
+			goto out2;
+
+		if (stat(attr_path, &sb) == 0) {
+			free(path);
+			return attr_path;
+		}
+
+		if (errno != ENOENT)
+			/* Something unexpected beside it not existing */
+			goto out1;
+
+		/* If it doesn't exist, walk down "device/" link */
+		if (asprintf(&new_path, "%s/device", path) == -1)
+			goto out1;
+
+		free(path);
+		path = new_path;
+		free(attr_path);
+	}
+	/* Directory doesn't exist */
+out1:
+	free(attr_path);
+out2:
+	free(path);
+	return NULL;
+}
+
+static char *read_sysfs_str(char *path, enum cxl_sysfs_attr attr)
+{
+	char *attr_path;
 	int fd, count;
 	char buf[BUFLEN];
 
-	if (devname == NULL)
+	if (path == NULL)
 		return NULL;
-	attr_name = cxl_sysfs_attr_name(attr);
-	if (attr_name == NULL)
+	attr_path = sysfs_get_path(path, attr);
+	if (attr_path == NULL)
 		return NULL;
-	asprintf(&sysfs_path, CXL_SYSFS_CLASS"/%s/%s", devname, attr_name);
-	if (sysfs_path == NULL)
+	fd = open(attr_path, O_RDONLY);
+	free(attr_path);
+	if (fd == -1)
 		return NULL;
-	fd = open(sysfs_path, O_RDONLY);
-	free(sysfs_path);
-	if (fd == -1) {
-		asprintf(&sysfs_path, CXL_SYSFS_CLASS"/%s/device/%s", devname,
-			attr_name);
-		if (sysfs_path == NULL)
-			return NULL;
-		fd = open(sysfs_path, O_RDONLY);
-		free(sysfs_path);
-		if (fd == -1)
-			return NULL;
-	}
 	count = read(fd, buf, BUFLEN);
 	close(fd);
 	if (count == -1)
@@ -211,8 +249,8 @@ static char *cxl_read_sysfs_str(char *devname, enum cxl_sysfs_attr attr)
 	return strdup(buf);
 }
 
-static int cxl_scan_sysfs_str(enum cxl_sysfs_attr attr, char *attr_str,
-			      long *majorp, long *minorp)
+static int scan_sysfs_str(enum cxl_sysfs_attr attr, char *attr_str,
+			  long *majorp, long *minorp)
 {
 	int (*scan_func)(char *attr_str, long *majorp, long *minorp);
 
@@ -220,99 +258,204 @@ static int cxl_scan_sysfs_str(enum cxl_sysfs_attr attr, char *attr_str,
 		return -1;
 	scan_func = sysfs_entry[attr].scan_func;
 	if (scan_func == NULL)
-		return 0;
+		return -1;
 	return (*scan_func)(attr_str, majorp, minorp);
 }
 
-static int cxl_read_sysfs(char *devname, enum cxl_sysfs_attr attr, long *majorp,
-		   long *minorp)
+static int read_sysfs(char *sysfs_path, enum cxl_sysfs_attr attr, long *majorp,
+		      long *minorp)
 {
 	char *buf;
 	int expected, ret;
 
-	if (devname == NULL)
-		return -1;
 	if (OUT_OF_RANGE(attr))
 		return -1;
-	if ((buf = cxl_read_sysfs_str(devname, attr)) == NULL)
+	if ((buf = read_sysfs_str(sysfs_path, attr)) == NULL)
 		return -1;
 	expected = sysfs_entry[attr].expected_num;
-	ret = cxl_scan_sysfs_str(attr, buf, majorp, minorp);
+	ret = scan_sysfs_str(attr, buf, majorp, minorp);
 	free(buf);
 	return (ret == expected) ? 0 : -1;
 }
 
-int cxl_get_api_version(char* devname, long *valp)
+static int read_sysfs_afu(struct cxl_afu_h *afu, enum cxl_sysfs_attr attr,
+			  long *majorp, long *minorp)
 {
-	return cxl_read_sysfs(devname, API_VERSION, valp, NULL);
+	if ((afu == NULL) || (afu->sysfs_path == NULL))
+		return -1;
+	return read_sysfs(afu->sysfs_path, attr, majorp, minorp);
+
 }
 
-int cxl_get_api_version_compatible(char* devname, long *valp)
+static int read_sysfs_adapter(struct cxl_adapter_h *adapter,
+			      enum cxl_sysfs_attr attr, long *majorp,
+			      long *minorp)
 {
-	return cxl_read_sysfs(devname, API_VERSION_COMPATIBLE, valp, NULL);
+	if ((adapter == NULL) || (adapter->sysfs_path == NULL))
+		return -1;
+	return read_sysfs(adapter->sysfs_path, attr, majorp, minorp);
 }
 
-int cxl_get_irqs_max(char* devname, long *valp)
+int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, IRQS_MAX, valp, NULL);
+	return read_sysfs_afu(afu, API_VERSION, valp, NULL);
 }
 
-int cxl_get_irqs_min(char* devname, long *valp)
+int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, IRQS_MIN, valp, NULL);
+	return read_sysfs_afu(afu, API_VERSION_COMPATIBLE, valp, NULL);
 }
 
-int cxl_get_mmio_size(char* devname, long *valp)
+int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, MMIO_SIZE, valp, NULL);
+	return read_sysfs_afu(afu, IRQS_MAX, valp, NULL);
 }
 
-int cxl_get_mode(char* devname, long *valp)
+int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, MODE, valp, NULL);
+	return read_sysfs_afu(afu, IRQS_MIN, valp, NULL);
 }
 
-int cxl_get_modes_supported(char* devname, long *valp)
+int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, MODES_SUPPORTED, valp, NULL);
+	return read_sysfs_afu(afu, MMIO_SIZE, valp, NULL);
 }
 
-int cxl_get_prefault_mode(char* devname, enum cxl_prefault_mode *valp)
+int cxl_get_mode(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, PREFAULT_MODE, (long *)valp, NULL);
+	return read_sysfs_afu(afu, MODE, valp, NULL);
 }
 
-int cxl_get_dev(char* devname, long *majorp, long *minorp)
+int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, DEV, majorp, minorp);
+	return read_sysfs_afu(afu, MODES_SUPPORTED, valp, NULL);
 }
 
-int cxl_get_pp_mmio_len(char* devname, long *valp)
+int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp)
 {
-	return cxl_read_sysfs(devname, PP_MMIO_LEN, valp, NULL);
+	long value;
+	int ret;
+
+	ret = read_sysfs_afu(afu, PREFAULT_MODE, &value, NULL);
+	*valp = (enum cxl_prefault_mode)value;
+	return ret;
 }
 
-int cxl_get_pp_mmio_off(char* devname, long *valp)
+int cxl_get_dev(struct cxl_afu_h *afu, long *majorp, long *minorp)
 {
-	return cxl_read_sysfs(devname, PP_MMIO_OFF, valp, NULL);
+	return read_sysfs_afu(afu, DEV, majorp, minorp);
 }
 
-int cxl_get_base_image(char* devname, long *valp)
+int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, BASE_IMAGE, valp, NULL);
+	return read_sysfs_afu(afu, PP_MMIO_LEN, valp, NULL);
 }
 
-int cxl_get_caia_version(char* devname, long *majorp, long *minorp)
+int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp)
 {
-	return cxl_read_sysfs(devname, CAIA_VERSION, majorp, minorp);
+	return read_sysfs_afu(afu, PP_MMIO_OFF, valp, NULL);
 }
 
-int cxl_get_image_loaded(char* devname, enum cxl_image *valp)
+int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp)
 {
-	return cxl_read_sysfs(devname, IMAGE_LOADED, (long *)valp, NULL);
+	return read_sysfs_adapter(adapter, BASE_IMAGE, valp, NULL);
 }
 
-int cxl_get_psl_revision(char* devname, long *valp)
+int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,
+			 long *minorp)
 {
-	return cxl_read_sysfs(devname, PSL_REVISION, valp, NULL);
+	return read_sysfs_adapter(adapter, CAIA_VERSION, majorp, minorp);
+}
+
+int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp)
+{
+	return read_sysfs_adapter(adapter, IMAGE_LOADED, (long *)valp, NULL);
+}
+
+int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp)
+{
+	return read_sysfs_adapter(adapter, PSL_REVISION, valp, NULL);
+}
+
+static int write_sysfs_str(char *path, enum cxl_sysfs_attr attr, char *str)
+{
+	char *attr_path;
+	int fd, count;
+
+	if (OUT_OF_RANGE(attr))
+		return -1;
+	if (path == NULL)
+		return -1;
+	attr_path = sysfs_get_path(path, attr);
+	if (attr_path == NULL)
+		return -1;
+	fd = open(attr_path, O_WRONLY);
+	free(attr_path);
+	if (fd == -1)
+		return -1;
+	count = write(fd, str, strlen(str));
+	close(fd);
+	if (count == -1)
+		return -1;
+	return 0;
+}
+
+static int write_sysfs_afu(struct cxl_afu_h *afu, enum cxl_sysfs_attr attr,
+			   char* str)
+{
+	if ((afu == NULL) || (afu->sysfs_path == NULL))
+		return -1;
+	return write_sysfs_str(afu->sysfs_path, attr, str);
+
+}
+
+int cxl_set_irqs_max(struct cxl_afu_h *afu, long value)
+{
+	char *buf;
+	int ret;
+
+	if (asprintf(&buf, "%ld", value) == -1)
+		return -1;
+	ret = write_sysfs_afu(afu, IRQS_MAX, buf);
+	free(buf);
+	return ret;
+}
+
+int cxl_set_mode(struct cxl_afu_h *afu, long value)
+{
+	char *str;
+
+	switch (value) {
+	case CXL_MODE_DEDICATED:
+		str = "dedicated_process";
+		break;
+	case CXL_MODE_DIRECTED:
+		str = "afu_directed";
+		break;
+	default:
+		errno = EINVAL;
+		return -1;
+	}
+	return write_sysfs_afu(afu, MODE, str);
+}
+
+int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value)
+{
+	char *str;
+
+	switch (value) {
+	case CXL_PREFAULT_MODE_NONE:
+		str = "none";
+		break;
+	case CXL_PREFAULT_MODE_WED:
+		str = "work_element_descriptor";
+		break;
+	case CXL_PREFAULT_MODE_ALL:
+		str = "all";
+		break;
+	default:
+		errno = EINVAL;
+		return -1;
+	}
+	return write_sysfs_afu(afu, PREFAULT_MODE, str);
 }

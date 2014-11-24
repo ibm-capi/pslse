@@ -36,6 +36,7 @@
 #include <sys/wait.h>
 
 #include "libcxl.h"
+#include "libcxl_internal.h"
 
 
 #undef DEBUG
@@ -54,27 +55,7 @@
 
 #define CXL_EVENT_READ_FAIL 0xffff
 
-struct cxl_adapter_h {
-	DIR *enum_dir;
-	struct dirent *enum_ent;
-};
-
-struct cxl_afu_h {
-	struct cxl_adapter_h *adapter; /* Only used if allocated by us */
-	DIR *enum_dir;
-	int process_element;
-	struct dirent *enum_ent;
-	struct cxl_event *event_buf;		/* Event buffer storage */
-	struct cxl_event *event_buf_first;	/* First event to read */
-	struct cxl_event *event_buf_end;	/* End of events */
-	char *dirpath;
-	char *devname;
-	int fd;
-	int flags;
-	void *ps_addr;
-	size_t ps_size;
-};
-
+#define WORD_OFFSET 4
 
 static struct cxl_adapter_h * malloc_adapter(void)
 {
@@ -88,7 +69,7 @@ static struct cxl_adapter_h * malloc_adapter(void)
 	return adapter;
 }
 
-char * cxl_adapter_devname(struct cxl_adapter_h *adapter)
+char * cxl_adapter_dev_name(struct cxl_adapter_h *adapter)
 {
 	/* FIXME: Work if not enumerating */
 	return adapter->enum_ent->d_name;
@@ -103,16 +84,21 @@ static struct cxl_afu_h * malloc_afu(void)
 
 	memset(afu, 0, sizeof(struct cxl_afu_h));
 	afu->fd = -1;
+	afu->attached = 0;
 	afu->process_element = -1;
+	afu->mmio_addr = NULL;
+	afu->dir_path = NULL;
+	afu->dev_name = NULL;
+	afu->sysfs_path = NULL;
 
 	return afu;
 }
 
-char * cxl_afu_devname(struct cxl_afu_h *afu)
+char * cxl_afu_dev_name(struct cxl_afu_h *afu)
 {
 	if (afu->enum_ent)
 		return afu->enum_ent->d_name;
-	return afu->devname;
+	return afu->dev_name;
 }
 
 int cxl_afu_fd(struct cxl_afu_h *afu)
@@ -204,10 +190,12 @@ static void _cxl_afu_free(struct cxl_afu_h *afu, int free_adapter)
 		return;
 	if (afu->enum_dir)
 		closedir(afu->enum_dir);
-	if (afu->dirpath)
-		free(afu->dirpath);	/* This also frees afu->devname. */
+	if (afu->dir_path)
+		free(afu->dir_path);	/* This also frees afu->dev_name. */
 	if (free_adapter && afu->adapter)
 		cxl_adapter_free(afu->adapter);
+	if (afu->mmio_addr)
+		cxl_mmio_unmap(afu);
 	if (afu->fd != -1)
 		close(afu->fd);
 	free(afu);
@@ -217,7 +205,6 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 {
 	return _cxl_afu_free(afu, 1);
 }
-
 
 /* TODO: Refactor common code with cxl_adapter_next() */
 struct cxl_afu_h *
@@ -229,10 +216,10 @@ cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu)
 		assert(adapter);
 		if (!(afu = malloc_afu()))
 			return NULL;
-		if (asprintf(&afu->dirpath, CXL_SYSFS_CLASS"/%s",
-			     cxl_adapter_devname(adapter)) == -1)
+		if (asprintf(&afu->dir_path, CXL_SYSFS_CLASS"/%s",
+			     cxl_adapter_dev_name(adapter)) == -1)
 			goto end;
-		if (!(afu->enum_dir = opendir(afu->dirpath)))
+		if (!(afu->enum_dir = opendir(afu->dir_path)))
 			goto err_free;
 	}
 	saved_errno = errno;
@@ -246,8 +233,8 @@ cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu)
 	} while (!is_cxl_afu_filename(afu->enum_ent->d_name));
 	return afu;
 err_free:
-	free(afu->dirpath);
-	afu->dirpath = NULL;
+	free(afu->dir_path);
+	afu->dir_path = NULL;
 end:
 	_cxl_afu_free(afu, 0);
 	return NULL;
@@ -289,7 +276,7 @@ static int cxl_sysfs(char **bufp, struct cxl_afu_h *afu)
 	if (afu->fd >= 0)
 		return cxl_sysfs_fd(bufp, afu);
 
-	return asprintf(bufp, "%s/%s", afu->dirpath, cxl_afu_devname(afu));
+	return asprintf(bufp, "%s/%s", afu->dir_path, cxl_afu_dev_name(afu));
 }
 
 #if 0
@@ -337,21 +324,21 @@ static int normalize_afu_path(struct cxl_afu_h *afu, char *path)
 {
 	char *tmp;
 
-	/* Allocate dirpath and make path absolute. */
+	/* Allocate dir_path and make path absolute. */
 	if (*path == '/') {
-		afu->dirpath = strdup(path);
-		if (afu->dirpath == NULL)
+		afu->dir_path = strdup(path);
+		if (afu->dir_path == NULL)
 			return -1;
 	} else {
 		tmp = getcwd(NULL, 0);
-		if (asprintf(&afu->dirpath, "%s/%s", tmp, path) == -1)
+		if (asprintf(&afu->dir_path, "%s/%s", tmp, path) == -1)
 			goto err;
 		free(tmp);
 	}
-	/* Split dirpath between dirpath and devname */
-        tmp = strrchr(afu->dirpath, '/');
+	/* Split dir_path between dirpath and dev_name */
+        tmp = strrchr(afu->dir_path, '/');
 	*tmp = '\0';
-	afu->devname = tmp + 1;
+	afu->dev_name = tmp + 1;
 	return 0;
 
 err:
@@ -390,51 +377,61 @@ err:
 	return -1;
 }
 
-static int is_afu_dev(char *devname, long major, long minor)
+#if 0
+static int is_afu_dev(char *dev_name, long major, long minor)
 {
 	long sysfs_major, sysfs_minor;
 
-	if (cxl_get_dev(devname, &sysfs_major, &sysfs_minor) < 0)
+	if (cxl_get_dev(dev_name, &sysfs_major, &sysfs_minor) < 0)
 		return 0;
 	return (major == sysfs_major && minor == sysfs_minor);
 }
+#endif
 
 /* Open Functions */
 
 static int open_afu_dev(struct cxl_afu_h *afu, char *path)
 {
 	struct stat sb;
+	long api_version;
 	int fd;
 
 	if ((fd = open(path, O_RDWR | O_CLOEXEC)) < 0)
 		return fd;
+	afu->fd = fd;
 
 	/* Verify that this is an AFU file we just opened */
 	if (fstat(fd, &sb) < 0)
-		goto err_close;
+		goto err;
 	if (!S_ISCHR(sb.st_mode))
-		goto err_close;
+		goto err;
 	if (normalize_afu_path(afu, path) < 0)
+		goto err;
+	if (cxl_sysfs(&afu->sysfs_path, afu) == -1)
+		goto err;
+	if (cxl_get_api_version_compatible(afu, &api_version))
+		goto err;
+	if (api_version > CXL_KERNEL_API_VERSION) {
+		errno = EPROTO;
 		goto err_close;
-	if (! is_afu_dev(afu->devname, major(sb.st_rdev), minor(sb.st_rdev)))
-		goto err_close;
-	afu->fd = fd;
+	}
 	return 0;
 
+err:
+	errno = ENODEV;
 err_close:
 	close(fd);
 	afu->fd = -1;
-	errno = ENODEV;
 	return -1;
 }
 
-static int major_minor_match(int dirfd, char *devname, int major, int minor)
+static int major_minor_match(int dirfd, char *dev_name, int major, int minor)
 {
 	struct stat sb;
 
-	if (*devname != 'a')
+	if (*dev_name != 'a')
 		return 0;
-	if (fstatat(dirfd, devname, &sb, 0) == -1)
+	if (fstatat(dirfd, dev_name, &sb, 0) == -1)
 		return 0;
 	if (!S_ISCHR(sb.st_mode))
 		return 0;
@@ -505,62 +502,66 @@ err:
 	return NULL;
 }
 
-static char *build_devname(char *devname, char *kind)
+static char *build_dev_name(char *dev_name, enum cxl_views view)
 {
 	char lastchar;
 	char *newname;
 
-	lastchar = *(devname + strlen(devname) - 1);
-	if (lastchar != *kind) {
-		switch (lastchar) {
-		case 'd':
-		case 'm':
-		case 's':	/* modify last char */
-			newname = strdup(devname);
-			if (newname != NULL)
-				*(newname + strlen(newname) - 1) = *kind;
-			break;
-		default:	/* append last char */
-			asprintf(&newname, "%s%s", devname, kind);
-		}
-	} else
-		newname = strdup(devname);
+	switch (view) {
+	case CXL_VIEW_DEDICATED:
+		lastchar = 'd';
+		break;
+	case CXL_VIEW_MASTER:
+		lastchar = 'm';
+		break;
+	case CXL_VIEW_SLAVE:
+		lastchar = 's';
+		break;
+	default:
+		return NULL;
+	}
+	if (asprintf(&newname, "%s%c", dev_name, lastchar) == -1)
+		return NULL;
 	return newname;
 }
 
-struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, char *kind)
+struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 {
-	char *devname;
-	char *newname = NULL;
+	char *dev_name;
+	char *new_name = NULL;
 	char *path = NULL;
-	struct cxl_afu_h *newafu = NULL;
+	struct cxl_afu_h *new_afu = NULL;
 	long sysfs_major, sysfs_minor;
 
-	if ((devname = cxl_afu_devname(afu)) == NULL)
+	if ((dev_name = cxl_afu_dev_name(afu)) == NULL)
 		return NULL;
-	if ((newname = build_devname(devname, kind)) == NULL)
+	if ((new_name = build_dev_name(dev_name, view)) == NULL)
 		return NULL;
-	if (cxl_get_dev(newname, &sysfs_major, &sysfs_minor) < 0)
+
+	if (!(new_afu = malloc_afu()))
 		goto err_exit;
-	if (!(newafu = malloc_afu()))
+	if (asprintf(&new_afu->sysfs_path, CXL_SYSFS_CLASS"/%s",
+		     new_name) == -1)
+		goto err_exit;
+	if (cxl_get_dev(afu, &sysfs_major, &sysfs_minor) < 0)
 		goto err_exit;
 	if ((path = find_dev_path(sysfs_major, sysfs_minor)) == NULL)
 		goto err_exit;
-	if ((newafu->fd = open(path, O_RDWR | O_CLOEXEC)) < 0)
-		goto err_exit;
-	if (normalize_afu_path(newafu, path) < 0)
-		goto err_exit;
+	if (open_afu_dev(new_afu, path))
+		goto err_pass;
 	free(path);
-	return newafu;
+	free(new_name);
+	return new_afu;
 
 err_exit:
+	errno = ENODEV;
+err_pass:
 	if (path)
 		free(path);
-	if (newafu)
-		free(newafu);
-	if (newname)
-		free(newname);
-	errno = ENODEV;
+	if (new_afu)
+		free(new_afu);
+	if (new_name)
+		free(new_name);
 	return NULL;
 }
 
@@ -605,7 +606,11 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 	memset(&work, 0, sizeof(work));
 	work.work_element_descriptor = wed;
 
-	return ioctl(afu->fd, CXL_IOCTL_START_WORK, &work);
+	int rc;
+	rc = ioctl(afu->fd, CXL_IOCTL_START_WORK, &work);
+	if(!rc)
+		afu->attached = 1;
+	return rc;
 }
 
 int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
@@ -809,105 +814,141 @@ int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
 	return 0;
 }
 
-/*
- * MMIO abstractions
- */
+/* Userspace MMIO functions */
 
-/* Map AFU Problem State Registers into memory */
-int
-cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
+int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 {
-	int fd = afu->fd;
-	void *ps_addr;
-	char *devname;
-	struct cxl_afu_h *newafu = NULL;
-	long sysfs_major, sysfs_minor;
-	size_t size;
+	void *addr;
+	long size;
 
-	if ((devname = cxl_afu_devname(afu)) == NULL)
-		return -1;
-	if (cxl_get_dev(devname, &sysfs_major, &sysfs_minor) < 0)
-		return -1;
-	if (cxl_get_mmio_size(devname, &size) < 0)
-		return -1;
-
-	ps_addr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-	if (ps_addr == MAP_FAILED)
-		return -1;
-
-	afu->ps_size = size;
-	afu->flags = flags;
-	afu->ps_addr = ps_addr;
-	return 0;
-}
-
-/* Unmap AFU Problem State Registers from memory */
-int
-cxl_mmio_unmap(struct cxl_afu_h *afu)
-{
-	if (munmap(afu->ps_addr, afu->ps_size)) {
-		perror("cxl_unmap_ps_registers");
+	if (flags & ~(CXL_MMIO_FLAGS_FULL))
+		goto err;
+	if (!afu->attached) {
+		fprintf (stderr, "ERROR:cxl_mmio_map:Must attach AFU first!\n");
 		return -1;
 	}
+	if (cxl_get_mmio_size(afu, &size) < 0)
+		return -1;
 
-	afu->ps_addr = 0;
-	afu->ps_size = 0;
+	afu->mmio_size = (size_t)size;
+	addr = mmap(NULL, afu->mmio_size, PROT_READ|PROT_WRITE, MAP_SHARED,
+		    afu->fd, 0);
+	if (addr == MAP_FAILED)
+		return -1;
+
+	afu->mmio_flags = flags;
+	afu->mmio_addr = addr;
+	return 0;
+err:
+	errno = ENODEV;
+	return -1;
+}
+
+int cxl_mmio_unmap(struct cxl_afu_h *afu)
+{
+	if (munmap(afu->mmio_addr, afu->mmio_size))
+		return -1;
+
+	afu->mmio_addr = NULL;
 	return 0;
 }
 
-/* WARNING: Use of cxl_mmio_ptr not supported for PSL Simulation Engine.
- * It is recommended that this function not be used but use the following MMIO
- * read/write functions instead. */
-//void *cxl_mmio_ptr(struct cxl_afu_h *afu);
-
-/* MMIO write, 64 bit */
-void
-cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
+void *cxl_mmio_ptr(struct cxl_afu_h *afu)
 {
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
+	return afu->mmio_addr;
+}
+
+int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
+{
+	if (!afu->mmio_addr)
+		return -1;
+	if (offset >= afu->mmio_size)
+		return -1;
+	if (offset & 0x1)
+		return -1;
+
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
 		data = htole64(data);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
 		data = htobe64(data);
-	void *offset2 = afu->ps_addr + (offset & ~0x1);
-	__asm__ __volatile__("std%U0%X0 %1,%0" : "=m"(*(uint64_t *)offset2) : "r"(data));
+
+	__asm__ __volatile__("sync ; std%U0%X0 %1,%0"
+			     : "=m"(*(__u64 *)(afu->mmio_addr +
+					       WORD_OFFSET * offset))
+			     : "r"(data));
+	return 0;
 }
 
-/* MMIO read, 64 bit */
-uint64_t
-cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset)
+int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data)
 {
-	uint64_t data;
-	void *offset2 = afu->ps_addr + (offset & ~0x1);
-	__asm__ __volatile__("ld%U1%X1 %0,%1" : "=r"(data) : "m"(*(uint64_t *)offset2));
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
-		data = le64toh(data);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
-		data = be64toh(data);
-	return data;
+	uint64_t d;
+
+	if (!afu->mmio_addr)
+		return -1;
+	if (offset >= afu->mmio_size)
+		return -1;
+	if (offset & 0x1)
+		return -1;
+
+	__asm__ __volatile__("ld%U1%X1 %0,%1; sync"
+			     : "=r"(d)
+			     : "m"(*(__u64 *)(afu->mmio_addr +
+					      WORD_OFFSET * offset)));
+
+	*data = d;
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
+		*data = le64toh(d);
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
+		*data = be64toh(d);
+	return 0;
 }
 
-/* MMIO write, 32 bit */
-void
-cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
+int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 {
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
+	if (!afu->mmio_addr)
+		return -1;
+	if (offset >= afu->mmio_size)
+		return -1;
+
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
 		data = htole32(data);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
 		data = htobe32(data);
-	void *offset2 = afu->ps_addr + offset;
-	__asm__ __volatile__("stw%U0%X0 %1,%0" : "=m"(*(uint32_t *)offset2) : "r"(data));
+
+	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
+			     : "=m"(*(__u64 *)(afu->mmio_addr +
+					       WORD_OFFSET * offset))
+			     : "r"(data));
+	return 0;
 }
 
-/* MMIO read, 32 bit */
-uint32_t
-cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset)
+int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data)
 {
-	uint32_t data;
-	void *offset2 = afu->ps_addr + offset;
-	__asm__ __volatile__("lwz%U1%X1 %0,%1" : "=r"(data) : "m"(*(uint32_t *)offset2));
-	if (afu->flags == CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
-		data = le32toh(data);
-	else if (afu->flags == CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
-		data = be32toh(data);
-	return data;
+	uint32_t d;
+
+	if (!afu->mmio_addr)
+		return -1;
+	if (offset >= afu->mmio_size)
+		return -1;
+
+	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
+			     : "=r"(d)
+			     : "m"(*(__u64 *)(afu->mmio_addr +
+					      WORD_OFFSET * offset)));
+
+	*data = d;
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
+		*data = le32toh(d);
+	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
+	    CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
+		*data = be32toh(d);
+	return 0;
 }
+
