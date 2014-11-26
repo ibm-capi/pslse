@@ -188,7 +188,6 @@ static char *sysfs_get_path(char *path, enum cxl_sysfs_attr attr)
 	attr_name = sysfs_attr_name(attr);
 	if (attr_name == NULL)
 		return NULL;
-
 	path = strdup(path);
 	if (path == NULL)
 		return NULL;
@@ -281,8 +280,10 @@ static int read_sysfs(char *sysfs_path, enum cxl_sysfs_attr attr, long *majorp,
 static int read_sysfs_afu(struct cxl_afu_h *afu, enum cxl_sysfs_attr attr,
 			  long *majorp, long *minorp)
 {
-	if ((afu == NULL) || (afu->sysfs_path == NULL))
+	if ((afu == NULL) || (afu->sysfs_path == NULL)) {
+		errno = EINVAL;
 		return -1;
+	}
 	return read_sysfs(afu->sysfs_path, attr, majorp, minorp);
 
 }
@@ -291,8 +292,10 @@ static int read_sysfs_adapter(struct cxl_adapter_h *adapter,
 			      enum cxl_sysfs_attr attr, long *majorp,
 			      long *minorp)
 {
-	if ((adapter == NULL) || (adapter->sysfs_path == NULL))
+	if ((adapter == NULL) || (adapter->sysfs_path == NULL)) {
+		errno = EINVAL;
 		return -1;
+	}
 	return read_sysfs(adapter->sysfs_path, attr, majorp, minorp);
 }
 
@@ -403,8 +406,10 @@ static int write_sysfs_str(char *path, enum cxl_sysfs_attr attr, char *str)
 static int write_sysfs_afu(struct cxl_afu_h *afu, enum cxl_sysfs_attr attr,
 			   char* str)
 {
-	if ((afu == NULL) || (afu->sysfs_path == NULL))
+	if ((afu == NULL) || (afu->sysfs_path == NULL)) {
+		errno = EINVAL;
 		return -1;
+	}
 	return write_sysfs_str(afu->sysfs_path, attr, str);
 
 }

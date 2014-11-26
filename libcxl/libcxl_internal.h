@@ -34,7 +34,6 @@ struct cxl_afu_h {
 	struct cxl_event *event_buf;		/* Event buffer storage */
 	struct cxl_event *event_buf_first;	/* First event to read */
 	struct cxl_event *event_buf_end;	/* End of events */
-	char *dir_path;
 	char *dev_name;
 	char *sysfs_path;
 	int fd;

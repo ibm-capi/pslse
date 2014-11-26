@@ -5,9 +5,6 @@ OBJS = libcxl.o libcxl_sysfs.o
 
 all: libcxl.so libcxl.a
 
-cxl.h:
-	$(error 'Please symlink include/uapi/misc/cxl.h from the Linux kernel tree')
-
 libcxl.o libcxl_sysfs.o : CFLAGS += -fPIC
 
 libcxl.so: libcxl.o libcxl_sysfs.o

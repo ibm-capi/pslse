@@ -207,7 +207,7 @@ int cxl_mmio_unmap(struct cxl_afu_h *afu);
 /* WARNING: Use of cxl_mmio_ptr not supported for PSL Simulation Engine.
  * It is recommended that this function not be used but use the following MMIO
  * read/write functions instead. */
-//void *cxl_mmio_ptr(struct cxl_afu_h *afu);
+void *cxl_mmio_ptr(struct cxl_afu_h *afu);
 
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data);
 int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data);

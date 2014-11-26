@@ -30,14 +30,13 @@
 #include <regex.h>
 
 #include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 
 #include "libcxl.h"
 #include "libcxl_internal.h"
-
 
 #undef DEBUG
 
@@ -54,8 +53,6 @@
 #endif
 
 #define CXL_EVENT_READ_FAIL 0xffff
-
-#define WORD_OFFSET 4
 
 static struct cxl_adapter_h * malloc_adapter(void)
 {
@@ -87,7 +84,6 @@ static struct cxl_afu_h * malloc_afu(void)
 	afu->attached = 0;
 	afu->process_element = -1;
 	afu->mmio_addr = NULL;
-	afu->dir_path = NULL;
 	afu->dev_name = NULL;
 	afu->sysfs_path = NULL;
 
@@ -143,6 +139,12 @@ static int is_cxl_afu_filename(char *name)
 	return rc;
 }
 
+static int cxl_sysfs_adapter(char **bufp, struct cxl_adapter_h *adapter)
+{
+	return asprintf(bufp, CXL_SYSFS_CLASS"/%s",
+			cxl_adapter_dev_name(adapter));
+}
+
 /* TODO: Refactor common code with cxl_adapter_afu_next() */
 struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter)
 {
@@ -164,6 +166,10 @@ struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter)
 			goto end;
 		}
 	} while (!is_cxl_adapter_filename(adapter->enum_ent->d_name));
+
+	if (cxl_sysfs_adapter(&adapter->sysfs_path, adapter) == -1)
+		goto end;
+
 	return adapter;
 
 end:
@@ -177,6 +183,8 @@ void cxl_adapter_free(struct cxl_adapter_h *adapter)
 		return;
 	if (adapter->enum_dir)
 		closedir(adapter->enum_dir);
+	if (adapter->sysfs_path)
+		free(adapter->sysfs_path);
 	free(adapter);
 }
 
@@ -190,8 +198,8 @@ static void _cxl_afu_free(struct cxl_afu_h *afu, int free_adapter)
 		return;
 	if (afu->enum_dir)
 		closedir(afu->enum_dir);
-	if (afu->dir_path)
-		free(afu->dir_path);	/* This also frees afu->dev_name. */
+	if (afu->sysfs_path)
+		free(afu->sysfs_path);
 	if (free_adapter && afu->adapter)
 		cxl_adapter_free(afu->adapter);
 	if (afu->mmio_addr)
@@ -206,20 +214,25 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	return _cxl_afu_free(afu, 1);
 }
 
+static int cxl_sysfs_afu(char **bufp, struct cxl_afu_h *afu)
+{
+	return asprintf(bufp, CXL_SYSFS_CLASS"/%s", cxl_afu_dev_name(afu));
+}
+
 /* TODO: Refactor common code with cxl_adapter_next() */
 struct cxl_afu_h *
 cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu)
 {
 	int saved_errno;
+	char *dir_path;
 
 	if (afu == NULL) {
 		assert(adapter);
 		if (!(afu = malloc_afu()))
 			return NULL;
-		if (asprintf(&afu->dir_path, CXL_SYSFS_CLASS"/%s",
-			     cxl_adapter_dev_name(adapter)) == -1)
+		if (cxl_sysfs_adapter(&dir_path, adapter) == -1)
 			goto end;
-		if (!(afu->enum_dir = opendir(afu->dir_path)))
+		if (!(afu->enum_dir = opendir(dir_path)))
 			goto err_free;
 	}
 	saved_errno = errno;
@@ -231,10 +244,13 @@ cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu)
 			goto end;
 		}
 	} while (!is_cxl_afu_filename(afu->enum_ent->d_name));
+	if (cxl_sysfs_afu(&afu->sysfs_path, afu) == -1)
+		goto err_free;
+
 	return afu;
+
 err_free:
-	free(afu->dir_path);
-	afu->dir_path = NULL;
+	free(dir_path);
 end:
 	_cxl_afu_free(afu, 0);
 	return NULL;
@@ -258,36 +274,6 @@ struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu)
 
 	return afu;
 }
-
-static int cxl_sysfs_fd(char **bufp, struct cxl_afu_h *afu)
-{
-	int fd = cxl_afu_fd(afu);
-	struct stat sb;
-
-	if (fstat(fd, &sb) < 0)
-		return -1;
-	if (!S_ISCHR(sb.st_mode))
-		return -1;
-	return asprintf(bufp, "/sys/dev/char/%i:%i", major(sb.st_rdev), minor(sb.st_rdev));
-}
-
-static int cxl_sysfs(char **bufp, struct cxl_afu_h *afu)
-{
-	if (afu->fd >= 0)
-		return cxl_sysfs_fd(bufp, afu);
-
-	return asprintf(bufp, "%s/%s", afu->dir_path, cxl_afu_dev_name(afu));
-}
-
-#if 0
-static int cxl_sysfs_afu(char **path, struct cxl_afu_h *afu)
-{
-}
-
-static int cxl_sysfs_adapter(char **path, struct cxl_adapter_h *adapter)
-{
-}
-#endif
 
 static int sysfs_subsystem(char **bufp, const char *path)
 {
@@ -320,37 +306,11 @@ out:
 	return rc;
 }
 
-static int normalize_afu_path(struct cxl_afu_h *afu, char *path)
-{
-	char *tmp;
-
-	/* Allocate dir_path and make path absolute. */
-	if (*path == '/') {
-		afu->dir_path = strdup(path);
-		if (afu->dir_path == NULL)
-			return -1;
-	} else {
-		tmp = getcwd(NULL, 0);
-		if (asprintf(&afu->dir_path, "%s/%s", tmp, path) == -1)
-			goto err;
-		free(tmp);
-	}
-	/* Split dir_path between dirpath and dev_name */
-        tmp = strrchr(afu->dir_path, '/');
-	*tmp = '\0';
-	afu->dev_name = tmp + 1;
-	return 0;
-
-err:
-	free(tmp);
-	return -1;
-}
-
 int cxl_afu_sysfs_pci(char **pathp, struct cxl_afu_h *afu)
 {
 	char *path, *new_path, *subsys;
 	struct stat sb;
-	if ((cxl_sysfs(&path, afu)) < 0)
+	if (cxl_sysfs_afu(&path, afu) == -1)
 		return -1;
 
 	do {
@@ -377,54 +337,6 @@ err:
 	return -1;
 }
 
-#if 0
-static int is_afu_dev(char *dev_name, long major, long minor)
-{
-	long sysfs_major, sysfs_minor;
-
-	if (cxl_get_dev(dev_name, &sysfs_major, &sysfs_minor) < 0)
-		return 0;
-	return (major == sysfs_major && minor == sysfs_minor);
-}
-#endif
-
-/* Open Functions */
-
-static int open_afu_dev(struct cxl_afu_h *afu, char *path)
-{
-	struct stat sb;
-	long api_version;
-	int fd;
-
-	if ((fd = open(path, O_RDWR | O_CLOEXEC)) < 0)
-		return fd;
-	afu->fd = fd;
-
-	/* Verify that this is an AFU file we just opened */
-	if (fstat(fd, &sb) < 0)
-		goto err;
-	if (!S_ISCHR(sb.st_mode))
-		goto err;
-	if (normalize_afu_path(afu, path) < 0)
-		goto err;
-	if (cxl_sysfs(&afu->sysfs_path, afu) == -1)
-		goto err;
-	if (cxl_get_api_version_compatible(afu, &api_version))
-		goto err;
-	if (api_version > CXL_KERNEL_API_VERSION) {
-		errno = EPROTO;
-		goto err_close;
-	}
-	return 0;
-
-err:
-	errno = ENODEV;
-err_close:
-	close(fd);
-	afu->fd = -1;
-	return -1;
-}
-
 static int major_minor_match(int dirfd, char *dev_name, int major, int minor)
 {
 	struct stat sb;
@@ -438,13 +350,13 @@ static int major_minor_match(int dirfd, char *dev_name, int major, int minor)
 	return major(sb.st_rdev) == major && minor(sb.st_rdev) == minor;
 }
 
-static char *find_dev_path(int major, int minor)
+static char *find_dev_name(int major, int minor)
 {
 	int saved_errno;
 	DIR *enum_dir;
 	struct dirent *enum_ent;
 	int fd;
-	char *path = NULL;
+	char *dev_name = NULL;
 
 	if ((enum_dir = opendir(CXL_DEV_DIR)) == NULL)
 		return NULL;
@@ -459,10 +371,10 @@ static char *find_dev_path(int major, int minor)
 		}
 	} while (!major_minor_match(fd, enum_ent->d_name, major, minor));
 
-	if ((asprintf(&path, CXL_DEV_DIR"/%s", enum_ent->d_name)) == -1)
+	if ((dev_name = strdup(enum_ent->d_name)) == NULL)
 		goto err_exit;
 	closedir(enum_dir);
-	return path;
+	return dev_name;
 
 err_exit:
 	closedir(enum_dir);
@@ -486,6 +398,46 @@ int cxl_afu_get_process_element(struct cxl_afu_h *afu)
 	return process_element;
 }
 
+/* Open Functions */
+
+static int open_afu_dev(struct cxl_afu_h *afu, char *path)
+{
+	struct stat sb;
+	long api_version;
+	int fd;
+
+	if ((fd = open(path, O_RDWR | O_CLOEXEC)) < 0)
+		return fd;
+	afu->fd = fd;
+
+	/* Verify that this is an AFU file we just opened */
+	if (fstat(fd, &sb) < 0)
+		goto err;
+	if (!S_ISCHR(sb.st_mode))
+		goto err;
+	if (!(afu->dev_name = find_dev_name(major(sb.st_rdev),
+					    minor(sb.st_rdev))))
+		goto err;
+	if (cxl_sysfs_afu(&afu->sysfs_path, afu) == -1)
+		goto err;
+	if (cxl_get_api_version_compatible(afu, &api_version))
+		goto err;
+	if (api_version > CXL_KERNEL_API_VERSION) {
+		errno = EPROTO;
+		goto err_close;
+	}
+	return 0;
+
+err:
+	errno = ENODEV;
+err_close:
+	if (afu->dev_name)
+		free(afu->dev_name);
+	close(fd);
+	afu->fd = -1;
+	return -1;
+}
+
 struct cxl_afu_h * cxl_afu_open_dev(char *path)
 {
 	struct cxl_afu_h *afu;
@@ -495,17 +447,16 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 
 	if (open_afu_dev(afu, path) < 0)
 		goto err;
-
 	return afu;
 err:
 	cxl_afu_free(afu);
 	return NULL;
 }
 
-static char *build_dev_name(char *dev_name, enum cxl_views view)
+static char *new_sysfs_path(char *sysfs_path, enum cxl_views view)
 {
 	char lastchar;
-	char *newname;
+	char *newpath;
 
 	switch (view) {
 	case CXL_VIEW_DEDICATED:
@@ -520,48 +471,52 @@ static char *build_dev_name(char *dev_name, enum cxl_views view)
 	default:
 		return NULL;
 	}
-	if (asprintf(&newname, "%s%c", dev_name, lastchar) == -1)
-		return NULL;
-	return newname;
+	switch (*(sysfs_path + strlen(sysfs_path) - 1)) {
+	case 'd':
+	case 'm':
+	case 's':
+		if ((newpath = strdup(sysfs_path)) == NULL)
+			return NULL;
+		*(newpath + strlen(newpath) - 1) = lastchar;
+		break;
+	default:
+		if (asprintf(&newpath, "%s%c", sysfs_path, lastchar) == -1)
+			return NULL;
+	}
+	return newpath;
 }
 
 struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 {
-	char *dev_name;
-	char *new_name = NULL;
-	char *path = NULL;
+	char *dev_name = NULL;
+	char *dev_path = NULL;
 	struct cxl_afu_h *new_afu = NULL;
 	long sysfs_major, sysfs_minor;
 
-	if ((dev_name = cxl_afu_dev_name(afu)) == NULL)
-		return NULL;
-	if ((new_name = build_dev_name(dev_name, view)) == NULL)
-		return NULL;
-
 	if (!(new_afu = malloc_afu()))
 		goto err_exit;
-	if (asprintf(&new_afu->sysfs_path, CXL_SYSFS_CLASS"/%s",
-		     new_name) == -1)
+	if (!(new_afu->sysfs_path = new_sysfs_path(afu->sysfs_path, view)))
 		goto err_exit;
-	if (cxl_get_dev(afu, &sysfs_major, &sysfs_minor) < 0)
+	if (cxl_get_dev(new_afu, &sysfs_major, &sysfs_minor) < 0)
 		goto err_exit;
-	if ((path = find_dev_path(sysfs_major, sysfs_minor)) == NULL)
+	if ((dev_name = find_dev_name(sysfs_major, sysfs_minor)) == NULL)
 		goto err_exit;
-	if (open_afu_dev(new_afu, path))
+	asprintf(&dev_path, CXL_DEV_DIR"/%s", dev_name);
+	if (open_afu_dev(new_afu, dev_path))
 		goto err_pass;
-	free(path);
-	free(new_name);
+	free(dev_name);
+	free(dev_path);
 	return new_afu;
 
 err_exit:
 	errno = ENODEV;
 err_pass:
-	if (path)
-		free(path);
+	if (dev_name)
+		free(dev_name);
+	if (dev_path)
+		free(dev_path);
 	if (new_afu)
 		free(new_afu);
-	if (new_name)
-		free(new_name);
 	return NULL;
 }
 
@@ -570,6 +525,7 @@ struct cxl_afu_h * cxl_afu_fd_to_h(int fd)
 	struct cxl_afu_h *afu;
 	struct stat sb;
 	char *path = NULL;
+	long api_version;
 
 	if (!(afu = malloc_afu()))
 		return NULL;
@@ -578,14 +534,23 @@ struct cxl_afu_h * cxl_afu_fd_to_h(int fd)
 		goto err_exit;
 	if (!S_ISCHR(sb.st_mode))
 		goto err_exit;
-	if (!(path = find_dev_path(major(sb.st_rdev), minor(sb.st_rdev))))
+	if (!(afu->dev_name = find_dev_name(major(sb.st_rdev),
+					    minor(sb.st_rdev))))
 		goto err_exit;
-	if (normalize_afu_path(afu, path) < 0)
+	if (cxl_sysfs_afu(&afu->sysfs_path, afu) == -1)
 		goto err_exit;
 	free(path);
+	if (cxl_get_api_version_compatible(afu, &api_version))
+		goto err;
+	if (api_version > CXL_KERNEL_API_VERSION) {
+		errno = EPROTO;
+		goto err_exit;
+	}
 	afu->fd = fd;
 	return afu;
 
+err:
+	errno = ENODEV;
 err_exit:
 	if (path)
 		free(path);
@@ -825,7 +790,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 		goto err;
 	if (!afu->attached) {
 		fprintf (stderr, "ERROR:cxl_mmio_map:Must attach AFU first!\n");
-		return -1;
+		goto err;
 	}
 	if (cxl_get_mmio_size(afu, &size) < 0)
 		return -1;
@@ -864,7 +829,7 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 		return -1;
 	if (offset >= afu->mmio_size)
 		return -1;
-	if (offset & 0x1)
+	if (offset & 0x7)
 		return -1;
 
 	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
@@ -875,8 +840,7 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 		data = htobe64(data);
 
 	__asm__ __volatile__("sync ; std%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr +
-					       WORD_OFFSET * offset))
+			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
 			     : "r"(data));
 	return 0;
 }
@@ -889,13 +853,12 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data)
 		return -1;
 	if (offset >= afu->mmio_size)
 		return -1;
-	if (offset & 0x1)
+	if (offset & 0x7)
 		return -1;
 
 	__asm__ __volatile__("ld%U1%X1 %0,%1; sync"
 			     : "=r"(d)
-			     : "m"(*(__u64 *)(afu->mmio_addr +
-					      WORD_OFFSET * offset)));
+			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
 
 	*data = d;
 	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
@@ -913,6 +876,8 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 		return -1;
 	if (offset >= afu->mmio_size)
 		return -1;
+	if (offset & 0x3)
+		return -1;
 
 	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
 	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
@@ -922,8 +887,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 		data = htobe32(data);
 
 	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr +
-					       WORD_OFFSET * offset))
+			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
 			     : "r"(data));
 	return 0;
 }
@@ -936,11 +900,12 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data)
 		return -1;
 	if (offset >= afu->mmio_size)
 		return -1;
+	if (offset & 0x3)
+		return -1;
 
 	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
 			     : "=r"(d)
-			     : "m"(*(__u64 *)(afu->mmio_addr +
-					      WORD_OFFSET * offset)));
+			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
 
 	*data = d;
 	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==

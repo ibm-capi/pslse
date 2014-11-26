@@ -26,22 +26,30 @@ struct cxl_adapter_h {
 	char *sysfs_path;
 };
 
+struct afu_descriptor {
+	uint16_t num_ints_per_process;
+	uint16_t num_of_processes;
+	uint16_t num_of_afu_CRs;
+	uint16_t req_prog_model;
+	uint64_t reserved1;
+	uint64_t reserved2;
+	uint64_t reserved3;
+	uint64_t AFU_CR_len;
+	uint64_t AFU_CR_offset;
+	uint64_t PerProcessPSA;
+	uint64_t PerProcessPSA_offset;
+	uint64_t AFU_EB_len;
+	uint64_t AFU_EB_offset;
+};
+
 struct cxl_afu_h {
-	struct cxl_adapter_h *adapter; /* Only used if allocated by us */
-	DIR *enum_dir;
-	int process_element;
-	struct dirent *enum_ent;
-	struct cxl_event *event_buf;		/* Event buffer storage */
-	struct cxl_event *event_buf_first;	/* First event to read */
-	struct cxl_event *event_buf_end;	/* End of events */
-	char *dir_path;
-	char *dev_name;
-	char *sysfs_path;
-	int fd;
-	int attached;
-	void *mmio_addr;
-	__u32 mmio_flags;
-	size_t mmio_size;
+	const char *id;
+	pthread_t thread;
+	volatile __u32 mmio_flags;
+	volatile int started;
+	volatile size_t attached;
+	volatile size_t mmio_size;
+	volatile struct afu_descriptor desc;
 };
 
 #endif

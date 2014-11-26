@@ -25,6 +25,7 @@
 #include <time.h>
 
 #include "libcxl.h"
+#include "libcxl_internal.h"
 #include "psl_interface/psl_interface.h"
 
 #define ODD_PARITY 1		// 1=Odd parity, 0=Even parity
@@ -45,32 +46,6 @@
 #define DWORDS_PER_CACHELINE 16
 #define BYTES_PER_DWORD 8
 #define WORD_OFFSET 4
-
-struct afu_descriptor {
-	uint16_t num_ints_per_process;
-	uint16_t num_of_processes;
-	uint16_t num_of_afu_CRs;
-	uint16_t req_prog_model;
-	uint64_t reserved1;
-	uint64_t reserved2;
-	uint64_t reserved3;
-	uint64_t AFU_CR_len;
-	uint64_t AFU_CR_offset;
-	uint64_t PerProcessPSA;
-	uint64_t PerProcessPSA_offset;
-	uint64_t AFU_EB_len;
-	uint64_t AFU_EB_offset;
-};
-
-struct cxl_afu_h {
-	const char *id;
-	pthread_t thread;
-	volatile __u32 mmio_flags;
-	volatile int started;
-	volatile int attached;
-	volatile size_t mapped;
-	volatile struct afu_descriptor desc;
-};
 
 struct afu_command {
 	int request;
@@ -308,15 +283,15 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 
 	if (status.event->aux2_change) {
 		status.event->aux2_change = 0;
-		if (afu->started != status.event->job_running) {
+		if (afu->attached != status.event->job_running) {
 			status.event_occurred = 1-status.event->job_running;
 		}
 		if (status.event->job_running)
-			afu->started = 1;
+			afu->attached = 1;
 		if (status.event->job_done) {
 			if (status.cmd.request==AFU_RESET) {
 				status.cmd.request = AFU_IDLE;
-				afu->started = 0;
+				afu->attached = 0;
 			}
 			else {
 				status.cmd.code = PSL_JOB_RESET;
@@ -606,8 +581,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.first_br = NULL;
 	status.last_br = NULL;
 	afu->id = afu_id;
-	afu->started = 0;
-	afu->mapped = 0;
+	afu->mmio_size = 0;
 	afu->attached = 0;
 	pthread_create(&(afu->thread), NULL, psl, (void *) afu);
 
@@ -703,11 +677,10 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	while (status.cmd.request == AFU_REQUEST) short_delay();
 
 	// Wait for job_running
-	while (!afu->started) {
+	while (!afu->attached) {
 		// FIXME: Timeout
 		short_delay();
 	}
-	afu->attached = 1;
 
 	return 0;
 }
@@ -717,7 +690,7 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	if (!afu) return;
 
 	// Wait for job_done
-	while (afu->started) {
+	while (afu->attached) {
 		// FIXME: Timeout
 		short_delay();
 	}
@@ -745,7 +718,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 	afu->mmio_flags = flags;
 	// Dedicated Process AFU
 	if (afu->desc.req_prog_model && 0x0010)
-		afu->mapped = 0x4000000; // 64MB, AFU Maximum
+		afu->mmio_size = 0x4000000; // 64MB, AFU Maximum
 	// Only dedicated mode supported for now
 	else
 		goto err;
@@ -757,26 +730,28 @@ err:
 }
 
 int cxl_mmio_unmap(struct cxl_afu_h *afu) {
-	afu->mapped = 0;
+	afu->mmio_size = 0;
 
 	return 0;
 }
 
+void *cxl_mmio_ptr(struct cxl_afu_h *afu) {
+	fprintf(stderr, "cxl_mmio_ptr:PSLSE does not support direct access to MMIO address space!\n");
+	return NULL;
+}
+
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
-	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped))
+	if (offset >= afu->mmio_size)
 		return -1;
-	if (offset % 2) {
-		fprintf(stderr, "cxl_mmio_write64: illegal offset of %d\n",
-			(int) offset);
+	if (offset & 0x7)
 		return -1;
-	}
 
 #ifdef DEBUG
 	printf ("Sending MMIO read double word to AFU\n");
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 0;
 	status.mmio.dw = 1;
-	status.mmio.addr = offset;
+	status.mmio.addr = offset >> 2;
 	status.mmio.data = data;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
@@ -791,22 +766,17 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
 }
 
 int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
-	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped)) {
-		*data = 0xfeedb00ffeedb00full;
+	if (offset >= afu->mmio_size)
 		return -1;
-	}
-	if (offset % 2) {
-		fprintf(stderr, "cxl_mmio_write64: illegal offset of %d\n",
-			(int) offset);
+	if (offset & 0x7)
 		return -1;
-	}
 
 #ifdef DEBUG
 	printf ("Sending MMIO read double word to AFU\n");
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 1;
 	status.mmio.dw = 1;
-	status.mmio.addr = offset;
+	status.mmio.addr = offset >> 2;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
 	printf ("Waiting for MMIO ack from AFU\n");
@@ -823,7 +793,9 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 	uint64_t value;
 
-	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped))
+	if (offset >= afu->mmio_size)
+		return -1;
+	if (offset & 0x3)
 		return -1;
 
 	value = data;
@@ -834,7 +806,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 0;
 	status.mmio.dw = 0;
-	status.mmio.addr = offset;
+	status.mmio.addr = offset >> 2;
 	status.mmio.data = value;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
@@ -849,17 +821,17 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 }
 
 int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data) {
-	if (!afu->started || (offset*WORD_OFFSET>=afu->mapped)) {
-		*data = 0xfeedb00f;
+	if (offset >= afu->mmio_size)
 		return -1;
-	}
+	if (offset & 0x3)
+		return -1;
 
 #ifdef DEBUG
 	printf ("Sending MMIO read single word to AFU\n");
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 1;
 	status.mmio.dw = 0;
-	status.mmio.addr = offset;
+	status.mmio.addr = offset >> 2;
 	status.mmio.request = AFU_REQUEST;
 #ifdef DEBUG
 	printf ("Waiting for MMIO ack from AFU\n");
