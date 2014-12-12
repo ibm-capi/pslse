@@ -367,7 +367,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 		addr = (uint8_t *) status.event->command_address;
 		switch (status.event->command_code) {
 		// Interrupt
-		case 0x0000:
+		case PSL_COMMAND_INTREQ:
 			printf ("AFU interrupt command received\n");
 			status.event_occurred = 1;
 #ifdef DEBUG
@@ -376,7 +376,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			add_resp (tag, PSL_RESPONSE_FLUSHED);
 			break;
 		// Restart
-		case 0x0001:
+		case PSL_COMMAND_RESTART:
 			status.psl_state = PSL_RUNNING;
 #ifdef DEBUG
 			printf ("AFU restart command received\n");
@@ -385,29 +385,29 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			add_resp (tag, PSL_RESPONSE_DONE);
 			break;
 		// Memory Reads
-		case 0x0a50:
-		case 0x0a60:
-		case 0x0a6b:
-		case 0x0a67:
-		case 0x0a00:
-		case 0x0e00:
-		case 0x0a90:
-		case 0x0aa0:
-		case 0x0ad0:
-		case 0x0af0:
+		case PSL_COMMAND_READ_CL_S:
+		case PSL_COMMAND_READ_CL_M:
+		case PSL_COMMAND_READ_CL_LCK:
+		case PSL_COMMAND_READ_CL_RES:
+		case PSL_COMMAND_READ_CL_NA:
+		case PSL_COMMAND_READ_PNA:
+		case PSL_COMMAND_READ_LS:
+		case PSL_COMMAND_READ_LM:
+		case PSL_COMMAND_RD_GO_S:
+		case PSL_COMMAND_RD_GO_M:
 #ifdef DEBUG
 			printf ("Read command size=%d tag=0x%02x\n", size, tag);
 #endif /* #ifdef DEBUG */
 			buffer_event (0, tag, addr);
 			break;
 		// Memory Writes
-		case 0x0d60:
-		case 0x0d70:
-		case 0x0d6b:
-		case 0x0d67:
-		case 0x0d00:
-		case 0x0d10:
-		case 0x0da0:
+		case PSL_COMMAND_WRITE_MI:
+		case PSL_COMMAND_WRITE_MS:
+		case PSL_COMMAND_WRITE_UNLOCK:
+		case PSL_COMMAND_WRITE_C:
+		case PSL_COMMAND_WRITE_NA:
+		case PSL_COMMAND_WRITE_INJ:
+		case PSL_COMMAND_WRITE_LM:
 #ifdef DEBUG
 			printf ("Write command size=%d, tag=0x%02x\n", size,
 				tag);
