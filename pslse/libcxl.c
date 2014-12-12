@@ -195,9 +195,9 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 	if (!testmemaddr (addr)) {
 		printf ("AFU attempted ");
 		if (rnw)
-			printf ("read");
-		else
 			printf ("write");
+		else
+			printf ("read");
 		printf (" to invalid address 0x%016llx\n",(long long) addr);
 #ifdef DEBUG
 		printf ("Response AERROR tag=0x%02x\n", tag);
