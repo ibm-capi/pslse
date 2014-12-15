@@ -57,6 +57,8 @@ enum PSL_STATE {
 	PSL_INIT,
 	PSL_RUNNING,
 	PSL_FLUSHING,
+	PSL_LOCK,
+	PSL_NLOCK,
 	PSL_DONE
 };
 
@@ -67,6 +69,10 @@ enum AFU_STATE {
 	AFU_PENDING
 };
 
+enum RESP_TYPE {
+	RESP_NORMAL,
+	RESP_UNLOCK
+};
 struct afu_mmio {
 	int request;
 	int rnw;
@@ -81,6 +87,7 @@ struct afu_br {
 	uint32_t tag;
 	uint32_t size;
 	uint8_t *addr;
+	uint8_t resp_type;
 	struct afu_br *_next;
 };
 
@@ -150,6 +157,15 @@ static void generate_cl_parity(uint8_t *data, uint8_t *parity) {
 	}
 }
 
+static void update_pending_resps (uint32_t code) {
+	struct afu_resp *resp;
+	resp = status.first_resp;
+	while (resp != NULL) {
+		resp->code = code;
+		resp = resp->_next;
+	}
+}
+
 static void add_resp (uint32_t tag, uint32_t code) {
 	struct afu_resp *resp;
 	resp = (struct afu_resp *) malloc (sizeof (struct afu_resp));
@@ -175,8 +191,9 @@ static void push_resp () {
 		struct afu_resp *temp;
 		temp = status.first_resp;
 		status.first_resp = status.first_resp->_next;
-		if (status.first_resp == NULL)
+		if (status.first_resp == NULL) {
 			status.last_resp = NULL;
+		}
 		free (temp);
 	}
 }
@@ -226,8 +243,15 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 #ifdef DEBUG
 		printf ("Response tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
-		// Inject random "Paged" response
-		if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
+		if (status.psl_state==PSL_NLOCK) {
+#ifdef DEBUG
+			printf ("Nlock response for read, tag=0x%02x\n", tag);
+			fflush (stdout);
+#endif /* #ifdef DEBUG */
+			add_resp (tag, PSL_RESPONSE_NLOCK);
+		}
+		else if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
+			// Inject random "Paged" response
 			add_resp (tag, PSL_RESPONSE_DONE);
 		}
 		else {
@@ -237,7 +261,8 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 	}
 }
 
-static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr) {
+static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr,
+			     uint8_t resp_type) {
 	struct afu_br *temp;
 
 	//printf ("Remembering write request 0x%02x\n", tag);
@@ -245,6 +270,7 @@ static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr) {
 	temp->tag = tag;
 	temp->size = size;
 	temp->addr = addr;
+	temp->resp_type = resp_type;
 	temp->_next = NULL;
 
 	// List is empty
@@ -333,6 +359,15 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 #ifdef DEBUG
 			printf ("Response tag=0x%02x\n", status.first_br->tag);
 #endif /* #ifdef DEBUG */
+			if ((status.first_br->resp_type==RESP_UNLOCK) &&
+			    ((status.psl_state==PSL_LOCK) ||
+		             (status.psl_state==PSL_NLOCK))) {
+#ifdef DEBUG
+				printf ("Lock sequence completed\n");
+				fflush (stdout);
+#endif /* #ifdef DEBUG */
+				status.psl_state = PSL_RUNNING;
+			}
 			// Inject random "Paged" response
 			if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
 				add_resp (status.first_br->tag,
@@ -365,6 +400,24 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 		}
 		--status.credits;
 		addr = (uint8_t *) status.event->command_address;
+
+		if (((status.psl_state==PSL_LOCK) &&
+		     (status.event->command_code!=PSL_COMMAND_WRITE_UNLOCK)) ||
+		    (status.psl_state==PSL_NLOCK)) {
+#ifdef DEBUG
+			printf ("Response NLOCK tag=0x%02x\n", tag);
+#endif /* #ifdef DEBUG */
+			add_resp (tag, PSL_RESPONSE_NLOCK);
+			status.psl_state=PSL_NLOCK;
+			update_pending_resps (PSL_RESPONSE_NLOCK);
+#ifdef DEBUG
+			printf ("Dumping lock intervening command, tag=0x%02x\n", tag);
+			fflush (stdout);
+#endif /* #ifdef DEBUG */
+			return;
+		}
+
+		uint8_t resp_type = RESP_NORMAL;
 		switch (status.event->command_code) {
 		// Interrupt
 		case PSL_COMMAND_INTREQ:
@@ -385,10 +438,16 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			add_resp (tag, PSL_RESPONSE_DONE);
 			break;
 		// Memory Reads
+		case PSL_COMMAND_READ_CL_LCK:
+			update_pending_resps (PSL_RESPONSE_NLOCK);
+			status.psl_state = PSL_LOCK;
+#ifdef DEBUG
+			printf ("Starting lock sequence, tag=0x%02x\n", tag);
+			fflush (stdout);
+#endif /* #ifdef DEBUG */
+		case PSL_COMMAND_READ_CL_RES:
 		case PSL_COMMAND_READ_CL_S:
 		case PSL_COMMAND_READ_CL_M:
-		case PSL_COMMAND_READ_CL_LCK:
-		case PSL_COMMAND_READ_CL_RES:
 		case PSL_COMMAND_READ_CL_NA:
 		case PSL_COMMAND_READ_PNA:
 		case PSL_COMMAND_READ_LS:
@@ -401,10 +460,11 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			buffer_event (0, tag, addr);
 			break;
 		// Memory Writes
+		case PSL_COMMAND_WRITE_UNLOCK:
+			resp_type = RESP_UNLOCK;
+		case PSL_COMMAND_WRITE_C:
 		case PSL_COMMAND_WRITE_MI:
 		case PSL_COMMAND_WRITE_MS:
-		case PSL_COMMAND_WRITE_UNLOCK:
-		case PSL_COMMAND_WRITE_C:
 		case PSL_COMMAND_WRITE_NA:
 		case PSL_COMMAND_WRITE_INJ:
 		case PSL_COMMAND_WRITE_LM:
@@ -418,7 +478,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 				//printf ("Buffer read request 0x%02x\n", tag);
 				buffer_event (1, tag, addr);
 			}
-			add_buffer_read (tag, size, addr);
+			add_buffer_read (tag, size, addr, resp_type);
 			// Remember tag and addr
 			break;
 		default:
