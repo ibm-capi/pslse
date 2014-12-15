@@ -257,7 +257,9 @@ module top (
   assign ha_mmrnw   = ha_mmrnw_top;
   assign ha_mmdw    = ha_mmdw_top;
   assign ha_mmad    = ha_mmad_top;
+  assign ha_mmadpar    = ha_mmadpar_top;
   assign ha_mmdata  = ha_mmdata_top;
+  assign ha_mmdatapar  = ha_mmdatapar_top;
   assign ha_jval    = ha_jval_top;
   assign ha_jcom    = ha_jcom_top;
   assign ha_jcompar = ha_jcompar_top;
@@ -283,6 +285,7 @@ module top (
     ah_cch_top <= ah_cch;
     ah_csize_top <= ah_csize;
     ah_mmdata_top <= ah_mmdata;
+    ah_mmdatapar_top <= ah_mmdatapar;
     ah_jerror_top <= ah_jerror;
     ah_jdone_top <= ah_jdone;
     ah_brlat_top <= ah_brlat;
