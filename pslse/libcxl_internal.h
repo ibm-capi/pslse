@@ -47,7 +47,8 @@ struct cxl_afu_h {
 	pthread_t thread;
 	volatile __u32 mmio_flags;
 	volatile int started;
-	volatile size_t attached;
+	volatile int attached;
+	volatile int running;
 	volatile size_t mmio_size;
 	volatile struct afu_descriptor desc;
 };

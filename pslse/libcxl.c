@@ -309,21 +309,15 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 
 	if (status.event->aux2_change) {
 		status.event->aux2_change = 0;
-		if (afu->attached != status.event->job_running) {
+		if (afu->running != status.event->job_running) {
 			status.event_occurred = 1-status.event->job_running;
 		}
 		if (status.event->job_running)
-			afu->attached = 1;
+			afu->running = 1;
 		if (status.event->job_done) {
-			if (status.cmd.request==AFU_RESET) {
+			if (status.cmd.request==AFU_RESET)
 				status.cmd.request = AFU_IDLE;
-				afu->attached = 0;
-			}
-			else {
-				status.cmd.code = PSL_JOB_RESET;
-				status.cmd.addr = 0;
-				status.cmd.request = AFU_REQUEST;
-			}
+			afu->running = 0;
 		}
 #ifdef DEBUG
 		printf ("AUX2 jrunning=%d jdone=%d", status.event->job_running,
@@ -643,6 +637,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	afu->id = afu_id;
 	afu->mmio_size = 0;
 	afu->attached = 0;
+	afu->running = 0;
 	pthread_create(&(afu->thread), NULL, psl, (void *) afu);
 
 	psl_aux1_change (status.event, status.credits);
@@ -722,10 +717,11 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 
-	// Reset AFU
-	status.cmd.code = PSL_JOB_RESET;
-	status.cmd.addr = 0;
-	status.cmd.request = AFU_REQUEST;
+	if (afu->attached) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	// FIXME: Add timeout
 	while (status.cmd.request != AFU_IDLE) short_delay();
 
@@ -737,11 +733,12 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	while (status.cmd.request == AFU_REQUEST) short_delay();
 
 	// Wait for job_running
-	while (!afu->attached) {
+	while (!afu->running) {
 		// FIXME: Timeout
 		short_delay();
 	}
 
+	afu->attached = 1;
 	return 0;
 }
 
@@ -750,7 +747,18 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	if (!afu) return;
 
 	// Wait for job_done
-	while (afu->attached) {
+	while (afu->running) {
+		// FIXME: Timeout
+		short_delay();
+	}
+
+	// Reset AFU
+	status.cmd.code = PSL_JOB_RESET;
+	status.cmd.addr = 0;
+	status.cmd.request = AFU_REQUEST;
+
+	// Wait for job_done
+	while (status.cmd.request != AFU_IDLE) {
 		// FIXME: Timeout
 		short_delay();
 	}
@@ -770,7 +778,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 
 	if (flags & ~(CXL_MMIO_FLAGS_FULL))
 		goto err;
-	if (!afu->attached) {
+	if (!afu->running) {
 		fprintf (stderr, "ERROR:cxl_mmio_map:Must attach AFU first!\n");
 		goto err;
 	}
