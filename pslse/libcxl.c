@@ -815,7 +815,7 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
 		return -1;
 
 #ifdef DEBUG
-	printf ("Sending MMIO read double word to AFU\n");
+	printf ("Sending MMIO write double word to AFU\n");
 #endif /* #ifdef DEBUG */
 	status.mmio.rnw = 0;
 	status.mmio.dw = 1;
