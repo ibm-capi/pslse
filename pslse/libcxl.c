@@ -207,7 +207,7 @@ static void push_resp () {
 }
 
 static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
-	uint8_t par[2];
+	uint8_t par[DWORDS_PER_CACHELINE/8];
 
 	if (status.psl_state==PSL_FLUSHING) {
 #ifdef DEBUG
@@ -315,7 +315,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 	uint64_t addr;
 	uint64_t addrpar;
 	uint8_t *addrptr;
-	uint8_t parity[DWORDS_PER_CACHELINE];
+	uint8_t parity[DWORDS_PER_CACHELINE/8];
 
 	if (status.event->aux2_change) {
 		status.event->aux2_change = 0;
@@ -356,6 +356,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 	}
 	else if (status.first_br) {
 		uint8_t *buffer = (uint8_t *) malloc (CACHELINE_BYTES);
+		uint8_t parity_check[DWORDS_PER_CACHELINE/8];
 		if (psl_get_buffer_read_data (status.event, buffer, parity)
 		    == PSL_SUCCESS) {
 			uint64_t offset = (uint64_t) status.first_br->addr;
@@ -363,9 +364,6 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			memcpy (status.first_br->addr, &(buffer[offset]),
 				status.first_br->size);
 			++status.credits;
-#ifdef DEBUG
-			printf ("Response tag=0x%02x\n", status.first_br->tag);
-#endif /* #ifdef DEBUG */
 			if ((status.first_br->resp_type==RESP_UNLOCK) &&
 			    ((status.psl_state==PSL_LOCK) ||
 		             (status.psl_state==PSL_NLOCK))) {
@@ -375,8 +373,23 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 #endif /* #ifdef DEBUG */
 				status.psl_state = PSL_RUNNING;
 			}
-			// Inject random "Paged" response
-			if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
+#ifdef DEBUG
+			printf ("Response tag=0x%02x\n", status.first_br->tag);
+#endif /* #ifdef DEBUG */
+			generate_cl_parity(buffer, parity_check);
+			if (afu->parity_enable) {
+				int i;
+				for (i=0; i<DWORDS_PER_CACHELINE/8;i++) {
+					if (parity[i] != parity_check[i]) {
+						fprintf (stderr, "ERROR:Parity error on Buffer Read data: tag 0x%02x\n", status.first_br->tag);
+						add_resp (status.first_br->tag,
+							  PSL_RESPONSE_DERROR);
+						status.psl_state = PSL_FLUSHING;
+					}
+				}
+			}
+			else if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
+				// Inject random "Paged" response
 				add_resp (status.first_br->tag,
 					  PSL_RESPONSE_DONE);
 			}
@@ -407,6 +420,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 		    ((addrpar != generate_parity(addr, ODD_PARITY)) ||
 		     (tagpar != generate_parity(tag, ODD_PARITY)) ||
 		     (cmdpar != generate_parity(cmd, ODD_PARITY)))) {
+			fprintf (stderr, "ERROR:Parity error on command code, tag=0x%02x\n", tag);
 #ifdef DEBUG
 			printf ("Response FAILED tag=0x%02x\n", tag);
 			fflush (stdout);
