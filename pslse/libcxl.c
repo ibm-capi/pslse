@@ -135,8 +135,11 @@ static int testmemaddr(uint8_t *memaddr) {
 
 static uint8_t generate_parity (uint64_t data, uint8_t odd) {
 	uint8_t parity = odd;
+	// While at least 1 bit is set
 	while (data) {
+		// Invert parity bit
 		parity = 1-parity;
+		// Zero out least significant bit that is set to 1
 		data &= data-1;
 	}
 	return parity;
@@ -147,11 +150,16 @@ static void generate_cl_parity(uint8_t *data, uint8_t *parity) {
 	uint64_t dw;
 	uint8_t p;
 
+	// Walk each double word (dword) in cacheline
 	for (i=0; i<DWORDS_PER_CACHELINE; i++) {
+		// Copy dword of data into uint64_t dw
 		memcpy(&dw, &(data[BYTES_PER_DWORD*i]), BYTES_PER_DWORD);
+		// Initialize parity entry to 0 when starting parity byte
 		if ((i%BYTES_PER_DWORD)==0)
 			parity[i/BYTES_PER_DWORD]=0;
+		// Shift previously calculated parity bits left
 		parity[i/BYTES_PER_DWORD]<<=1;
+		// Generate parity bit for this dword
 		p=generate_parity(dw, ODD_PARITY);
 		parity[i/BYTES_PER_DWORD]+=p;
 	}
