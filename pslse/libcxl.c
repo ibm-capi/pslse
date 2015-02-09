@@ -273,7 +273,6 @@ static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr,
 			     uint8_t resp_type) {
 	struct afu_br *temp;
 
-	//printf ("Remembering write request 0x%02x\n", tag);
 	temp = (struct afu_br *) malloc (sizeof (struct afu_br));
 	temp->tag = tag;
 	temp->size = size;
@@ -296,7 +295,6 @@ static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr,
 static void remove_buffer_read () {
 	struct afu_br *temp;
 	
-	//printf ("Forgeting write request 0x%02x\n", status.first_br->tag);
 	if (status.first_br == status.last_br)
 		status.last_br = NULL;
 	temp = status.first_br;
@@ -305,7 +303,6 @@ static void remove_buffer_read () {
 
 	// Issue buffer read for pending writes
 	if (status.first_br) {
-		//printf ("Buffer read request 0x%02x\n", status.first_br->tag);
 		buffer_event (1, status.first_br->tag, status.first_br->addr);
 	}
 }
@@ -480,6 +477,17 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 #endif /* #ifdef DEBUG */
 			add_resp (tag, PSL_RESPONSE_DONE);
 			break;
+		case PSL_COMMAND_LOCK:
+			update_pending_resps (PSL_RESPONSE_NLOCK);
+			status.psl_state = PSL_LOCK;
+#ifdef DEBUG
+			printf ("Starting lock sequence, tag=0x%02x\n", tag);
+			fflush (stdout);
+#endif /* #ifdef DEBUG */
+			break;
+		case PSL_COMMAND_UNLOCK:
+			resp_type = RESP_UNLOCK;
+			break;
 		// Memory Reads
 		case PSL_COMMAND_READ_CL_LCK:
 			update_pending_resps (PSL_RESPONSE_NLOCK);
@@ -488,15 +496,16 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			printf ("Starting lock sequence, tag=0x%02x\n", tag);
 			fflush (stdout);
 #endif /* #ifdef DEBUG */
-		case PSL_COMMAND_READ_CL_RES:
+		case PSL_COMMAND_READ_CL_NA:
 		case PSL_COMMAND_READ_CL_S:
 		case PSL_COMMAND_READ_CL_M:
-		case PSL_COMMAND_READ_CL_NA:
+		case PSL_COMMAND_READ_CL_RES:
 		case PSL_COMMAND_READ_PNA:
 		case PSL_COMMAND_READ_LS:
 		case PSL_COMMAND_READ_LM:
 		case PSL_COMMAND_RD_GO_S:
 		case PSL_COMMAND_RD_GO_M:
+		case PSL_COMMAND_RWITM:
 #ifdef DEBUG
 			printf ("Read command size=%d tag=0x%02x\n", size, tag);
 #endif /* #ifdef DEBUG */
@@ -515,16 +524,31 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			printf ("Write command size=%d, tag=0x%02x\n", size,
 				tag);
 #endif /* #ifdef DEBUG */
-			//printf ("Memory write request 0x%02x\n", tag);
 			// Only issue buffer read if no other pending
 			if (!status.first_br) {
-				//printf ("Buffer read request 0x%02x\n", tag);
 				buffer_event (1, tag, addrptr);
 			}
 			// Remember tag and addr
 			add_buffer_read (tag, size, addrptr, resp_type);
 			break;
+		case PSL_COMMAND_TOUCH_I:
+		case PSL_COMMAND_TOUCH_S:
+		case PSL_COMMAND_TOUCH_M:
+		case PSL_COMMAND_TOUCH_LS:
+		case PSL_COMMAND_TOUCH_LM:
+		case PSL_COMMAND_PUSH_I:
+		case PSL_COMMAND_PUSH_S:
+		case PSL_COMMAND_INVALIDATE:
+		case PSL_COMMAND_CASTOUT_I:
+		case PSL_COMMAND_CASTOUT_S:
+		case PSL_COMMAND_CLAIM_M:
+		case PSL_COMMAND_CLAIM_U:
+		case PSL_COMMAND_FLUSH:
+		case PSL_COMMAND_EVICT_I:
+			add_resp (tag, PSL_RESPONSE_DONE);
+			break;
 		default:
+			fprintf (stderr, "ERROR:Command currently unsupported 0x%04x\n", cmd);
 			break;
 		}
 	}
