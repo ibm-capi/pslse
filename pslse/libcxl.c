@@ -311,8 +311,10 @@ static void remove_buffer_read () {
 }
 
 static void handle_psl_events (struct cxl_afu_h* afu) {
-	uint32_t tag, size;
-	uint8_t *addr;
+	uint32_t tag, tagpar, size, cmd, cmdpar;
+	uint64_t addr;
+	uint64_t addrpar;
+	uint8_t *addrptr;
 	uint8_t parity[DWORDS_PER_CACHELINE];
 
 	if (status.event->aux2_change) {
@@ -327,6 +329,9 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 				status.cmd.request = AFU_IDLE;
 			afu->running = 0;
 		}
+		if (status.event->parity_enable)
+			afu->parity_enable = 1;
+
 #ifdef DEBUG
 		printf ("AUX2 jrunning=%d jdone=%d", status.event->job_running,
 			status.event->job_done);
@@ -390,9 +395,27 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 #endif /* #ifdef DEBUG */
 		status.event->command_valid = 0;
 		tag = status.event->command_tag;
+		tagpar = status.event->command_tag_parity;
 		size = status.event->command_size;
-		if ((status.psl_state==PSL_FLUSHING) &&
-		    (status.event->command_code != 1)) {
+		cmd = status.event->command_code;
+		cmdpar = status.event->command_code_parity;
+		addr = status.event->command_address;
+		addrptr = (uint8_t *) status.event->command_address;
+		addrpar = status.event->command_address_parity;
+
+		if (afu->parity_enable &&
+		    ((addrpar != generate_parity(addr, ODD_PARITY)) ||
+		     (tagpar != generate_parity(tag, ODD_PARITY)) ||
+		     (cmdpar != generate_parity(cmd, ODD_PARITY)))) {
+#ifdef DEBUG
+			printf ("Response FAILED tag=0x%02x\n", tag);
+			fflush (stdout);
+#endif /* #ifdef DEBUG */
+			add_resp (tag, PSL_RESPONSE_FAILED);
+			return;
+		}
+
+		if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
 #ifdef DEBUG
 			printf ("Response FLUSHED tag=0x%02x\n", tag);
 			fflush (stdout);
@@ -401,10 +424,9 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			return;
 		}
 		--status.credits;
-		addr = (uint8_t *) status.event->command_address;
 
 		if (((status.psl_state==PSL_LOCK) &&
-		     (status.event->command_code!=PSL_COMMAND_WRITE_UNLOCK)) ||
+		     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
 		    (status.psl_state==PSL_NLOCK)) {
 #ifdef DEBUG
 			printf ("Response NLOCK tag=0x%02x\n", tag);
@@ -420,7 +442,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 		}
 
 		uint8_t resp_type = RESP_NORMAL;
-		switch (status.event->command_code) {
+		switch (cmd) {
 		// Interrupt
 		case PSL_COMMAND_INTREQ:
 			printf ("AFU interrupt command received\n");
@@ -459,7 +481,7 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 #ifdef DEBUG
 			printf ("Read command size=%d tag=0x%02x\n", size, tag);
 #endif /* #ifdef DEBUG */
-			buffer_event (0, tag, addr);
+			buffer_event (0, tag, addrptr);
 			break;
 		// Memory Writes
 		case PSL_COMMAND_WRITE_UNLOCK:
@@ -478,10 +500,10 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 			// Only issue buffer read if no other pending
 			if (!status.first_br) {
 				//printf ("Buffer read request 0x%02x\n", tag);
-				buffer_event (1, tag, addr);
+				buffer_event (1, tag, addrptr);
 			}
-			add_buffer_read (tag, size, addr, resp_type);
 			// Remember tag and addr
+			add_buffer_read (tag, size, addrptr, resp_type);
 			break;
 		default:
 			break;
@@ -646,6 +668,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	afu->mmio_size = 0;
 	afu->attached = 0;
 	afu->running = 0;
+	afu->parity_enable= 0;
 	pthread_create(&(afu->thread), NULL, psl, (void *) afu);
 
 	psl_aux1_change (status.event, status.credits);
