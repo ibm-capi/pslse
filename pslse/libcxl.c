@@ -349,6 +349,11 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 		printf ("MMIO Acknowledge\n");
 #endif /* #ifdef DEBUG */
 		status.mmio.request = AFU_IDLE;
+		if (afu->parity_enable &&
+		     (status.mmio.parity != generate_parity(status.mmio.data, ODD_PARITY))) {
+			fprintf (stderr, "ERROR:Parity error on MMIO read data\n");
+			status.mmio.data = ~0ull;
+		}
 	}
 	if (status.first_br && status.psl_state==PSL_FLUSHING) {
 		add_resp (status.first_br->tag, PSL_RESPONSE_FLUSHED);
