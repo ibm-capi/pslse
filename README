@@ -15,14 +15,21 @@ exists in the "pslse" directory for co-simulation with the AFU on most
 industry standard Verilog simulators.  The "pslse" directory contains the code
 to interface with a Verilog simulator.
 
-First is should be noted that only a handful of functions are currently
-supported in the both environments.  This list should grow but in programming
-of applications should focus only on using the currently supported functions.
+There is a dependence on a file in the kernel headers for newer 3.18 kernels.
+The file is /usr/include/misc/cxl.h.  Without this file on your system you
+will not be able to compile libcxl code.  This file can not be included here
+as it falls under a different license.
+
+It should be noted that only a handful of functions are currently supported in
+both environments.  This list should grow but in programming of applications
+should focus only on using the currently supported functions.
 
 Functions currenty supported in both "libcxl" and "pslse":
 - struct cxl_afu_h * cxl_afu_open_dev (char *path);
 - int cxl_afu_attach (struct cxl_afu_h *afu, __u64 wed);
 - void cxl_afu_free (struct cxl_afu_h *afu);
+- bool cxl_pending_event (struct cxl_afu *afu);
+- int cxl_read_event (struct cxl_afu_h *afu, struct cxl_event *event);
 - int cxl_mmio_map (struct cxl_afu_h *afu, __u32 flags);
 - int cxl_mmio_unmap (struct cxl_afu_h *afu);
 - void cxl_mmio_write64 (struct cxl_afu_h *afu, uint64_t offset, uint64_t data);
@@ -46,7 +53,7 @@ The afu_driver directory contains two directories src and verilog.  The verilog
 directory contains the file top.v which is a top level wrapper that will
 instantiate your AFU Verilog code.  The src directory contains afu_driver.c
 which works hand in hand with top.v.  You'll need to modify the Makefile in
-src to set VPI_USER_H_DIR to point to the directory that contains the file
+src to set SIM_INCLUDE_DIR to point to the directory that contains the file
 vpi_user.h necessary for the Verilog PLI 2.0 interface.  This file should be
 part of the simulator installation and is completely seperate from this code.
 Once this modification has been made then you should be able to "make" the

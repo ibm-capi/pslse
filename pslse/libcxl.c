@@ -96,9 +96,15 @@ struct afu_resp {
 	struct afu_resp *_next;
 };
 
+struct cxl_event_wrapper {
+	struct cxl_event *event;
+	struct cxl_event_wrapper *_next;
+};
+
 struct psl_status {
 	struct AFU_EVENT *event;
-	volatile int event_occurred;	/* Job done or interrupt */
+	volatile struct cxl_event_wrapper *event_list;
+	volatile unsigned int max_ints;
 	volatile unsigned int credits;
 	volatile struct afu_command cmd;
 	volatile struct afu_mmio mmio;
@@ -162,6 +168,35 @@ static void generate_cl_parity(uint8_t *data, uint8_t *parity) {
 		p=generate_parity(dw, ODD_PARITY);
 		parity[i/BYTES_PER_DWORD]+=p;
 	}
+}
+
+static int add_interrupt (volatile struct cxl_event_wrapper **head,
+			  uint64_t irq) {
+	struct cxl_event_wrapper *new_event;
+
+	// Check for legal interrupt number
+	irq &= 0x7FFL;
+	if (!irq || (irq > status.max_ints))
+		return 1;
+
+	// Find end of list searching for duplicates
+	if (*head) {
+		if ((*head)->event->irq.irq == (__u16) irq)
+			return 1;
+		return add_interrupt ((volatile struct cxl_event_wrapper **)
+				      &((*head)->_next), irq);
+	}
+
+	new_event = (struct cxl_event_wrapper *)
+		    malloc (sizeof (struct cxl_event_wrapper));
+	new_event->event = (struct cxl_event *)
+		    malloc (sizeof (struct cxl_event));
+	new_event->event->header.type = CXL_EVENT_AFU_INTERRUPT;
+	new_event->event->header.size = 16;
+	new_event->event->header.process_element = 0;
+	new_event->event->irq.irq = (__u16) irq;
+	*head = new_event;
+	return 0;
 }
 
 static void update_pending_resps (uint32_t code) {
@@ -312,9 +347,6 @@ static void remove_buffer_read () {
 
 static void handle_aux2_change (struct cxl_afu_h* afu) {
 	status.event->aux2_change = 0;
-	if (afu->running != status.event->job_running) {
-		status.event_occurred = 1-status.event->job_running;
-	}
 	if (status.event->job_running)
 		afu->running = 1;
 	if (status.event->job_done) {
@@ -466,7 +498,7 @@ static int error_check (struct cxl_afu_h* afu) {
 		}
 		if (fail) {
 #ifdef DEBUG
-			printf ("Response FAILED")
+			printf ("Response FAILED");
 			printf (" tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
 			add_resp (tag, PSL_RESPONSE_FAILED);
@@ -532,11 +564,15 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	// Interrupt
 	case PSL_COMMAND_INTREQ:
 		printf ("AFU interrupt command received\n");
-		status.event_occurred = 1;
+		if (add_interrupt (&(status.event_list), addr)) {
+			add_resp (tag, PSL_RESPONSE_FAILED);
+		}
+		else {
+			add_resp (tag, PSL_RESPONSE_DONE);
+		}
 #ifdef DEBUG
 		printf ("Response tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
-		add_resp (tag, PSL_RESPONSE_FLUSHED);
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
@@ -799,7 +835,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 
 	// Start PSL thread
 	status.psl_state = PSL_INIT;
-	status.event_occurred = 0;
+	status.event_list = NULL;
 	status.credits = 64;
 	status.first_br = NULL;
 	status.last_br = NULL;
@@ -882,6 +918,11 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 
 	status.mmio.desc = 0;
 
+	// Minimum interrupts is 1
+	status.max_ints = afu->desc.num_ints_per_process;
+	if (!status.max_ints)
+		status.max_ints = 1;
+
 	return afu;
 }
 
@@ -942,6 +983,29 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 
 	// Free memory
 	free (afu);
+}
+
+bool cxl_pending_event(struct cxl_afu_h *afu) {
+	if (status.event_list)
+		return true;
+	return false;
+}
+
+int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event) {
+	volatile struct cxl_event_wrapper *head;
+
+	if (!event)
+		return -1;
+
+	while (!(status.event_list))
+		short_delay();
+
+	head = status.event_list;
+	memcpy (event, head->event, head->event->header.size);
+	status.event_list = head->_next;
+	free ((void *) head->event);
+	free ((void *) head);
+	return 0;
 }
 
 int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {

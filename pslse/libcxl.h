@@ -18,7 +18,7 @@
 #define _LIBCXL_H
 
 #include <linux/types.h>
-//#include <misc/cxl.h>
+#include <misc/cxl.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -179,10 +179,10 @@ enum cxl_image {
 /*
  * Events
  */
-//bool cxl_pending_event(struct cxl_afu_h *afu);
-//int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
-//int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
-//			    __u32 type, __u16 irq);
+bool cxl_pending_event(struct cxl_afu_h *afu);
+int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
+/*int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
+			    __u32 type, __u16 irq);*/
 
 /*
  * fprint wrappers to print out CXL events - useful for debugging.
