@@ -204,7 +204,7 @@ psl_init_afu_event (struct AFU_EVENT *event, char *server_host, int port)
   struct hostent *he;
   if ((he = gethostbyname (server_host)) == NULL)
     {
-      perror("gethostbyname");
+      herror("gethostbyname");
       return PSL_BAD_SOCKET;
     }
   struct sockaddr_in ssadr;

@@ -21,7 +21,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
 
 #include "libcxl.h"
@@ -307,251 +306,327 @@ static void remove_buffer_read () {
 	}
 }
 
-static void handle_psl_events (struct cxl_afu_h* afu) {
+static void handle_aux2_change (struct cxl_afu_h* afu) {
+	status.event->aux2_change = 0;
+	if (afu->running != status.event->job_running) {
+		status.event_occurred = 1-status.event->job_running;
+	}
+	if (status.event->job_running)
+		afu->running = 1;
+	if (status.event->job_done) {
+		if (status.cmd.request==AFU_RESET)
+			status.cmd.request = AFU_IDLE;
+		afu->running = 0;
+	}
+	if (status.event->parity_enable)
+		afu->parity_enable = 1;
+
+#ifdef DEBUG
+	printf ("AUX2 jrunning=%d jdone=%d", status.event->job_running,
+		status.event->job_done);
+	if (status.event->job_done) {
+		printf (" jerror=0x%016llx", (long long)
+			status.event->job_error);
+	}
+	printf ("\n");
+#endif /* #ifdef DEBUG */
+}
+
+static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
+#ifdef DEBUG
+	printf ("MMIO Acknowledge\n");
+#endif /* #ifdef DEBUG */
+	status.mmio.request = AFU_IDLE;
+	if (afu->parity_enable && status.event->mmio_read &&
+	     (status.mmio.parity !=
+	      generate_parity(status.mmio.data, ODD_PARITY))) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR:Parity error");
+		fprintf (stderr, " on MMIO read data\n");
+		fflush (stderr);
+		status.mmio.data = ~0ull;
+	}
+}
+
+static void handle_buffer_read (struct cxl_afu_h* afu) {
+	uint64_t offset;
+	uint32_t tag;
+	uint8_t *buffer;
+	uint8_t parity[DWORDS_PER_CACHELINE/8];
+	uint8_t parity_check[DWORDS_PER_CACHELINE/8];
+
+	tag = status.first_br->tag;
+	buffer = (uint8_t *) malloc (CACHELINE_BYTES);
+	if (psl_get_buffer_read_data (status.event, buffer, parity)
+	    == PSL_SUCCESS) {
+		offset = (uint64_t) status.first_br->addr;
+		offset &= 0x7Fll;
+		memcpy (status.first_br->addr, &(buffer[offset]),
+			status.first_br->size);
+		++status.credits;
+		if ((status.first_br->resp_type==RESP_UNLOCK) &&
+		    ((status.psl_state==PSL_LOCK) ||
+	             (status.psl_state==PSL_NLOCK))) {
+#ifdef DEBUG
+			printf ("Lock sequence completed\n");
+			fflush (stdout);
+#endif /* #ifdef DEBUG */
+			status.psl_state = PSL_RUNNING;
+		}
+#ifdef DEBUG
+		printf ("Response tag=0x%02x\n", tag);
+#endif /* #ifdef DEBUG */
+		generate_cl_parity(buffer, parity_check);
+		if (afu->parity_enable &&
+		    memcmp(parity, parity_check, sizeof(parity))) {
+			fflush (stdout);
+			fprintf (stderr, "ERROR:Parity error on ");
+			fprintf (stderr, "buffer read data tag=0x");
+			fprintf (stderr, "%02x\n", tag);
+			fflush (stderr);
+			add_resp (tag, PSL_RESPONSE_DERROR);
+			status.psl_state = PSL_FLUSHING;
+		}
+		else if (!PAGED_RANDOMIZER ||
+			 (rand() % PAGED_RANDOMIZER)) {
+			// Inject random "Paged" response
+			add_resp (tag, PSL_RESPONSE_DONE);
+		}
+		else {
+			add_resp (tag, PSL_RESPONSE_PAGED);
+			status.psl_state = PSL_FLUSHING;
+		}
+		// Stop remembing status.first_br
+		remove_buffer_read();
+	}
+}
+
+static int error_check (struct cxl_afu_h* afu) {
+	unsigned fail;
 	uint32_t tag, tagpar, size, cmd, cmdpar;
 	uint64_t addr;
 	uint64_t addrpar;
 	uint8_t *addrptr;
-	uint8_t parity[DWORDS_PER_CACHELINE/8];
 
-	if (status.event->aux2_change) {
-		status.event->aux2_change = 0;
-		if (afu->running != status.event->job_running) {
-			status.event_occurred = 1-status.event->job_running;
-		}
-		if (status.event->job_running)
-			afu->running = 1;
-		if (status.event->job_done) {
-			if (status.cmd.request==AFU_RESET)
-				status.cmd.request = AFU_IDLE;
-			afu->running = 0;
-		}
-		if (status.event->parity_enable)
-			afu->parity_enable = 1;
+	status.event->command_valid = 0;
+	tag = status.event->command_tag;
+	tagpar = status.event->command_tag_parity;
+	size = status.event->command_size;
+	cmd = status.event->command_code;
+	cmdpar = status.event->command_code_parity;
+	addr = status.event->command_address;
+	addrptr = (uint8_t *) status.event->command_address;
+	addrpar = status.event->command_address_parity;
 
-#ifdef DEBUG
-		printf ("AUX2 jrunning=%d jdone=%d", status.event->job_running,
-			status.event->job_done);
-		if (status.event->job_done) {
-			printf (" jerror=0x%016llx", (long long)
-				status.event->job_error);
-		}
-		printf ("\n");
-#endif /* #ifdef DEBUG */
+	if (!afu->running) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR:Command without jrunning=1,");
+		fprintf (stderr, " tag=0x%02x\n", tag);
+		fflush (stderr);
 	}
-	if (psl_get_mmio_acknowledge (status.event, (uint64_t *)
-	    &(status.mmio.data), (uint32_t *) &(status.mmio.parity)) ==
-	    PSL_SUCCESS) {
-#ifdef DEBUG
-		printf ("MMIO Acknowledge\n");
-#endif /* #ifdef DEBUG */
-		status.mmio.request = AFU_IDLE;
-		if (afu->parity_enable &&
-		     (status.mmio.parity != generate_parity(status.mmio.data, ODD_PARITY))) {
-			fprintf (stderr, "ERROR:Parity error on MMIO read data\n");
-			status.mmio.data = ~0ull;
-		}
-	}
-	if (status.first_br && status.psl_state==PSL_FLUSHING) {
-		add_resp (status.first_br->tag, PSL_RESPONSE_FLUSHED);
-		remove_buffer_read();
-	}
-	else if (status.first_br) {
-		uint8_t *buffer = (uint8_t *) malloc (CACHELINE_BYTES);
-		uint8_t parity_check[DWORDS_PER_CACHELINE/8];
-		if (psl_get_buffer_read_data (status.event, buffer, parity)
-		    == PSL_SUCCESS) {
-			uint64_t offset = (uint64_t) status.first_br->addr;
-			offset &= 0x7Fll;
-			memcpy (status.first_br->addr, &(buffer[offset]),
-				status.first_br->size);
-			++status.credits;
-			if ((status.first_br->resp_type==RESP_UNLOCK) &&
-			    ((status.psl_state==PSL_LOCK) ||
-		             (status.psl_state==PSL_NLOCK))) {
-#ifdef DEBUG
-				printf ("Lock sequence completed\n");
-				fflush (stdout);
-#endif /* #ifdef DEBUG */
-				status.psl_state = PSL_RUNNING;
-			}
-#ifdef DEBUG
-			printf ("Response tag=0x%02x\n", status.first_br->tag);
-#endif /* #ifdef DEBUG */
-			generate_cl_parity(buffer, parity_check);
-			if (afu->parity_enable) {
-				int i;
-				for (i=0; i<DWORDS_PER_CACHELINE/8;i++) {
-					if (parity[i] != parity_check[i]) {
-						fprintf (stderr, "ERROR:Parity error on Buffer Read data: tag 0x%02x\n", status.first_br->tag);
-						add_resp (status.first_br->tag,
-							  PSL_RESPONSE_DERROR);
-						status.psl_state = PSL_FLUSHING;
-					}
-				}
-			}
-			else if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
-				// Inject random "Paged" response
-				add_resp (status.first_br->tag,
-					  PSL_RESPONSE_DONE);
-			}
-			else {
-				add_resp (status.first_br->tag,
-					  PSL_RESPONSE_PAGED);
-				status.psl_state = PSL_FLUSHING;
-			}
-			// Stop remembing status.first_br
-			remove_buffer_read();
-		}
-	}
-	if (status.event->command_valid) {
-#ifdef DEBUG
-		printf ("Command tag=0x%02x\n", status.event->command_tag);
-#endif /* #ifdef DEBUG */
-		status.event->command_valid = 0;
-		tag = status.event->command_tag;
-		tagpar = status.event->command_tag_parity;
-		size = status.event->command_size;
-		cmd = status.event->command_code;
-		cmdpar = status.event->command_code_parity;
-		addr = status.event->command_address;
-		addrptr = (uint8_t *) status.event->command_address;
-		addrpar = status.event->command_address_parity;
 
-		if (afu->parity_enable &&
-		    ((addrpar != generate_parity(addr, ODD_PARITY)) ||
-		     (tagpar != generate_parity(tag, ODD_PARITY)) ||
-		     (cmdpar != generate_parity(cmd, ODD_PARITY)))) {
-			fprintf (stderr, "ERROR:Parity error on command code, tag=0x%02x\n", tag);
-#ifdef DEBUG
-			printf ("Response FAILED tag=0x%02x\n", tag);
+	if (afu->parity_enable) {
+		fail = 0;
+		fflush (stdout);
+		if (addrpar != generate_parity(addr, ODD_PARITY)) {
 			fflush (stdout);
+			fprintf (stderr, "ERROR:Parity error on command");
+			fprintf (stderr, " address=0x%016lx\n", addr);
+			fflush (stderr);
+			fail = 1;
+		}
+		if (tagpar != generate_parity(tag, ODD_PARITY)) {
+			fflush (stdout);
+			fprintf (stderr, "ERROR:Parity error on command");
+			fprintf (stderr, " tag=0x%02x\n", tag);
+			fflush (stderr);
+			fail = 1;
+		}
+		if (cmdpar != generate_parity(cmd, ODD_PARITY)) {
+			fflush (stdout);
+			fprintf (stderr, "ERROR:Parity error on command");
+			fprintf (stderr, " code=0x%04x\n", cmd);
+			fflush (stderr);
+			fail = 1;
+		}
+		if (fail) {
+#ifdef DEBUG
+			printf ("Response FAILED")
+			printf (" tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
 			add_resp (tag, PSL_RESPONSE_FAILED);
-			return;
-		}
-
-		if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
-#ifdef DEBUG
-			printf ("Response FLUSHED tag=0x%02x\n", tag);
-			fflush (stdout);
-#endif /* #ifdef DEBUG */
-			add_resp (tag, PSL_RESPONSE_FLUSHED);
-			return;
-		}
-		--status.credits;
-
-		if (((status.psl_state==PSL_LOCK) &&
-		     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
-		    (status.psl_state==PSL_NLOCK)) {
-#ifdef DEBUG
-			printf ("Response NLOCK tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
-			add_resp (tag, PSL_RESPONSE_NLOCK);
-			status.psl_state=PSL_NLOCK;
-			update_pending_resps (PSL_RESPONSE_NLOCK);
-#ifdef DEBUG
-			printf ("Dumping lock intervening command, tag=0x%02x\n", tag);
-			fflush (stdout);
-#endif /* #ifdef DEBUG */
-			return;
-		}
-
-		uint8_t resp_type = RESP_NORMAL;
-		switch (cmd) {
-		// Interrupt
-		case PSL_COMMAND_INTREQ:
-			printf ("AFU interrupt command received\n");
-			status.event_occurred = 1;
-#ifdef DEBUG
-			printf ("Response tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
-			add_resp (tag, PSL_RESPONSE_FLUSHED);
-			break;
-		// Restart
-		case PSL_COMMAND_RESTART:
-			status.psl_state = PSL_RUNNING;
-#ifdef DEBUG
-			printf ("AFU restart command received\n");
-			printf ("Response tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
-			add_resp (tag, PSL_RESPONSE_DONE);
-			break;
-		case PSL_COMMAND_LOCK:
-			update_pending_resps (PSL_RESPONSE_NLOCK);
-			status.psl_state = PSL_LOCK;
-#ifdef DEBUG
-			printf ("Starting lock sequence, tag=0x%02x\n", tag);
-			fflush (stdout);
-#endif /* #ifdef DEBUG */
-			break;
-		case PSL_COMMAND_UNLOCK:
-			resp_type = RESP_UNLOCK;
-			break;
-		// Memory Reads
-		case PSL_COMMAND_READ_CL_LCK:
-			update_pending_resps (PSL_RESPONSE_NLOCK);
-			status.psl_state = PSL_LOCK;
-#ifdef DEBUG
-			printf ("Starting lock sequence, tag=0x%02x\n", tag);
-			fflush (stdout);
-#endif /* #ifdef DEBUG */
-		case PSL_COMMAND_READ_CL_NA:
-		case PSL_COMMAND_READ_CL_S:
-		case PSL_COMMAND_READ_CL_M:
-		case PSL_COMMAND_READ_CL_RES:
-		case PSL_COMMAND_READ_PNA:
-		case PSL_COMMAND_READ_LS:
-		case PSL_COMMAND_READ_LM:
-		case PSL_COMMAND_RD_GO_S:
-		case PSL_COMMAND_RD_GO_M:
-		case PSL_COMMAND_RWITM:
-#ifdef DEBUG
-			printf ("Read command size=%d tag=0x%02x\n", size, tag);
-#endif /* #ifdef DEBUG */
-			buffer_event (0, tag, addrptr);
-			break;
-		// Memory Writes
-		case PSL_COMMAND_WRITE_UNLOCK:
-			resp_type = RESP_UNLOCK;
-		case PSL_COMMAND_WRITE_C:
-		case PSL_COMMAND_WRITE_MI:
-		case PSL_COMMAND_WRITE_MS:
-		case PSL_COMMAND_WRITE_NA:
-		case PSL_COMMAND_WRITE_INJ:
-		case PSL_COMMAND_WRITE_LM:
-#ifdef DEBUG
-			printf ("Write command size=%d, tag=0x%02x\n", size,
-				tag);
-#endif /* #ifdef DEBUG */
-			// Only issue buffer read if no other pending
-			if (!status.first_br) {
-				buffer_event (1, tag, addrptr);
-			}
-			// Remember tag and addr
-			add_buffer_read (tag, size, addrptr, resp_type);
-			break;
-		case PSL_COMMAND_TOUCH_I:
-		case PSL_COMMAND_TOUCH_S:
-		case PSL_COMMAND_TOUCH_M:
-		case PSL_COMMAND_TOUCH_LS:
-		case PSL_COMMAND_TOUCH_LM:
-		case PSL_COMMAND_PUSH_I:
-		case PSL_COMMAND_PUSH_S:
-		case PSL_COMMAND_INVALIDATE:
-		case PSL_COMMAND_CASTOUT_I:
-		case PSL_COMMAND_CASTOUT_S:
-		case PSL_COMMAND_CLAIM_M:
-		case PSL_COMMAND_CLAIM_U:
-		case PSL_COMMAND_FLUSH:
-		case PSL_COMMAND_EVICT_I:
-			add_resp (tag, PSL_RESPONSE_DONE);
-			break;
-		default:
-			fprintf (stderr, "ERROR:Command currently unsupported 0x%04x\n", cmd);
-			break;
+			return 1;
 		}
 	}
+
+	return 0;
+}
+
+static void handle_command_valid (struct cxl_afu_h* afu) {
+	uint32_t tag, tagpar, size, cmd, cmdpar;
+	uint64_t addr;
+	uint64_t addrpar;
+	uint8_t *addrptr;
+	uint8_t resp_type;
+
+	status.event->command_valid = 0;
+	tag = status.event->command_tag;
+	tagpar = status.event->command_tag_parity;
+	size = status.event->command_size;
+	cmd = status.event->command_code;
+	cmdpar = status.event->command_code_parity;
+	addr = status.event->command_address;
+	addrptr = (uint8_t *) status.event->command_address;
+	addrpar = status.event->command_address_parity;
+
+#ifdef DEBUG
+	printf ("Command tag=0x%02x\n", status.event->command_tag);
+#endif /* #ifdef DEBUG */
+
+	if (error_check (afu))
+		return;
+
+	if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
+#ifdef DEBUG
+		printf ("Response FLUSHED tag=0x%02x\n", tag);
+		fflush (stdout);
+#endif /* #ifdef DEBUG */
+		add_resp (tag, PSL_RESPONSE_FLUSHED);
+		return;
+	}
+	--status.credits;
+
+	if (((status.psl_state==PSL_LOCK) &&
+	     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
+	    (status.psl_state==PSL_NLOCK)) {
+#ifdef DEBUG
+		printf ("Response NLOCK tag=0x%02x\n", tag);
+#endif /* #ifdef DEBUG */
+		add_resp (tag, PSL_RESPONSE_NLOCK);
+		status.psl_state=PSL_NLOCK;
+		update_pending_resps (PSL_RESPONSE_NLOCK);
+#ifdef DEBUG
+		printf ("Dumping lock intervening command, tag=0x%02x\n", tag);
+		fflush (stdout);
+#endif /* #ifdef DEBUG */
+		return;
+	}
+
+	resp_type = RESP_NORMAL;
+	switch (cmd) {
+	// Interrupt
+	case PSL_COMMAND_INTREQ:
+		printf ("AFU interrupt command received\n");
+		status.event_occurred = 1;
+#ifdef DEBUG
+		printf ("Response tag=0x%02x\n", tag);
+#endif /* #ifdef DEBUG */
+		add_resp (tag, PSL_RESPONSE_FLUSHED);
+		break;
+	// Restart
+	case PSL_COMMAND_RESTART:
+		status.psl_state = PSL_RUNNING;
+#ifdef DEBUG
+		printf ("AFU restart command received\n");
+		printf ("Response tag=0x%02x\n", tag);
+#endif /* #ifdef DEBUG */
+		add_resp (tag, PSL_RESPONSE_DONE);
+		break;
+	case PSL_COMMAND_LOCK:
+		update_pending_resps (PSL_RESPONSE_NLOCK);
+		status.psl_state = PSL_LOCK;
+#ifdef DEBUG
+		printf ("Starting lock sequence, tag=0x%02x\n", tag);
+		fflush (stdout);
+#endif /* #ifdef DEBUG */
+		break;
+	case PSL_COMMAND_UNLOCK:
+		resp_type = RESP_UNLOCK;
+		break;
+	// Memory Reads
+	case PSL_COMMAND_READ_CL_LCK:
+		update_pending_resps (PSL_RESPONSE_NLOCK);
+		status.psl_state = PSL_LOCK;
+#ifdef DEBUG
+		printf ("Starting lock sequence, tag=0x%02x\n", tag);
+		fflush (stdout);
+#endif /* #ifdef DEBUG */
+	case PSL_COMMAND_READ_CL_NA:
+	case PSL_COMMAND_READ_CL_S:
+	case PSL_COMMAND_READ_CL_M:
+	case PSL_COMMAND_READ_CL_RES:
+	case PSL_COMMAND_READ_PNA:
+	case PSL_COMMAND_READ_LS:
+	case PSL_COMMAND_READ_LM:
+	case PSL_COMMAND_RD_GO_S:
+	case PSL_COMMAND_RD_GO_M:
+	case PSL_COMMAND_RWITM:
+#ifdef DEBUG
+		printf ("Read command size=%d tag=0x%02x\n", size, tag);
+#endif /* #ifdef DEBUG */
+		buffer_event (0, tag, addrptr);
+		break;
+	// Memory Writes
+	case PSL_COMMAND_WRITE_UNLOCK:
+		resp_type = RESP_UNLOCK;
+	case PSL_COMMAND_WRITE_C:
+	case PSL_COMMAND_WRITE_MI:
+	case PSL_COMMAND_WRITE_MS:
+	case PSL_COMMAND_WRITE_NA:
+	case PSL_COMMAND_WRITE_INJ:
+	case PSL_COMMAND_WRITE_LM:
+#ifdef DEBUG
+		printf ("Write command size=%d, tag=0x%02x\n", size,
+			tag);
+#endif /* #ifdef DEBUG */
+		// Only issue buffer read if no other pending
+		if (!status.first_br) {
+			buffer_event (1, tag, addrptr);
+		}
+		// Remember tag and addr
+		add_buffer_read (tag, size, addrptr, resp_type);
+		break;
+	case PSL_COMMAND_TOUCH_I:
+	case PSL_COMMAND_TOUCH_S:
+	case PSL_COMMAND_TOUCH_M:
+	case PSL_COMMAND_TOUCH_LS:
+	case PSL_COMMAND_TOUCH_LM:
+	case PSL_COMMAND_PUSH_I:
+	case PSL_COMMAND_PUSH_S:
+	case PSL_COMMAND_INVALIDATE:
+	case PSL_COMMAND_CASTOUT_I:
+	case PSL_COMMAND_CASTOUT_S:
+	case PSL_COMMAND_CLAIM_M:
+	case PSL_COMMAND_CLAIM_U:
+	case PSL_COMMAND_FLUSH:
+	case PSL_COMMAND_EVICT_I:
+		add_resp (tag, PSL_RESPONSE_DONE);
+		break;
+	default:
+		fflush (stdout);
+		fprintf (stderr, "ERROR:Command currently unsupported");
+		fprintf (stderr, " 0x%04x\n", cmd);
+		fflush (stderr);
+		break;
+	}
+}
+
+static void handle_psl_events (struct cxl_afu_h* afu) {
+	if (status.event->aux2_change)
+		handle_aux2_change (afu);
+
+	if (psl_get_mmio_acknowledge (status.event, (uint64_t *)
+	    &(status.mmio.data), (uint32_t *) &(status.mmio.parity)) ==
+	    PSL_SUCCESS)
+		handle_mmio_acknowledge (afu);
+
+	if (status.first_br && status.psl_state==PSL_FLUSHING)
+		remove_buffer_read();
+	else if (status.first_br)
+		handle_buffer_read (afu);
+
+	if (status.event->command_valid)
+		handle_command_valid (afu);
 }
 
 
@@ -632,6 +707,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	afu = (struct cxl_afu_h *) malloc (sizeof (struct cxl_afu_h));
 	if (!afu) {
 		perror ("malloc");
+		errno = ENOMEM;
 		return NULL;
 	}
 
@@ -640,6 +716,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	if (!status.event ) {
 		perror ("malloc");
 		free (afu);
+		errno = ENOMEM;
 		return NULL;
 	}
 	psl_event_reset (status.event);
@@ -647,9 +724,10 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Connect to AFU server
 	fp = fopen ("shim_host.dat", "r");
 	if (!fp) {
-		perror ("fopen shim_host.dat");
+		perror ("fopen:shim_host.dat");
 		free (status.event);
 		free (afu);
+		errno = ENODEV;
 		return NULL;
 	}
 	afu_id = x+1;
@@ -671,6 +749,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 			fclose (fp);
 			free (status.event);
 			free (afu);
+			errno = ENODEV;
 			return NULL;
 		}
 		port_str = strchr(host, ':');
@@ -684,6 +763,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 			fclose (fp);
 			free (status.event);
 			free (afu);
+			errno = ENODEV;
 			return NULL;
 		}
 	}
@@ -698,6 +778,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 		printf ("Unable to connect to %s:%d\n", host, port);
 		free (status.event);
 		free (afu);
+		errno = ENODEV;
 		return NULL;
 	}
 
@@ -853,7 +934,9 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 	if (flags & ~(CXL_MMIO_FLAGS_FULL))
 		goto err;
 	if (!afu->running) {
+		fflush (stdout);
 		fprintf (stderr, "ERROR:cxl_mmio_map:Must attach AFU first!\n");
+		fflush (stderr);
 		goto err;
 	}
 
@@ -878,15 +961,26 @@ int cxl_mmio_unmap(struct cxl_afu_h *afu) {
 }
 
 void *cxl_mmio_ptr(struct cxl_afu_h *afu) {
-	fprintf(stderr, "cxl_mmio_ptr:PSLSE does not support direct access to MMIO address space!\n");
+	fflush (stdout);
+	fprintf(stderr, "cxl_mmio_ptr:PSLSE does not support direct access");
+	fprintf(stderr, " to MMIO address space!\n");
+	fflush (stderr);
 	return NULL;
 }
 
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
-	if (offset >= afu->mmio_size)
+	if ((offset >= afu->mmio_size) || (offset & 0x7)) {
+		errno = EADDRNOTAVAIL;
 		return -1;
-	if (offset & 0x7)
+	}
+
+	if (!afu->running) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR:MMIO write without jrunning=1\n");
+		fflush (stderr);
+		errno = EADDRNOTAVAIL;
 		return -1;
+	}
 
 #ifdef DEBUG
 	printf ("Sending MMIO write double word to AFU\n");
@@ -908,10 +1002,19 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
 }
 
 int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
-	if (offset >= afu->mmio_size)
+	if ((offset >= afu->mmio_size) || (offset & 0x7)) {
+		errno = EADDRNOTAVAIL;
 		return -1;
-	if (offset & 0x7)
+	}
+
+	if (!afu->running) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR:MMIO read without jrunning=1\n");
+		fflush (stderr);
+		errno = EADDRNOTAVAIL;
+		*data = 0xfeedb00ffeedb00fl;
 		return -1;
+	}
 
 #ifdef DEBUG
 	printf ("Sending MMIO read double word to AFU\n");
@@ -935,10 +1038,18 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 	uint64_t value;
 
-	if (offset >= afu->mmio_size)
+	if ((offset >= afu->mmio_size) || (offset & 0x3)) {
+		errno = EADDRNOTAVAIL;
 		return -1;
-	if (offset & 0x3)
+	}
+
+	if (!afu->running) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR:MMIO write without jrunning=1\n");
+		fflush (stderr);
+		errno = EADDRNOTAVAIL;
 		return -1;
+	}
 
 	value = data;
 	value <<= 32;
@@ -963,10 +1074,19 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 }
 
 int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data) {
-	if (offset >= afu->mmio_size)
+	if ((offset >= afu->mmio_size) || (offset & 0x3)) {
+		errno = EADDRNOTAVAIL;
 		return -1;
-	if (offset & 0x3)
+	}
+
+	if (!afu->running) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR:MMIO read without jrunning=1\n");
+		fflush (stderr);
+		errno = EADDRNOTAVAIL;
+		*data = 0xfeedb00fl;
 		return -1;
+	}
 
 #ifdef DEBUG
 	printf ("Sending MMIO read single word to AFU\n");
