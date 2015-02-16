@@ -15,6 +15,7 @@
  */
 
 #include <malloc.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -57,7 +58,7 @@ static void psl (void);
 
 // VPI abstraction functions
 
-static uint64_t get_time()
+static long long get_time()
 {
   s_vpi_time time;
   time.type = vpiSimTime;
@@ -66,7 +67,7 @@ static uint64_t get_time()
   long_time = time.high;
   long_time <<= 32;
   long_time += time.low;
-  return long_time;
+  return (long long) long_time;
 }
 
 static void set_signal32(vpiHandle signal, uint32_t data)
@@ -198,13 +199,20 @@ static vpiHandle set_callback_event(void *func, int event)
 // Helper functions
 
 static void error_message (const char *str) {
-  uint64_t time = get_time();
-  fprintf (stderr, "%07"PRId64":ERROR: %s\n", time, str);
+  fflush (stdout);
+  fprintf (stderr, "%08lld: ERROR: %s\n", get_time(), str);
+  fflush (stderr);
 }
 
-static void print_time () {
-  uint64_t time = get_time();
-  printf ("%07"PRId64": ", time);
+static int info_message (char *format, ...) {
+  va_list args;
+  int ret;
+
+  printf ("%08lld: ", get_time());
+  va_start (args, format);
+  ret = vprintf (format, args);
+  va_end (args);
+  return ret;
 }
 
 // PSL functions
@@ -247,30 +255,19 @@ PLI_INT32 aux2 () {
   get_signal32(latency, &lat);
 
 #ifdef DEBUG
-  if (running && !event.job_running) {
-    print_time ();
-    printf ("jrunning=1\n");
-  }
+  if (running && !event.job_running)
+    info_message ("jrunning=1\n");
   if (done) {
-    print_time ();
-    printf ("jdone=1\n");
-    if (error) {
-      print_time ();
-      printf ("jerror=0x%016llx\n", (long long) error);
-    }
+    info_message ("jdone=1\n");
+    if (error)
+      info_message ("jerror=0x%016llx\n", (long long) error);
   }
-  if (llcmd_ack) {
-    print_time ();
-    printf ("jcack=1\n");
-  }
-  if (yield) {
-    print_time ();
-    printf ("jyield=1\n");
-  }
-  if (tbreq) {
-    print_time ();
-    printf ("tbreq=1\n");
-  }
+  if (llcmd_ack)
+    info_message ("jcack=1\n");
+  if (yield)
+    info_message ("jyield=1\n");
+  if (tbreq)
+    info_message ("tbreq=1\n");
 #endif /* #ifdef DEBUG */
 
   if (running && done) {
@@ -298,8 +295,7 @@ void mmio () {
 
 #ifdef DEBUG
   printf ("\n");
-  print_time ();
-  printf ("MMIO Ack data=0x%016llx\n", data);
+  info_message ("MMIO Ack data=0x%016llx\n", data);
 #endif /* #ifdef DEBUG */
 }
 
@@ -324,9 +320,8 @@ static void command () {
 		   handle);
 
 #ifdef DEBUG
-  print_time ();
-  printf ("Command tag=0x%03x com=%02x ea=0x%016llx size=%d\n", tag, com, addr,
-	  size);
+  info_message ("Command tag=0x%03x com=%02x ea=0x%016llx size=%d\n", tag, com,
+		addr, size);
 #endif /* #ifdef DEBUG */
 
   return;
@@ -348,12 +343,11 @@ void buffer_read () {
   event.buffer_rdata_valid = 1;
 
 #ifdef DEBUG
-  print_time ();
-  printf ("Buffer read data tag=0x%02x", tag);
+  info_message ("Buffer read data tag=0x%02x", tag);
   unsigned i;
   for (i=0;i<128;i++) {
     if (!(i%32))
-      printf ("\n0x");
+      printf ("\n  0x");
     printf ("%02x", event.buffer_rdata[i]);
   }
   printf ("\n");
@@ -578,8 +572,7 @@ static void set_job ()
   set_signal32(jval, 1);
 
 #ifdef DEBUG
-  print_time ();
-  printf ("Job 0x%03x EA=0x%016llx\n", event.job_code, event.job_address);
+  info_message ("Job 0x%03x EA=0x%016llx\n", event.job_code, event.job_address);
 #endif /* #ifdef DEBUG */
 
   cl_jval = CLOCK_EDGE_DELAY;
@@ -599,10 +592,9 @@ static void set_mmio ()
   set_signal32(mmval, 1);
 
 #ifdef DEBUG
-  print_time ();
-  printf ("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
-	  event.mmio_read, event.mmio_double, event.mmio_address,
-	  event.mmio_wdata);
+  info_message ("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
+		event.mmio_read, event.mmio_double, event.mmio_address,
+		event.mmio_wdata);
 #endif /* #ifdef DEBUG */
 
   cl_mmio = CLOCK_EDGE_DELAY;
@@ -617,8 +609,7 @@ static void set_buffer_read ()
   set_signal32(brval, 1);
 
 #ifdef DEBUG
-  print_time ();
-  printf ("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
+  info_message ("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
 #endif /* #ifdef DEBUG */
 
   cl_br = CLOCK_EDGE_DELAY;
@@ -641,8 +632,7 @@ static void set_buffer_write ()
   set_signal32(bwval, 1);
 
 #ifdef DEBUG
-  print_time ();
-  printf ("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
+  info_message ("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
 #endif /* #ifdef DEBUG */
 
   cl_bw = CLOCK_EDGE_DELAY;
@@ -659,9 +649,8 @@ static void set_response ()
   set_signal32(rval, 1);
 
 #ifdef DEBUG
-  print_time ();
-  printf ("Response tag=0x%02x code=0x%02x credits=%d\n", resp_list->tag,
-	  resp_list->code, resp_list->credits);
+  info_message ("Response tag=0x%02x code=0x%02x credits=%d\n", resp_list->tag,
+		resp_list->code, resp_list->credits);
 #endif /* #ifdef DEBUG */
 
   struct resp_event *tmp;
