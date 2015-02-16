@@ -52,11 +52,13 @@ struct cxl_afu_h;
  * cxl_adapter_next() will implicitly free used buffers if it is called on the
  * last adapter, or cxl_adapter_free() can be called explicitly.
  */
-//struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter);
-//char * cxl_adapter_dev_name(struct cxl_adapter_h *adapter);
-//void cxl_adapter_free(struct cxl_adapter_h *adapter);
-//#define cxl_for_each_adapter(adapter) \
+/* NOT YET SUPPORTED FOR SIMULATION
+struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter);
+char * cxl_adapter_dev_name(struct cxl_adapter_h *adapter);
+void cxl_adapter_free(struct cxl_adapter_h *adapter);
+#define cxl_for_each_adapter(adapter) \
 	for (adapter = cxl_adapter_next(NULL); adapter; adapter = cxl_adapter_next(adapter))
+   NOT YET SUPPORTED FOR SIMULATION */
 
 /*
  * AFU Enumeration
@@ -73,13 +75,15 @@ struct cxl_afu_h;
  * cxl_[adapter]_afu_next() will implicitly free used buffers if it is called
  * on the last AFU, or cxl_afu_free() can be called explicitly.
  */
-//struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu);
-//struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu);
-//char * cxl_afu_dev_name(struct cxl_afu_h *afu);
-//#define cxl_for_each_adapter_afu(adapter, afu) \
+/* NOT YET SUPPORTED FOR SIMULATION
+struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu);
+struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu);
+char * cxl_afu_dev_name(struct cxl_afu_h *afu);
+#define cxl_for_each_adapter_afu(adapter, afu) \
 	for (afu = cxl_adapter_afu_next(adapter, NULL); afu; afu = cxl_adapter_afu_next(NULL, afu))
-//#define cxl_for_each_afu(afu) \
+#define cxl_for_each_afu(afu) \
 	for (afu = cxl_afu_next(NULL); afu; afu = cxl_afu_next(afu))
+   NOT YET SUPPORTED FOR SIMULATION */
 
 enum cxl_views {
 	CXL_VIEW_DEDICATED = 0,
