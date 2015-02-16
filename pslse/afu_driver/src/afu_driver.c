@@ -195,6 +195,18 @@ static vpiHandle set_callback_event(void *func, int event)
   return vpi_register_cb(&cb);
 }
 
+// Helper functions
+
+static void error_message (const char *str) {
+  uint64_t time = get_time();
+  fprintf (stderr, "%07"PRId64":ERROR: %s\n", time, str);
+}
+
+static void print_time () {
+  uint64_t time = get_time();
+  printf ("%07"PRId64": ", time);
+}
+
 // PSL functions
 
 static void add_response()
@@ -222,7 +234,6 @@ static void add_response()
 }
 
 PLI_INT32 aux2 () {
-  uint64_t time = get_time();
   uint64_t error;
   uint32_t running, done, llcmd_ack, yield, tbreq, paren, lat;
 
@@ -236,24 +247,35 @@ PLI_INT32 aux2 () {
   get_signal32(latency, &lat);
 
 #ifdef DEBUG
-  if (running && !event.job_running)
-    printf ("%07lld: jrunning=1\n", time);
-  if (done) {
-    printf ("%07lld: jdone=1\n", time);
-    if (error)
-      printf ("%07lld: jerror=0x%016llx\n", time, (long long) error);
+  if (running && !event.job_running) {
+    print_time ();
+    printf ("jrunning=1\n");
   }
-  if (llcmd_ack)
-    printf ("%07lld: jcack=1\n", time);
-  if (yield)
-    printf ("%07lld: jyield=1\n", time);
-  if (tbreq)
-    printf ("%07lld: tbreq=1\n", time);
+  if (done) {
+    print_time ();
+    printf ("jdone=1\n");
+    if (error) {
+      print_time ();
+      printf ("jerror=0x%016llx\n", (long long) error);
+    }
+  }
+  if (llcmd_ack) {
+    print_time ();
+    printf ("jcack=1\n");
+  }
+  if (yield) {
+    print_time ();
+    printf ("jyield=1\n");
+  }
+  if (tbreq) {
+    print_time ();
+    printf ("tbreq=1\n");
+  }
 #endif /* #ifdef DEBUG */
 
-  if (running && done)
-    fprintf (stderr, "%07lld:ERROR: jrunning and jdone asserted at same time!",
-	     time);
+  if (running && done) {
+    error_message ("jrunning and jdone asserted at same time!");
+  }
 
   psl_afu_aux2_change(&event, running, done, llcmd_ack, error, yield, tbreq,
                       paren, lat);
@@ -262,9 +284,6 @@ PLI_INT32 aux2 () {
 }
 
 void mmio () {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
   uint64_t data, datapar;
   uint32_t ack;
 
@@ -278,14 +297,13 @@ void mmio () {
   psl_afu_mmio_ack (&event, data, datapar);
 
 #ifdef DEBUG
-  printf ("\n%07lld: MMIO Ack data=0x%016llx\n", time, data);
+  printf ("\n");
+  print_time ();
+  printf ("MMIO Ack data=0x%016llx\n", data);
 #endif /* #ifdef DEBUG */
 }
 
 static void command () {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
   uint64_t addr, addrpar;
   uint32_t valid, tag, tagpar, com, compar, abt, size, handle;
 
@@ -306,17 +324,15 @@ static void command () {
 		   handle);
 
 #ifdef DEBUG
-  printf ("%07lld: Command tag=0x%03x com=%02x ea=0x%016llx size=%d\n",
-	  time, tag, com, addr, size);
+  print_time ();
+  printf ("Command tag=0x%03x com=%02x ea=0x%016llx size=%d\n", tag, com, addr,
+	  size);
 #endif /* #ifdef DEBUG */
 
   return;
 }
 
 void buffer_read () {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
   uint32_t tag, valid, parity;
 
   get_signal32(brvalid_out, &valid);
@@ -332,7 +348,8 @@ void buffer_read () {
   event.buffer_rdata_valid = 1;
 
 #ifdef DEBUG
-  printf ("%07lld: Buffer read data tag=0x%02x", time, tag);
+  print_time ();
+  printf ("Buffer read data tag=0x%02x", tag);
   unsigned i;
   for (i=0;i<128;i++) {
     if (!(i%32))
@@ -554,10 +571,6 @@ PLI_INT32 clear_rval ()
 
 static void set_job ()
 {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
-
   set_signal32(jcom, event.job_code);
   set_signal32(jcompar, event.job_code_parity);
   set_signal64(jea, event.job_address);
@@ -565,8 +578,8 @@ static void set_job ()
   set_signal32(jval, 1);
 
 #ifdef DEBUG
-  printf ("%07lld: Job 0x%03x EA=0x%016llx\n", time, event.job_code,
-	  event.job_address);
+  print_time ();
+  printf ("Job 0x%03x EA=0x%016llx\n", event.job_code, event.job_address);
 #endif /* #ifdef DEBUG */
 
   cl_jval = CLOCK_EDGE_DELAY;
@@ -576,10 +589,6 @@ static void set_job ()
 
 static void set_mmio ()
 {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
-
   set_signal32(mmrnw, event.mmio_read);
   set_signal32(mmdw, event.mmio_double);
   set_signal64(mmad, event.mmio_address);
@@ -590,7 +599,8 @@ static void set_mmio ()
   set_signal32(mmval, 1);
 
 #ifdef DEBUG
-  printf ("%07lld: MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n", time,
+  print_time ();
+  printf ("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
 	  event.mmio_read, event.mmio_double, event.mmio_address,
 	  event.mmio_wdata);
 #endif /* #ifdef DEBUG */
@@ -602,16 +612,13 @@ static void set_mmio ()
 
 static void set_buffer_read ()
 {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
-
   set_signal32(brtag, event.buffer_read_tag);
   set_signal32(brtagpar, event.buffer_read_tag_parity);
   set_signal32(brval, 1);
 
 #ifdef DEBUG
-  printf ("%07lld: Buffer Read tag=0x%02x\n", time, event.buffer_read_tag);
+  print_time ();
+  printf ("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
 #endif /* #ifdef DEBUG */
 
   cl_br = CLOCK_EDGE_DELAY;
@@ -621,10 +628,6 @@ static void set_buffer_read ()
 
 static void set_buffer_write ()
 {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
-
   bw_delay += 2;
   uint32_t parity;
   parity = (uint32_t) event.buffer_wparity[0];
@@ -638,7 +641,8 @@ static void set_buffer_write ()
   set_signal32(bwval, 1);
 
 #ifdef DEBUG
-  printf ("%07lld: Buffer Write tag=0x%02x\n", time, event.buffer_write_tag);
+  print_time ();
+  printf ("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
 #endif /* #ifdef DEBUG */
 
   cl_bw = CLOCK_EDGE_DELAY;
@@ -648,10 +652,6 @@ static void set_buffer_write ()
 
 static void set_response ()
 {
-#ifdef DEBUG
-  uint64_t time = get_time();
-#endif /* #ifdef DEBUG */
-
   set_signal32(rtag, resp_list->tag);
   set_signal32(rtagpar, resp_list->tagpar);
   set_signal32(resp, resp_list->code);
@@ -659,8 +659,9 @@ static void set_response ()
   set_signal32(rval, 1);
 
 #ifdef DEBUG
-  printf ("%07lld: Response tag=0x%02x code=0x%02x credits=%d\n", time,
-	  resp_list->tag, resp_list->code, resp_list->credits);
+  print_time ();
+  printf ("Response tag=0x%02x code=0x%02x credits=%d\n", resp_list->tag,
+	  resp_list->code, resp_list->credits);
 #endif /* #ifdef DEBUG */
 
   struct resp_event *tmp;
@@ -687,7 +688,7 @@ static void psl () {
   }
   // Error case
   if (rc < 0) {
-    fprintf (stderr, "Socket error!  Terminating connection.\n");
+    error_message ("Socket error!  Terminating connection.");
     psl_close_afu_event (&event);
   }
 
@@ -736,7 +737,7 @@ PLI_INT32 afu_init()
     {
       if (port == 65535)
         {
-          fprintf (stderr, "Unable to find open port!\n");
+          error_message ("Unable to find open port!");
         }
       ++port;
     }
