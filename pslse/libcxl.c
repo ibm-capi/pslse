@@ -466,7 +466,7 @@ static int error_check (struct cxl_afu_h* afu) {
 		}
 		if (fail) {
 #ifdef DEBUG
-			printf ("Response FAILED")
+			printf ("Response FAILED");
 			printf (" tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
 			add_resp (tag, PSL_RESPONSE_FAILED);
