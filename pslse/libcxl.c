@@ -217,12 +217,16 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 	}
 
 	if (!testmemaddr (addr)) {
-		printf ("AFU attempted ");
+		fflush (stdout);
+		fprintf (stderr, "AFU attempted ");
 		if (rnw)
-			printf ("write");
+			fprintf (stderr, "write");
 		else
-			printf ("read");
-		printf (" to invalid address 0x%016llx\n",(long long) addr);
+			fprintf (stderr, "read");
+		fprintf (stderr, " to invalid address 0x");
+		fprintf (stderr, "%016llx", (long long) addr);
+		fprintf (stderr, "\n");
+		fflush (stderr);
 #ifdef DEBUG
 		printf ("Response AERROR tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
@@ -325,8 +329,8 @@ static void handle_aux2_change (struct cxl_afu_h* afu) {
 	printf ("AUX2 jrunning=%d jdone=%d", status.event->job_running,
 		status.event->job_done);
 	if (status.event->job_done) {
-		printf (" jerror=0x%016llx", (long long)
-			status.event->job_error);
+		printf (" jerror=0x%016llx",
+			(long long) status.event->job_error);
 	}
 	printf ("\n");
 #endif /* #ifdef DEBUG */
@@ -343,6 +347,9 @@ static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
 		fflush (stdout);
 		fprintf (stderr, "ERROR:Parity error");
 		fprintf (stderr, " on MMIO read data\n");
+		fprintf (stderr, " Data:0x%016llx\n",
+			 (long long) status.mmio.data);
+		fprintf (stderr, " Parity:%d\n", status.mmio.parity);
 		fflush (stderr);
 		status.mmio.data = ~0ull;
 	}
@@ -354,6 +361,7 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 	uint8_t *buffer;
 	uint8_t parity[DWORDS_PER_CACHELINE/8];
 	uint8_t parity_check[DWORDS_PER_CACHELINE/8];
+	unsigned i;
 
 	tag = status.first_br->tag;
 	buffer = (uint8_t *) malloc (CACHELINE_BYTES);
@@ -383,6 +391,12 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 			fprintf (stderr, "ERROR:Parity error on ");
 			fprintf (stderr, "buffer read data tag=0x");
 			fprintf (stderr, "%02x\n", tag);
+			for (i=0; i<CACHELINE_BYTES; i++) {
+				if (!(i%32))
+					fprintf (stderr, "\n  0x");
+				fprintf (stderr, "%02x", buffer[i]);
+			}
+			fprintf (stderr, "\n");
 			fflush (stderr);
 			add_resp (tag, PSL_RESPONSE_DERROR);
 			status.psl_state = PSL_FLUSHING;
@@ -431,7 +445,8 @@ static int error_check (struct cxl_afu_h* afu) {
 		if (addrpar != generate_parity(addr, ODD_PARITY)) {
 			fflush (stdout);
 			fprintf (stderr, "ERROR:Parity error on command");
-			fprintf (stderr, " address=0x%016lx\n", addr);
+			fprintf (stderr, " address=0x%016llx\n",
+				 (long long) addr);
 			fflush (stderr);
 			fail = 1;
 		}
