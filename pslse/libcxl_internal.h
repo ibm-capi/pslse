@@ -50,6 +50,7 @@ struct cxl_afu_h {
 	volatile int attached;
 	volatile int running;
 	volatile int parity_enable;
+	volatile int catastrophic;
 	volatile size_t mmio_size;
 	volatile struct afu_descriptor desc;
 };
