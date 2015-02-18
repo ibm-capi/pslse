@@ -242,6 +242,7 @@ static void push_resp () {
 	if (psl_response (status.event, status.first_resp->tag,
 	    status.first_resp->code, 1, 0, 0) == PSL_SUCCESS) {
 		struct afu_resp *temp;
+		status.active_tags[status.first_resp->tag] = 0;
 		temp = status.first_resp;
 		status.first_resp = status.first_resp->_next;
 		if (status.first_resp == NULL) {
