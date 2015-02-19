@@ -27,7 +27,10 @@
 #include "libcxl_internal.h"
 #include "psl_interface/psl_interface.h"
 
-#define ODD_PARITY 1		// 1=Odd parity, 0=Even parity
+/*
+ * Simulation parms
+ */
+// TODO: Clean this up with better method
 
 #define PAGED_RANDOMIZER 0	// Setting to smaller values means more
 				// frequent paged responses.
@@ -39,7 +42,11 @@
 				// Large values increase response delays
 				// Zero is an illegal value
 
-// System constants
+/*
+ * System constants
+ */
+
+#define ODD_PARITY 1		// 1=Odd parity, 0=Even parity
 #define MAX_LINE_CHARS 1024
 #define PSL_TAGS 256
 #define MAX_CREDITS 64
@@ -48,11 +55,9 @@
 #define BYTES_PER_DWORD 8
 #define WORD_OFFSET 4
 
-struct afu_command {
-	int request;
-	uint32_t code;
-	uint64_t addr;
-};
+/*
+ * Enumerations
+ */
 
 enum PSL_STATE {
 	PSL_INIT,
@@ -74,6 +79,17 @@ enum RESP_TYPE {
 	RESP_NORMAL,
 	RESP_UNLOCK
 };
+
+/*
+ * Structures
+ */
+
+struct afu_command {
+	int request;
+	uint32_t code;
+	uint64_t addr;
+};
+
 struct afu_mmio {
 	int request;
 	int rnw;
@@ -106,22 +122,26 @@ struct cxl_event_wrapper {
 struct psl_status {
 	struct AFU_EVENT *event;
 	volatile struct cxl_event_wrapper *event_list;
-	volatile unsigned int max_ints;
-	volatile unsigned int credits;
-	volatile unsigned int available_credits;
 	volatile struct afu_command cmd;
 	volatile struct afu_mmio mmio;
-	volatile int psl_state;
-	volatile int active_tags[PSL_TAGS];
 	struct afu_br *first_br;
 	struct afu_br *last_br;
 	struct afu_resp *first_resp;
 	struct afu_resp *last_resp;
+	volatile int psl_state;
+	unsigned int max_ints;
+	unsigned int credits;
+	unsigned int available_credits;
+	int active_tags[PSL_TAGS];
 };
 
 static struct psl_status status;
 
-static void short_delay() {
+/*
+ * Helper functions
+ */
+
+static void short_delay () {
 	struct timespec ts;
 	ts.tv_sec = 0;
 	ts.tv_nsec = 4;	// 250MHz = 4ns cycle time
@@ -154,7 +174,7 @@ static uint8_t generate_parity (uint64_t data, uint8_t odd) {
 	return parity;
 }
 
-static void generate_cl_parity(uint8_t *data, uint8_t *parity) {
+static void generate_cl_parity (uint8_t *data, uint8_t *parity) {
 	int i;
 	uint64_t dw;
 	uint8_t p;
@@ -173,6 +193,10 @@ static void generate_cl_parity(uint8_t *data, uint8_t *parity) {
 		parity[i/BYTES_PER_DWORD]+=p;
 	}
 }
+
+/*
+ * PSL thread functions
+ */
 
 static void catastrophic_error (struct cxl_afu_h* afu) {
 	fflush (stdout);
@@ -409,10 +433,10 @@ static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
 #endif /* #ifdef DEBUG */
 	status.mmio.request = AFU_IDLE;
 	if (afu->parity_enable && status.event->mmio_read &&
-	     (status.mmio.parity !=
-	      generate_parity(status.mmio.data, ODD_PARITY))) {
+	    (status.mmio.parity !=
+	     generate_parity(status.mmio.data, ODD_PARITY))) {
 		fflush (stdout);
-		fprintf (stderr, "ERROR: Parity error on MMIO read data\n");
+		fprintf (stderr, "ERROR: MMIO read data parity error\n");
 		fprintf (stderr, " Data:0x%016llx\n",
 			 (long long) status.mmio.data);
 		fprintf (stderr, " Parity:%d\n", status.mmio.parity);
@@ -449,9 +473,8 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 		if (afu->parity_enable &&
 		    memcmp(parity, parity_check, sizeof(parity))) {
 			fflush (stdout);
-			fprintf (stderr, "ERROR: Parity error on ");
-			fprintf (stderr, "buffer read data tag=0x");
-			fprintf (stderr, "%02x\n", tag);
+			fprintf (stderr, "ERROR: Buffer read parity error");
+			fprintf (stderr, ", tag=0x%02x\n", tag);
 			for (i=0; i<CACHELINE_BYTES; i++) {
 				if (!(i%32))
 					fprintf (stderr, "\n  0x");
@@ -482,8 +505,8 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 
 static void cmd_parity_error (const char *msg, uint64_t value, uint64_t parity) {
 	fflush (stdout);
-	fprintf (stderr, "ERROR: Parity error on command ");
-	fprintf (stderr, "%s=0x%016llx", msg, (long long) value);
+	fprintf (stderr, "ERROR: Common %s parity error", msg);
+	fprintf (stderr, " 0x%llx", (long long) value);
 	fprintf (stderr, ",%d\n", (int) parity);
 	fflush (stderr);
 }
@@ -795,6 +818,10 @@ static void *psl(void *ptr) {
 
 	pthread_exit(NULL);
 }
+
+/*
+ * libcxl functions
+ */
 
 struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	char *x, *comment, *afu_id, *host, *port_str;
