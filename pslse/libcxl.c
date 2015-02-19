@@ -266,10 +266,10 @@ static void push_resp () {
 	if (status.first_resp == NULL)
 		return;
 
-	if ((1 + (rand() % status.available_credits)) >= status.credits)
-		credits = 1 +
-			 (rand() % (status.available_credits - status.credits));
-	else
+	credits = (rand() % (1 + status.available_credits - status.credits));
+	credits++;
+
+	if ((rand() % (1 + status.available_credits)) < status.credits)
 		credits = 0;
 
 	if (psl_response (status.event, status.first_resp->tag,
@@ -740,19 +740,23 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 }
 
 static void handle_psl_events (struct cxl_afu_h* afu) {
+	// AUX2 signals changed
 	if (status.event->aux2_change)
 		handle_aux2_change (afu);
 
+	// MMIO acknowledge received
 	if (psl_get_mmio_acknowledge (status.event, (uint64_t *)
 	    &(status.mmio.data), (uint32_t *) &(status.mmio.parity)) ==
 	    PSL_SUCCESS)
 		handle_mmio_acknowledge (afu);
 
+	// Buffer Read data returned
 	if (status.first_br && status.psl_state==PSL_FLUSHING)
 		remove_buffer_read();
 	else if (status.first_br)
 		handle_buffer_read (afu);
 
+	// Command received
 	if (status.event->command_valid)
 		handle_command_valid (afu);
 }
