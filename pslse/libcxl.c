@@ -42,6 +42,7 @@
 // System constants
 #define MAX_LINE_CHARS 1024
 #define PSL_TAGS 256
+#define MAX_CREDITS 64
 #define CACHELINE_BYTES 128
 #define DWORDS_PER_CACHELINE 16
 #define BYTES_PER_DWORD 8
@@ -107,6 +108,7 @@ struct psl_status {
 	volatile struct cxl_event_wrapper *event_list;
 	volatile unsigned int max_ints;
 	volatile unsigned int credits;
+	volatile unsigned int available_credits;
 	volatile struct afu_command cmd;
 	volatile struct afu_mmio mmio;
 	volatile int psl_state;
@@ -236,11 +238,22 @@ static void add_resp (uint32_t tag, uint32_t code) {
 }
 
 static void push_resp () {
+	int credits;
 	if (status.first_resp == NULL)
 		return;
 
+	if ((1 + (rand() % status.available_credits)) >= status.credits)
+		credits = 1 +
+			 (rand() % (status.available_credits - status.credits));
+	else
+		credits = 0;
+
 	if (psl_response (status.event, status.first_resp->tag,
-	    status.first_resp->code, 1, 0, 0) == PSL_SUCCESS) {
+	    status.first_resp->code, credits, 0, 0) == PSL_SUCCESS) {
+#ifdef DEBUG
+		printf ("Response tag=0x%02x credits=%d\n",
+			status.first_resp->tag, credits);
+#endif /* #ifdef DEBUG */
 		struct afu_resp *temp;
 		status.active_tags[status.first_resp->tag] = 0;
 		temp = status.first_resp;
@@ -249,7 +262,8 @@ static void push_resp () {
 			status.last_resp = NULL;
 		}
 		free (temp);
-		++status.credits;
+		status.available_credits++;
+		status.credits += credits;
 	}
 }
 
@@ -298,9 +312,6 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 		psl_buffer_write (status.event, tag, (uint64_t) addr,
 				  CACHELINE_BYTES,
 				  addr, par);
-#ifdef DEBUG
-		printf ("Response tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
 		if (status.psl_state==PSL_NLOCK) {
 #ifdef DEBUG
 			printf ("Nlock response for read, tag=0x%02x\n", tag);
@@ -358,19 +369,32 @@ static void remove_buffer_read () {
 
 static void handle_aux2_change (struct cxl_afu_h* afu) {
 	status.event->aux2_change = 0;
+
+	// AFU started running
 	if (status.event->job_running)
 		afu->running = 1;
+
+	// AFU done
 	if (status.event->job_done) {
+		if (status.event->job_running) {
+			fflush (stdout);
+			fprintf (stderr, "ERROR: ");
+			fprintf (stderr, "jdone=1 while jrunning=1!");
+			fflush (stderr);
+		}
 		if (status.cmd.request==AFU_RESET)
 			status.cmd.request = AFU_IDLE;
 		afu->running = 0;
 	}
+
 	if (status.event->parity_enable)
 		afu->parity_enable = 1;
+	else
+		afu->parity_enable = 0;
 
 #ifdef DEBUG
-	printf ("AUX2 jrunning=%d jdone=%d", status.event->job_running,
-		status.event->job_done);
+	printf ("AUX2 paren=%d jrunning=%d jdone=%d", afu->parity_enable,
+		status.event->job_running, status.event->job_done);
 	if (status.event->job_done) {
 		printf (" jerror=0x%016llx",
 			(long long) status.event->job_error);
@@ -388,8 +412,7 @@ static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
 	     (status.mmio.parity !=
 	      generate_parity(status.mmio.data, ODD_PARITY))) {
 		fflush (stdout);
-		fprintf (stderr, "ERROR: Parity error");
-		fprintf (stderr, " on MMIO read data\n");
+		fprintf (stderr, "ERROR: Parity error on MMIO read data\n");
 		fprintf (stderr, " Data:0x%016llx\n",
 			 (long long) status.mmio.data);
 		fprintf (stderr, " Parity:%d\n", status.mmio.parity);
@@ -422,9 +445,6 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 #endif /* #ifdef DEBUG */
 			status.psl_state = PSL_RUNNING;
 		}
-#ifdef DEBUG
-		printf ("Response tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
 		generate_cl_parity(buffer, parity_check);
 		if (afu->parity_enable &&
 		    memcmp(parity, parity_check, sizeof(parity))) {
@@ -436,6 +456,10 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 				if (!(i%32))
 					fprintf (stderr, "\n  0x");
 				fprintf (stderr, "%02x", buffer[i]);
+			}
+			fprintf (stderr, "\n  0x");
+			for (i=0; i<DWORDS_PER_CACHELINE/8; i++) {
+				fprintf (stderr, "%02x", parity[i]);
 			}
 			fprintf (stderr, "\n");
 			fflush (stderr);
@@ -456,21 +480,26 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 	}
 }
 
+static void cmd_parity_error (const char *msg, uint64_t value, uint64_t parity) {
+	fflush (stdout);
+	fprintf (stderr, "ERROR: Parity error on command ");
+	fprintf (stderr, "%s=0x%016llx", msg, (long long) value);
+	fprintf (stderr, ",%d\n", (int) parity);
+	fflush (stderr);
+}
+
 static int cmd_error_check (struct cxl_afu_h* afu) {
 	unsigned fail;
-	uint32_t tag, tagpar, size, cmd, cmdpar;
+	uint32_t tag, tagpar, cmd, cmdpar;
 	uint64_t addr;
 	uint64_t addrpar;
-	uint8_t *addrptr;
 
 	status.event->command_valid = 0;
 	tag = status.event->command_tag;
 	tagpar = status.event->command_tag_parity;
-	size = status.event->command_size;
 	cmd = status.event->command_code;
 	cmdpar = status.event->command_code_parity;
 	addr = status.event->command_address;
-	addrptr = (uint8_t *) status.event->command_address;
 	addrpar = status.event->command_address_parity;
 
 	if (!afu->running) {
@@ -483,26 +512,20 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 	if (afu->parity_enable) {
 		fail = 0;
 		if (addrpar != generate_parity(addr, ODD_PARITY)) {
-			fflush (stdout);
-			fprintf (stderr, "ERROR: Parity error on command");
-			fprintf (stderr, " address=0x%016llx\n",
-				 (long long) addr);
+			cmd_parity_error ("address", addr, addrpar);
 			fail = 1;
 		}
 		if (tagpar != generate_parity(tag, ODD_PARITY)) {
-			fflush (stdout);
-			fprintf (stderr, "ERROR: Parity error on command");
-			fprintf (stderr, " tag=0x%02x\n", tag);
+			cmd_parity_error ("tag", (uint64_t) tag,
+					  (uint64_t) tagpar);
 			fail = 1;
 		}
 		if (cmdpar != generate_parity(cmd, ODD_PARITY)) {
-			fflush (stdout);
-			fprintf (stderr, "ERROR: Parity error on command");
-			fprintf (stderr, " code=0x%04x\n", cmd);
+			cmd_parity_error ("code", (uint64_t) cmd,
+					  (uint64_t) cmdpar);
 			fail = 1;
 		}
 		if (fail) {
-			fflush (stderr);
 #ifdef DEBUG
 			printf ("Response FAILED");
 			printf (" tag=0x%02x\n", tag);
@@ -516,21 +539,17 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 }
 
 static void handle_command_valid (struct cxl_afu_h* afu) {
-	uint32_t tag, tagpar, size, cmd, cmdpar;
+	uint32_t tag, size, cmd;
 	uint64_t addr;
-	uint64_t addrpar;
 	uint8_t *addrptr;
 	uint8_t resp_type;
 
 	status.event->command_valid = 0;
 	tag = status.event->command_tag;
-	tagpar = status.event->command_tag_parity;
 	size = status.event->command_size;
 	cmd = status.event->command_code;
-	cmdpar = status.event->command_code_parity;
 	addr = status.event->command_address;
 	addrptr = (uint8_t *) status.event->command_address;
-	addrpar = status.event->command_address_parity;
 
 #ifdef DEBUG
 	printf ("Command tag=0x%02x\n", status.event->command_tag);
@@ -570,6 +589,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		return;
 	}
 	--status.credits;
+	--status.available_credits;
 
 	// Check if PSL is flushing commands
 	if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
@@ -608,16 +628,12 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		else {
 			add_resp (tag, PSL_RESPONSE_DONE);
 		}
-#ifdef DEBUG
-		printf ("Response tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
 		status.psl_state = PSL_RUNNING;
 #ifdef DEBUG
 		printf ("AFU restart command received\n");
-		printf ("Response tag=0x%02x\n", tag);
 #endif /* #ifdef DEBUG */
 		add_resp (tag, PSL_RESPONSE_DONE);
 		break;
@@ -695,6 +711,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, " 0x%04x\n", cmd);
 		fflush (stderr);
 		++status.credits;
+		++status.available_credits;
 		break;
 	}
 }
@@ -873,7 +890,8 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Start PSL thread
 	status.psl_state = PSL_INIT;
 	status.event_list = NULL;
-	status.credits = 16;
+	status.credits = MAX_CREDITS;
+	status.available_credits = MAX_CREDITS;
 	for (i = 0; i < PSL_TAGS; i++)
 		status.active_tags[i] = 0;
 	status.first_br = NULL;
@@ -1053,7 +1071,8 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 		goto err;
 	if (!afu->running) {
 		fflush (stdout);
-		fprintf (stderr, "ERROR: cxl_mmio_map:Must attach AFU first!\n");
+		fprintf (stderr, "ERROR: ");
+		fprintf (stderr, "cxl_mmio_map: Must attach AFU first!\n");
 		fflush (stderr);
 		goto err;
 	}
