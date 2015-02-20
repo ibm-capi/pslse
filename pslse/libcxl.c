@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <assert.h>
 
 #include "libcxl.h"
 #include "libcxl_internal.h"
@@ -107,12 +108,18 @@ struct afu_mmio {
 	uint32_t desc;
 };
 
-struct afu_br {
+struct afu_req {
+	enum {
+		REQ_EMPTY = 0,
+		REQ_READ,
+		REQ_WRITE,
+		REQ_READ_WAIT_BUFFER,
+		REQ_READ_GOT_BUFFER,
+	} type;
 	uint32_t tag;
 	uint32_t size;
 	uint8_t *addr;
 	uint8_t resp_type;
-	struct afu_br *_next;
 };
 
 struct afu_resp {
@@ -131,8 +138,6 @@ struct psl_status {
 	volatile struct cxl_event_wrapper *event_list;
 	volatile struct afu_command cmd;
 	volatile struct afu_mmio mmio;
-	struct afu_br *first_br;
-	struct afu_br *last_br;
 	struct afu_resp *first_resp;
 	struct afu_resp *last_resp;
 	volatile int psl_state;
@@ -140,6 +145,8 @@ struct psl_status {
 	unsigned int credits;
 	unsigned int available_credits;
 	int active_tags[PSL_TAGS];
+	struct afu_req buffer_req[MAX_CREDITS];
+	struct afu_req *buffer_read;
 };
 
 static struct psl_status status;
@@ -319,93 +326,128 @@ static void push_resp () {
 	}
 }
 
-static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
-	uint8_t par[DWORDS_PER_CACHELINE/8];
+static int find_buffer_req(int empty)
+{
+	int j;
+	int i = rand() % MAX_CREDITS;
 
-	if (status.psl_state==PSL_FLUSHING) {
-		DPRINTF("Response FLUSHED tag=0x%02x\n", tag);
-		add_resp (tag, PSL_RESPONSE_FLUSHED);
+	for (j = 0; j < MAX_CREDITS; j++) {
+		if ((status.buffer_req[i].type == REQ_EMPTY) == empty)
+			break;
+		i++;
+		i %= MAX_CREDITS;
+	}
+
+	return i;
+}
+
+static void add_buffer_req(int type, uint32_t tag, uint32_t size,
+			   uint8_t *addr, uint8_t resp_type)
+{
+	int i = find_buffer_req(1);
+
+	// Sanity check -- this should never occur
+	assert(status.buffer_req[i].type == REQ_EMPTY);
+
+	status.buffer_req[i].type = type;
+	status.buffer_req[i].tag = tag;
+	status.buffer_req[i].size = size;
+	status.buffer_req[i].addr = addr;
+	status.buffer_req[i].resp_type = resp_type;
+}
+
+static int check_mem_addr(struct afu_req *req)
+{
+	if (testmemaddr(req->addr))
+		return 0;
+
+	fflush(stdout);
+	fprintf(stderr, "AFU attempted ");
+	if (req->type == REQ_WRITE)
+		fprintf(stderr, "write");
+	else
+		fprintf(stderr, "read");
+	fprintf(stderr, " to invalid address 0x");
+	fprintf(stderr, "%016llx", (long long) req->addr);
+	fprintf(stderr, "\n");
+	fflush(stderr);
+	DPRINTF("Response AERROR tag=0x%02x\n", req->tag);
+	add_resp(req->tag, PSL_RESPONSE_AERROR);
+	status.psl_state = PSL_FLUSHING;
+	req->type = REQ_EMPTY;
+
+	return 1;
+}
+
+static int check_flushing(struct afu_req *req)
+{
+	if (status.psl_state != PSL_FLUSHING)
+		return 0;
+
+	DPRINTF("Response FLUSHED tag=0x%02x\n", req->tag);
+	add_resp(req->tag, PSL_RESPONSE_FLUSHED);
+	req->type = REQ_EMPTY;
+
+	return 1;
+}
+
+static int check_paged(struct afu_req *req)
+{
+	if (!PAGED_RANDOMIZER || rand() % PAGED_RANDOMIZER)
+		return 0;
+
+	add_resp(req->tag, PSL_RESPONSE_PAGED);
+	status.psl_state = PSL_FLUSHING;
+	req->type = REQ_EMPTY;
+
+	return 1;
+}
+
+static void handle_buffer_req(struct cxl_afu_h* afu)
+{
+	//7 in 8 chance to delay so more commands can come
+	if ((rand() % 8))
 		return;
-	}
 
-	if (!testmemaddr (addr)) {
-		fflush (stdout);
-		fprintf (stderr, "AFU attempted ");
-		if (rnw)
-			fprintf (stderr, "write");
-		else
-			fprintf (stderr, "read");
-		fprintf (stderr, " to invalid address 0x");
-		fprintf (stderr, "%016llx", (long long) addr);
-		fprintf (stderr, "\n");
-		fflush (stderr);
-		DPRINTF("Response AERROR tag=0x%02x\n", tag);
-		add_resp (tag, PSL_RESPONSE_AERROR);
-		status.psl_state = PSL_FLUSHING;
+	int i = find_buffer_req(0);
+	struct afu_req *req = &status.buffer_req[i];
+
+	if (req->type == REQ_EMPTY)
 		return;
-	}
 
-	if (rnw) {
-		DPRINTF("Buffer Read tag=0x%02x\n", tag);
-		psl_buffer_read (status.event, tag, (uint64_t) addr,
-				 CACHELINE_BYTES);
-	}
-	else {
-		DPRINTF("Buffer Write tag=0x%02x\n", tag);
-		generate_cl_parity(addr, par);
-		psl_buffer_write (status.event, tag, (uint64_t) addr,
-				  CACHELINE_BYTES,
-				  addr, par);
+	if (check_flushing(req)) return;
+	if (check_mem_addr(req)) return;
+	if (check_paged(req)) return;
+
+	if (req->type == REQ_READ)
+	{
+		if (status.buffer_read != NULL)
+			return;
+
+		DPRINTF("Buffer Read tag=0x%02x\n", req->tag);
+		psl_buffer_read(status.event, req->tag, (uint64_t) req->addr,
+				CACHELINE_BYTES);
+		status.buffer_read = req;
+		req->type = REQ_READ_WAIT_BUFFER;
+
+	} else if (req->type == REQ_READ_GOT_BUFFER) {
+		add_resp(req->tag, PSL_RESPONSE_DONE);
+		req->type = REQ_EMPTY;
+	} else if (req->type == REQ_WRITE) {
+		uint8_t parity[DWORDS_PER_CACHELINE/8];
+		DPRINTF("Buffer Write tag=0x%02x\n", req->tag);
+		generate_cl_parity(req->addr, parity);
+		psl_buffer_write(status.event, req->tag, (uint64_t) req->addr,
+				 CACHELINE_BYTES, req->addr, parity);
+
 		if (status.psl_state==PSL_NLOCK) {
-			DPRINTF("Nlock response for read, tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_NLOCK);
+			DPRINTF("Nlock response for read, tag=0x%02x\n", req->tag);
+			add_resp(req->tag, PSL_RESPONSE_NLOCK);
+		} else {
+			add_resp(req->tag, PSL_RESPONSE_DONE);
 		}
-		else if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
-			// Inject random "Paged" response
-			add_resp (tag, PSL_RESPONSE_DONE);
-		}
-		else {
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-		}
-	}
-}
 
-static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr,
-			     uint8_t resp_type) {
-	struct afu_br *temp;
-
-	temp = (struct afu_br *) malloc (sizeof (struct afu_br));
-	temp->tag = tag;
-	temp->size = size;
-	temp->addr = addr;
-	temp->resp_type = resp_type;
-	temp->_next = NULL;
-
-	// List is empty
-	if (status.last_br == NULL) {
-		status.first_br = temp;
-		status.last_br = temp;
-		return;
-	}
-
-	// Append to list
-	status.last_br->_next = temp;
-	status.last_br = temp;
-}
-
-static void remove_buffer_read () {
-	struct afu_br *temp;
-
-	if (status.first_br == status.last_br)
-		status.last_br = NULL;
-	temp = status.first_br;
-	status.first_br = status.first_br->_next;
-	free (temp);
-
-	// Issue buffer read for pending writes
-	if (status.first_br) {
-		buffer_event (1, status.first_br->tag, status.first_br->addr);
+		req->type = REQ_EMPTY;
 	}
 }
 
@@ -461,58 +503,57 @@ static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
 
 static void handle_buffer_read (struct cxl_afu_h* afu) {
 	uint64_t offset;
-	uint32_t tag;
 	uint8_t *buffer;
 	uint8_t parity[DWORDS_PER_CACHELINE/8];
 	uint8_t parity_check[DWORDS_PER_CACHELINE/8];
 	unsigned i;
+	struct afu_req *req = status.buffer_read;
 
-	tag = status.first_br->tag;
+	if (req == NULL)
+		return;
+
 	buffer = (uint8_t *) malloc (CACHELINE_BYTES);
 	if (psl_get_buffer_read_data (status.event, buffer, parity)
-	    == PSL_SUCCESS) {
-		offset = (uint64_t) status.first_br->addr;
-		offset &= 0x7Fll;
-		memcpy (status.first_br->addr, &(buffer[offset]),
-			status.first_br->size);
-		if ((status.first_br->resp_type==RESP_UNLOCK) &&
-		    ((status.psl_state==PSL_LOCK) ||
-	             (status.psl_state==PSL_NLOCK))) {
-			DPRINTF("Lock sequence completed\n");
-			status.psl_state = PSL_RUNNING;
-		}
-		generate_cl_parity(buffer, parity_check);
-		if (afu->parity_enable &&
-		    memcmp(parity, parity_check, sizeof(parity))) {
-			fflush (stdout);
-			fprintf (stderr, "ERROR: Buffer read parity error");
-			fprintf (stderr, ", tag=0x%02x\n", tag);
-			for (i=0; i<CACHELINE_BYTES; i++) {
-				if (!(i%32))
-					fprintf (stderr, "\n  0x");
-				fprintf (stderr, "%02x", buffer[i]);
-			}
-			fprintf (stderr, "\n  0x");
-			for (i=0; i<DWORDS_PER_CACHELINE/8; i++) {
-				fprintf (stderr, "%02x", parity[i]);
-			}
-			fprintf (stderr, "\n");
-			fflush (stderr);
-			add_resp (tag, PSL_RESPONSE_DERROR);
-			status.psl_state = PSL_FLUSHING;
-		}
-		else if (!PAGED_RANDOMIZER ||
-			 (rand() % PAGED_RANDOMIZER)) {
-			// Inject random "Paged" response
-			add_resp (tag, PSL_RESPONSE_DONE);
-		}
-		else {
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-		}
-		// Stop remembing status.first_br
-		remove_buffer_read();
+	    != PSL_SUCCESS)
+		goto cleanup;
+
+	offset = (uint64_t) req->addr;
+	offset &= 0x7Fll;
+	memcpy (req->addr, &(buffer[offset]), req->size);
+	if ((req->resp_type==RESP_UNLOCK) &&
+	    ((status.psl_state==PSL_LOCK) ||
+	     (status.psl_state==PSL_NLOCK))) {
+		DPRINTF("Lock sequence completed\n");
+		status.psl_state = PSL_RUNNING;
 	}
+
+	generate_cl_parity(buffer, parity_check);
+	if (afu->parity_enable &&
+	    memcmp(parity, parity_check, sizeof(parity))) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR: Buffer read parity error");
+		fprintf (stderr, ", tag=0x%02x\n", req->tag);
+		for (i=0; i<CACHELINE_BYTES; i++) {
+			if (!(i%32))
+				fprintf (stderr, "\n  0x");
+			fprintf (stderr, "%02x", buffer[i]);
+		}
+		fprintf (stderr, "\n  0x");
+		for (i=0; i<DWORDS_PER_CACHELINE/8; i++) {
+			fprintf (stderr, "%02x", parity[i]);
+		}
+		fprintf (stderr, "\n");
+		fflush (stderr);
+		add_resp (req->tag, PSL_RESPONSE_DERROR);
+		status.psl_state = PSL_FLUSHING;
+		goto cleanup;
+	}
+
+	req->type = REQ_READ_GOT_BUFFER;
+	status.buffer_read = NULL;
+
+cleanup:
+	free(buffer);
 }
 
 static void cmd_parity_error (const char *msg, uint64_t value, uint64_t parity) {
@@ -677,7 +718,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_RD_GO_M:
 	case PSL_COMMAND_RWITM:
 		DPRINTF("Read command size=%d tag=0x%02x\n", size, tag);
-		buffer_event (0, tag, addrptr);
+		add_buffer_req(REQ_WRITE, tag, size, addrptr,  resp_type);
 		break;
 	// Memory Writes
 	case PSL_COMMAND_WRITE_UNLOCK:
@@ -689,12 +730,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_WRITE_INJ:
 	case PSL_COMMAND_WRITE_LM:
 		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
-		// Only issue buffer read if no other pending
-		if (!status.first_br) {
-			buffer_event (1, tag, addrptr);
-		}
-		// Remember tag and addr
-		add_buffer_read (tag, size, addrptr, resp_type);
+		add_buffer_req(REQ_READ, tag, size, addrptr,  resp_type);
 		break;
 	case PSL_COMMAND_TOUCH_I:
 	case PSL_COMMAND_TOUCH_S:
@@ -733,12 +769,6 @@ static void handle_psl_events (struct cxl_afu_h* afu) {
 	    &(status.mmio.data), (uint32_t *) &(status.mmio.parity)) ==
 	    PSL_SUCCESS)
 		handle_mmio_acknowledge (afu);
-
-	// Buffer Read data returned
-	if (status.first_br && status.psl_state==PSL_FLUSHING)
-		remove_buffer_read();
-	else if (status.first_br)
-		handle_buffer_read (afu);
 
 	// Command received
 	if (status.event->command_valid)
@@ -794,6 +824,9 @@ static void *psl(void *ptr) {
 		if (psl_get_afu_events (status.event) > 0) {
 			handle_psl_events (afu);
 		}
+
+		handle_buffer_read(afu);
+		handle_buffer_req(afu);
 	}
 
 	pthread_exit(NULL);
@@ -808,7 +841,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	struct cxl_afu_h *afu;
 	FILE *fp;
 	char hostdata[MAX_LINE_CHARS];
-	int port, i;
+	int port;
 	uint64_t value;
 
 	// Isolate AFU id from full path
@@ -899,10 +932,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.event_list = NULL;
 	status.credits = MAX_CREDITS;
 	status.available_credits = MAX_CREDITS;
-	for (i = 0; i < PSL_TAGS; i++)
-		status.active_tags[i] = 0;
-	status.first_br = NULL;
-	status.last_br = NULL;
+	memset(status.active_tags, 0, sizeof(status.active_tags));
+	memset(status.buffer_req, 0, sizeof(status.buffer_req));
+	status.buffer_read = NULL;
 	afu->id = afu_id;
 	afu->mmio_size = 0;
 	afu->attached = 0;
