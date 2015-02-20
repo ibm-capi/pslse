@@ -148,12 +148,35 @@ static struct psl_status status;
  * Helper functions
  */
 
+static int timeout_occured = 0;
+static void alarm_handler(int signal)
+{
+	timeout_occured = 1;
+}
+
+static void start_timeout(unsigned int timeout_seconds)
+{
+	signal(SIGALRM, alarm_handler);
+	timeout_occured = 0;
+	alarm(timeout_seconds);
+}
+
 static void short_delay () {
 	struct timespec ts;
 	ts.tv_sec = 0;
-	ts.tv_nsec = 4;	// 250MHz = 4ns cycle time
-	nanosleep (&ts, &ts);
+	ts.tv_nsec = 4; // 250MHz = 4ns cycle time
+	nanosleep(&ts, &ts);
 }
+
+#define wait_with_timeout(cond, timeout_seconds, message)   ({ \
+	start_timeout(timeout_seconds);			       \
+	while(cond && !timeout_occured) short_delay();	       \
+							       \
+	if (timeout_occured) {				       \
+		fprintf(stderr, "TIMEOUT: " message "\n");     \
+		catastrophic_error(afu);		       \
+	}						       \
+})
 
 static int testmemaddr(uint8_t *memaddr) {
 	int fd[2];
@@ -893,8 +916,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.cmd.code = PSL_JOB_RESET;
 	status.cmd.addr = 0;
 	status.cmd.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.cmd.request != AFU_IDLE) short_delay();
+
+	wait_with_timeout(status.cmd.request != AFU_IDLE, 10,
+			  "waiting for the AFU to go IDLE");
 
 	// Read AFU descriptor
 	status.mmio.rnw = 1;
@@ -904,8 +928,10 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Offset 0x00
 	status.mmio.addr = 0;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
+
 	value = be64toh(status.mmio.data);
 	afu->desc.req_prog_model = value && 0xffff;
         value >>= 16;
@@ -918,43 +944,43 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Offset 0x20
 	status.mmio.addr = 8;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_len = be64toh(status.mmio.data);
 
 	// Offset 0x28
 	status.mmio.addr = 10;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_offset = be64toh(status.mmio.data);
 
 	// Offset 0x30
 	status.mmio.addr = 12;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA = be64toh(status.mmio.data);
 
 	// Offset 0x38
 	status.mmio.addr = 14;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA_offset = be64toh(status.mmio.data);
 
 	// Offset 0x40
 	status.mmio.addr = 16;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_len = be64toh(status.mmio.data);
 
 	// Offset 0x48
 	status.mmio.addr = 18;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_offset = be64toh(status.mmio.data);
 
 	status.mmio.desc = 0;
@@ -974,21 +1000,19 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		return -1;
 	}
 
-	// FIXME: Add timeout
-	while (status.cmd.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.cmd.request != AFU_IDLE, 10,
+			  "waiting for the AFU to go IDLE");
 
 	// Start AFU
 	status.cmd.code = PSL_JOB_START;
 	status.cmd.addr = wed;
 	status.cmd.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.cmd.request == AFU_REQUEST) short_delay();
+	wait_with_timeout(status.cmd.request == AFU_REQUEST, 10,
+			  "waiting for the AFU to start");
 
 	// Wait for job_running
-	while (!afu->running) {
-		// FIXME: Timeout
-		short_delay();
-	}
+	wait_with_timeout(!afu->running, 10,
+			  "waiting for the AFU to start");
 
 	afu->attached = 1;
 	return 0;
@@ -999,10 +1023,7 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	if (!afu) return;
 
 	// Wait for job_done
-	while (afu->running) {
-		// FIXME: Timeout
-		short_delay();
-	}
+	wait_with_timeout(afu->running, 2, "waiting for the AFU to stop");
 
 	// Reset AFU
 	status.cmd.code = PSL_JOB_RESET;
@@ -1010,10 +1031,8 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	status.cmd.request = AFU_REQUEST;
 
 	// Wait for job_done
-	while (status.cmd.request != AFU_IDLE) {
-		// FIXME: Timeout
-		short_delay();
-	}
+	wait_with_timeout(status.cmd.request != AFU_IDLE, 2,
+			  "waiting for the AFU to stop");
 
 	// Stop PSL thread
 	status.psl_state = PSL_DONE;
