@@ -1,12 +1,12 @@
 /*
  * Copyright 2014 International Business Machines
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,6 +26,13 @@
 #include "libcxl.h"
 #include "libcxl_internal.h"
 #include "psl_interface/psl_interface.h"
+
+#ifdef DEBUG
+#define DPRINTF(...) printf(__VA_ARGS__)
+#else
+#define DPRINTF(...)
+#endif
+
 
 /*
  * Simulation parms
@@ -141,12 +148,35 @@ static struct psl_status status;
  * Helper functions
  */
 
+static int timeout_occured = 0;
+static void alarm_handler(int signal)
+{
+	timeout_occured = 1;
+}
+
+static void start_timeout(unsigned int timeout_seconds)
+{
+	signal(SIGALRM, alarm_handler);
+	timeout_occured = 0;
+	alarm(timeout_seconds);
+}
+
 static void short_delay () {
 	struct timespec ts;
 	ts.tv_sec = 0;
-	ts.tv_nsec = 4;	// 250MHz = 4ns cycle time
-	nanosleep (&ts, &ts);
+	ts.tv_nsec = 4; // 250MHz = 4ns cycle time
+	nanosleep(&ts, &ts);
 }
+
+#define wait_with_timeout(cond, timeout_seconds, message)   ({ \
+	start_timeout(timeout_seconds);			       \
+	while(cond && !timeout_occured) short_delay();	       \
+							       \
+	if (timeout_occured) {				       \
+		fprintf(stderr, "TIMEOUT: " message "\n");     \
+		catastrophic_error(afu);		       \
+	}						       \
+})
 
 static int testmemaddr(uint8_t *memaddr) {
 	int fd[2];
@@ -274,10 +304,8 @@ static void push_resp () {
 
 	if (psl_response (status.event, status.first_resp->tag,
 	    status.first_resp->code, credits, 0, 0) == PSL_SUCCESS) {
-#ifdef DEBUG
-		printf ("Response tag=0x%02x credits=%d\n",
-			status.first_resp->tag, credits);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response tag=0x%02x credits=%d\n", status.first_resp->tag,
+			credits);
 		struct afu_resp *temp;
 		status.active_tags[status.first_resp->tag] = 0;
 		temp = status.first_resp;
@@ -295,9 +323,7 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 	uint8_t par[DWORDS_PER_CACHELINE/8];
 
 	if (status.psl_state==PSL_FLUSHING) {
-#ifdef DEBUG
-		printf ("Response FLUSHED tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response FLUSHED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FLUSHED);
 		return;
 	}
@@ -313,33 +339,25 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 		fprintf (stderr, "%016llx", (long long) addr);
 		fprintf (stderr, "\n");
 		fflush (stderr);
-#ifdef DEBUG
-		printf ("Response AERROR tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response AERROR tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_AERROR);
 		status.psl_state = PSL_FLUSHING;
 		return;
 	}
 
 	if (rnw) {
-#ifdef DEBUG
-		printf ("Buffer Read tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Buffer Read tag=0x%02x\n", tag);
 		psl_buffer_read (status.event, tag, (uint64_t) addr,
 				 CACHELINE_BYTES);
 	}
 	else {
-#ifdef DEBUG
-		printf ("Buffer Write tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Buffer Write tag=0x%02x\n", tag);
 		generate_cl_parity(addr, par);
 		psl_buffer_write (status.event, tag, (uint64_t) addr,
 				  CACHELINE_BYTES,
 				  addr, par);
 		if (status.psl_state==PSL_NLOCK) {
-#ifdef DEBUG
-			printf ("Nlock response for read, tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+			DPRINTF("Nlock response for read, tag=0x%02x\n", tag);
 			add_resp (tag, PSL_RESPONSE_NLOCK);
 		}
 		else if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
@@ -378,7 +396,7 @@ static void add_buffer_read (uint32_t tag, uint32_t size, uint8_t *addr,
 
 static void remove_buffer_read () {
 	struct afu_br *temp;
-	
+
 	if (status.first_br == status.last_br)
 		status.last_br = NULL;
 	temp = status.first_br;
@@ -416,21 +434,17 @@ static void handle_aux2_change (struct cxl_afu_h* afu) {
 	else
 		afu->parity_enable = 0;
 
-#ifdef DEBUG
-	printf ("AUX2 paren=%d jrunning=%d jdone=%d", afu->parity_enable,
+	DPRINTF("AUX2 paren=%d jrunning=%d jdone=%d", afu->parity_enable,
 		status.event->job_running, status.event->job_done);
 	if (status.event->job_done) {
-		printf (" jerror=0x%016llx",
+		DPRINTF(" jerror=0x%016llx",
 			(long long) status.event->job_error);
 	}
-	printf ("\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("\n");
 }
 
 static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
-#ifdef DEBUG
-	printf ("MMIO Acknowledge\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("MMIO Acknowledge\n");
 	status.mmio.request = AFU_IDLE;
 	if (afu->parity_enable && status.event->mmio_read &&
 	    (status.mmio.parity !=
@@ -464,9 +478,7 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 		if ((status.first_br->resp_type==RESP_UNLOCK) &&
 		    ((status.psl_state==PSL_LOCK) ||
 	             (status.psl_state==PSL_NLOCK))) {
-#ifdef DEBUG
-			printf ("Lock sequence completed\n");
-#endif /* #ifdef DEBUG */
+			DPRINTF("Lock sequence completed\n");
 			status.psl_state = PSL_RUNNING;
 		}
 		generate_cl_parity(buffer, parity_check);
@@ -549,10 +561,7 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 			fail = 1;
 		}
 		if (fail) {
-#ifdef DEBUG
-			printf ("Response FAILED");
-			printf (" tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+			DPRINTF("Response FAILED tag=0x%02x\n", tag);
 			add_resp (tag, PSL_RESPONSE_FAILED);
 			return 1;
 		}
@@ -574,9 +583,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	addr = status.event->command_address;
 	addrptr = (uint8_t *) status.event->command_address;
 
-#ifdef DEBUG
-	printf ("Command tag=0x%02x\n", status.event->command_tag);
-#endif /* #ifdef DEBUG */
+	DPRINTF("Command tag=0x%02x\n", status.event->command_tag);
 
 	// Check for parity errors on command
 	if (cmd_error_check (afu))
@@ -588,10 +595,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "ERROR: Tag already in use:");
 		fprintf (stderr, "0x%02x\n", tag);
 		fflush (stderr);
-#ifdef DEBUG
-		printf ("Response FAILED");
-		printf (" tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response FAILED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FAILED);
 		catastrophic_error (afu);
 		return;
@@ -604,10 +608,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "ERROR: No credits left for command");
 		fprintf (stderr, " tag=0x%02x\n", tag);
 		fflush (stderr);
-#ifdef DEBUG
-		printf ("Response FAILED");
-		printf (" tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response FAILED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FAILED);
 		return;
 	}
@@ -616,9 +617,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 
 	// Check if PSL is flushing commands
 	if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
-#ifdef DEBUG
-		printf ("Response FLUSHED tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response FLUSHED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FLUSHED);
 		return;
 	}
@@ -627,15 +626,11 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	if (((status.psl_state==PSL_LOCK) &&
 	     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
 	    (status.psl_state==PSL_NLOCK)) {
-#ifdef DEBUG
-		printf ("Response NLOCK tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Response NLOCK tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_NLOCK);
 		status.psl_state=PSL_NLOCK;
 		update_pending_resps (PSL_RESPONSE_NLOCK);
-#ifdef DEBUG
-		printf ("Dumping lock intervening command, tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Dumping lock intervening command, tag=0x%02x\n", tag);
 		return;
 	}
 
@@ -655,17 +650,13 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	// Restart
 	case PSL_COMMAND_RESTART:
 		status.psl_state = PSL_RUNNING;
-#ifdef DEBUG
-		printf ("AFU restart command received\n");
-#endif /* #ifdef DEBUG */
+		DPRINTF("AFU restart command received\n");
 		add_resp (tag, PSL_RESPONSE_DONE);
 		break;
 	case PSL_COMMAND_LOCK:
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
-#ifdef DEBUG
-		printf ("Starting lock sequence, tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
 		break;
 	case PSL_COMMAND_UNLOCK:
 		resp_type = RESP_UNLOCK;
@@ -674,9 +665,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_READ_CL_LCK:
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
-#ifdef DEBUG
-		printf ("Starting lock sequence, tag=0x%02x\n", tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
 	case PSL_COMMAND_READ_CL_NA:
 	case PSL_COMMAND_READ_CL_S:
 	case PSL_COMMAND_READ_CL_M:
@@ -687,9 +676,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_RD_GO_S:
 	case PSL_COMMAND_RD_GO_M:
 	case PSL_COMMAND_RWITM:
-#ifdef DEBUG
-		printf ("Read command size=%d tag=0x%02x\n", size, tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Read command size=%d tag=0x%02x\n", size, tag);
 		buffer_event (0, tag, addrptr);
 		break;
 	// Memory Writes
@@ -701,10 +688,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_WRITE_NA:
 	case PSL_COMMAND_WRITE_INJ:
 	case PSL_COMMAND_WRITE_LM:
-#ifdef DEBUG
-		printf ("Write command size=%d, tag=0x%02x\n", size,
-			tag);
-#endif /* #ifdef DEBUG */
+		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
 		// Only issue buffer read if no other pending
 		if (!status.first_br) {
 			buffer_event (1, tag, addrptr);
@@ -773,9 +757,7 @@ static void *psl(void *ptr) {
 		if (status.cmd.request==AFU_REQUEST) {
 			if (psl_job_control (status.event, status.cmd.code,
 			    status.cmd.addr) == PSL_SUCCESS) {
-#ifdef DEBUG
-				printf ("Job 0x%02x\n", status.cmd.code);
-#endif /* #ifdef DEBUG */
+				DPRINTF("Job 0x%02x\n", status.cmd.code);
 				if (status.cmd.code == PSL_JOB_RESET)
 					status.cmd.request = AFU_RESET;
 				else
@@ -788,10 +770,7 @@ static void *psl(void *ptr) {
 				if (psl_mmio_read (status.event, status.mmio.dw,
 				    status.mmio.addr, status.mmio.desc) ==
 				    PSL_SUCCESS) {
-#ifdef DEBUG
-					printf ("MMIO Read %d\n",
-						status.mmio.addr);
-#endif /* #ifdef DEBUG */
+					DPRINTF("MMIO Read %d\n", status.mmio.addr);
 					status.mmio.request = AFU_PENDING;
 					continue;
 				}
@@ -803,10 +782,7 @@ static void *psl(void *ptr) {
 						    status.mmio.data,
 						    status.mmio.desc) ==
 						    PSL_SUCCESS) {
-#ifdef DEBUG
-					printf ("MMIO Write %d\n",
-						status.mmio.addr);
-#endif /* #ifdef DEBUG */
+					DPRINTF("MMIO Write %d\n", status.mmio.addr);
 					status.mmio.request = AFU_PENDING;
 					continue;
 				}
@@ -940,8 +916,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.cmd.code = PSL_JOB_RESET;
 	status.cmd.addr = 0;
 	status.cmd.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.cmd.request != AFU_IDLE) short_delay();
+
+	wait_with_timeout(status.cmd.request != AFU_IDLE, 10,
+			  "waiting for the AFU to go IDLE");
 
 	// Read AFU descriptor
 	status.mmio.rnw = 1;
@@ -951,8 +928,10 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Offset 0x00
 	status.mmio.addr = 0;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
+
 	value = be64toh(status.mmio.data);
 	afu->desc.req_prog_model = value && 0xffff;
         value >>= 16;
@@ -965,43 +944,43 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Offset 0x20
 	status.mmio.addr = 8;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_len = be64toh(status.mmio.data);
 
 	// Offset 0x28
 	status.mmio.addr = 10;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_offset = be64toh(status.mmio.data);
 
 	// Offset 0x30
 	status.mmio.addr = 12;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA = be64toh(status.mmio.data);
 
 	// Offset 0x38
 	status.mmio.addr = 14;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA_offset = be64toh(status.mmio.data);
 
 	// Offset 0x40
 	status.mmio.addr = 16;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_len = be64toh(status.mmio.data);
 
 	// Offset 0x48
 	status.mmio.addr = 18;
 	status.mmio.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_offset = be64toh(status.mmio.data);
 
 	status.mmio.desc = 0;
@@ -1021,21 +1000,19 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		return -1;
 	}
 
-	// FIXME: Add timeout
-	while (status.cmd.request != AFU_IDLE) short_delay();
+	wait_with_timeout(status.cmd.request != AFU_IDLE, 10,
+			  "waiting for the AFU to go IDLE");
 
 	// Start AFU
 	status.cmd.code = PSL_JOB_START;
 	status.cmd.addr = wed;
 	status.cmd.request = AFU_REQUEST;
-	// FIXME: Add timeout
-	while (status.cmd.request == AFU_REQUEST) short_delay();
+	wait_with_timeout(status.cmd.request == AFU_REQUEST, 10,
+			  "waiting for the AFU to start");
 
 	// Wait for job_running
-	while (!afu->running) {
-		// FIXME: Timeout
-		short_delay();
-	}
+	wait_with_timeout(!afu->running, 10,
+			  "waiting for the AFU to start");
 
 	afu->attached = 1;
 	return 0;
@@ -1046,10 +1023,7 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	if (!afu) return;
 
 	// Wait for job_done
-	while (afu->running) {
-		// FIXME: Timeout
-		short_delay();
-	}
+	wait_with_timeout(afu->running, 2, "waiting for the AFU to stop");
 
 	// Reset AFU
 	status.cmd.code = PSL_JOB_RESET;
@@ -1057,10 +1031,8 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	status.cmd.request = AFU_REQUEST;
 
 	// Wait for job_done
-	while (status.cmd.request != AFU_IDLE) {
-		// FIXME: Timeout
-		short_delay();
-	}
+	wait_with_timeout(status.cmd.request != AFU_IDLE, 2,
+			  "waiting for the AFU to stop");
 
 	// Stop PSL thread
 	status.psl_state = PSL_DONE;
@@ -1150,22 +1122,16 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
 		return -1;
 	}
 
-#ifdef DEBUG
-	printf ("Sending MMIO write double word to AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Sending MMIO write double word to AFU\n");
 	status.mmio.rnw = 0;
 	status.mmio.dw = 1;
 	status.mmio.addr = offset >> 2;
 	status.mmio.data = data;
 	status.mmio.request = AFU_REQUEST;
-#ifdef DEBUG
-	printf ("Waiting for MMIO ack from AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Waiting for MMIO ack from AFU\n");
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
-#ifdef DEBUG
-	printf ("MMIO write complete\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("MMIO write complete\n");
 	return 0;
 }
 
@@ -1184,22 +1150,16 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
 		return -1;
 	}
 
-#ifdef DEBUG
-	printf ("Sending MMIO read double word to AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Sending MMIO read double word to AFU\n");
 	status.mmio.rnw = 1;
 	status.mmio.dw = 1;
 	status.mmio.addr = offset >> 2;
 	status.mmio.request = AFU_REQUEST;
-#ifdef DEBUG
-	printf ("Waiting for MMIO ack from AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Waiting for MMIO ack from AFU\n");
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
 	*data = status.mmio.data;
-#ifdef DEBUG
-	printf ("MMIO read complete\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("MMIO read complete\n");
 	return 0;
 }
 
@@ -1222,22 +1182,16 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 	value = data;
 	value <<= 32;
 	value |= data;
-#ifdef DEBUG
-	printf ("Sending MMIO write single word to AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Sending MMIO write single word to AFU\n");
 	status.mmio.rnw = 0;
 	status.mmio.dw = 0;
 	status.mmio.addr = offset >> 2;
 	status.mmio.data = value;
 	status.mmio.request = AFU_REQUEST;
-#ifdef DEBUG
-	printf ("Waiting for MMIO ack from AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Waiting for MMIO ack from AFU\n");
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
-#ifdef DEBUG
-	printf ("MMIO write complete\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("MMIO write complete\n");
 	return 0;
 }
 
@@ -1256,21 +1210,16 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data) {
 		return -1;
 	}
 
-#ifdef DEBUG
-	printf ("Sending MMIO read single word to AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Sending MMIO read single word to AFU\n");
 	status.mmio.rnw = 1;
 	status.mmio.dw = 0;
 	status.mmio.addr = offset >> 2;
 	status.mmio.request = AFU_REQUEST;
-#ifdef DEBUG
-	printf ("Waiting for MMIO ack from AFU\n");
-#endif /* #ifdef DEBUG */
+	DPRINTF("Waiting for MMIO ack from AFU\n");
 	// FIXME: Add timeout
 	while (status.mmio.request != AFU_IDLE) short_delay();
 	*data = (uint32_t) status.mmio.data;
-#ifdef DEBUG
-	printf ("MMIO read complete\n");
-#endif /* #ifdef DEBUG */
+
+	DPRINTF("MMIO read complete\n");
 	return 0;
 }
