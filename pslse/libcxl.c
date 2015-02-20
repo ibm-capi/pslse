@@ -310,6 +310,10 @@ static void push_resp () {
 	if ((rand() % (1 + status.available_credits)) < status.credits)
 		credits = 0;
 
+	#ifdef DISABLE_DYNAMIC_CREDITS
+	credits = 1;
+	#endif
+
 	if (psl_response (status.event, status.first_resp->tag,
 	    status.first_resp->code, credits, 0, 0) == PSL_SUCCESS) {
 		DPRINTF("Response tag=0x%02x credits=%d\n", status.first_resp->tag,
