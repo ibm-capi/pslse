@@ -113,6 +113,7 @@ struct afu_req {
 		REQ_EMPTY = 0,
 		REQ_READ,
 		REQ_WRITE,
+		REQ_READ_PRELIM,
 		REQ_READ_WAIT_BUFFER,
 		REQ_READ_GOT_BUFFER,
 	} type;
@@ -403,10 +404,29 @@ static int check_paged(struct afu_req *req)
 	return 1;
 }
 
+static void do_buffer_write(uint8_t *addr, uint32_t tag, int prelim)
+{
+	uint8_t parity[DWORDS_PER_CACHELINE/8];
+	DPRINTF("Buffer %s Write tag=0x%02x\n", prelim ? "Prelim" : "", tag);
+	generate_cl_parity(addr, parity);
+	psl_buffer_write(status.event, tag, (uint64_t) addr,
+			 CACHELINE_BYTES, addr, parity);
+}
+
 static void handle_buffer_req(struct cxl_afu_h* afu)
 {
+	enum {
+		// A prelim_op is n extra buffer read/write which occurs before
+		// sending the completion
+		PRELIM_OP,
+		COMPLETE,
+		DELAY_START,
+		DELAY_END = 15,
+		MAX_OPS
+	} op = rand() % MAX_OPS;
+
 	//7 in 8 chance to delay so more commands can come
-	if ((rand() % 8))
+	if (op >= DELAY_START && op <= DELAY_END)
 		return;
 
 	int i = find_buffer_req(0);
@@ -419,8 +439,7 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 	if (check_mem_addr(req)) return;
 	if (check_paged(req)) return;
 
-	if (req->type == REQ_READ)
-	{
+	if (req->type == REQ_READ) {
 		if (status.buffer_read != NULL)
 			return;
 
@@ -428,17 +447,20 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 		psl_buffer_read(status.event, req->tag, (uint64_t) req->addr,
 				CACHELINE_BYTES);
 		status.buffer_read = req;
-		req->type = REQ_READ_WAIT_BUFFER;
+		if (op == COMPLETE)
+		    req->type = REQ_READ_WAIT_BUFFER;
+		else
+		    req->type = REQ_READ_PRELIM;
 
 	} else if (req->type == REQ_READ_GOT_BUFFER) {
 		add_resp(req->tag, PSL_RESPONSE_DONE);
 		req->type = REQ_EMPTY;
-	} else if (req->type == REQ_WRITE) {
-		uint8_t parity[DWORDS_PER_CACHELINE/8];
-		DPRINTF("Buffer Write tag=0x%02x\n", req->tag);
-		generate_cl_parity(req->addr, parity);
-		psl_buffer_write(status.event, req->tag, (uint64_t) req->addr,
-				 CACHELINE_BYTES, req->addr, parity);
+	} else if (req->type == REQ_WRITE && op == PRELIM_OP) {
+		uint8_t prelim_data[CACHELINE_BYTES];
+		memset(prelim_data, 0xFF, sizeof(prelim_data));
+		do_buffer_write(prelim_data, req->tag, 1);
+	} else if (req->type == REQ_WRITE && op == COMPLETE) {
+		do_buffer_write(req->addr, req->tag, 0);
 
 		if (status.psl_state==PSL_NLOCK) {
 			DPRINTF("Nlock response for read, tag=0x%02x\n", req->tag);
@@ -519,12 +541,16 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 
 	offset = (uint64_t) req->addr;
 	offset &= 0x7Fll;
-	memcpy (req->addr, &(buffer[offset]), req->size);
-	if ((req->resp_type==RESP_UNLOCK) &&
-	    ((status.psl_state==PSL_LOCK) ||
-	     (status.psl_state==PSL_NLOCK))) {
-		DPRINTF("Lock sequence completed\n");
-		status.psl_state = PSL_RUNNING;
+
+	if (req->type != REQ_READ_PRELIM) {
+		memcpy (req->addr, &(buffer[offset]), req->size);
+
+		if ((req->resp_type==RESP_UNLOCK) &&
+		    ((status.psl_state==PSL_LOCK) ||
+		     (status.psl_state==PSL_NLOCK))) {
+			DPRINTF("Lock sequence completed\n");
+			status.psl_state = PSL_RUNNING;
+		}
 	}
 
 	generate_cl_parity(buffer, parity_check);
@@ -549,7 +575,11 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 		goto cleanup;
 	}
 
-	req->type = REQ_READ_GOT_BUFFER;
+	if (req->type != REQ_READ_PRELIM)
+		req->type = REQ_READ_GOT_BUFFER;
+	else
+		req->type = REQ_READ;
+
 	status.buffer_read = NULL;
 
 cleanup:
