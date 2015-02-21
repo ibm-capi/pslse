@@ -46,7 +46,7 @@
 				// 1 is an illegal value as every response
 				// would be paged.
 
-#define RESP_RANDOMIZER 10	// Setting to 1 achieves fastest responses,
+#define RESP_RANDOMIZER 5	// Setting to 1 achieves fastest responses,
 				// Large values increase response delays
 				// Zero is an illegal value
 
