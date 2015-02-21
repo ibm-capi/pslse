@@ -39,11 +39,7 @@
  */
 // TODO: Clean this up with better method
 
-#define PAGED_RANDOMIZER 0	// Setting to smaller values means more
-				// frequent paged responses.
-				// 0 disables all paged responses.
-				// 1 is an illegal value as every response
-				// would be paged.
+#define PAGED_RANDOMIZER 5	// Percent chance of getting paged response
 
 #define RESP_RANDOMIZER 10	// Setting to 1 achieves fastest responses,
 				// Large values increase response delays
@@ -360,13 +356,8 @@ static void buffer_event (int rnw, uint32_t tag, uint8_t *addr) {
 			DPRINTF("Nlock response for read, tag=0x%02x\n", tag);
 			add_resp (tag, PSL_RESPONSE_NLOCK);
 		}
-		else if (!PAGED_RANDOMIZER || (rand() % PAGED_RANDOMIZER)) {
-			// Inject random "Paged" response
-			add_resp (tag, PSL_RESPONSE_DONE);
-		}
 		else {
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
+			add_resp (tag, PSL_RESPONSE_DONE);
 		}
 	}
 }
@@ -501,15 +492,8 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 			add_resp (tag, PSL_RESPONSE_DERROR);
 			status.psl_state = PSL_FLUSHING;
 		}
-		else if (!PAGED_RANDOMIZER ||
-			 (rand() % PAGED_RANDOMIZER)) {
-			// Inject random "Paged" response
-			add_resp (tag, PSL_RESPONSE_DONE);
-		}
-		else {
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-		}
+		add_resp (tag, PSL_RESPONSE_DONE);
+
 		// Stop remembing status.first_br
 		remove_buffer_read();
 	}
@@ -583,7 +567,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	addr = status.event->command_address;
 	addrptr = (uint8_t *) status.event->command_address;
 
-	DPRINTF("Command tag=0x%02x\n", status.event->command_tag);
+	DPRINTF("Command %04x tag=0x%02x\n", cmd, tag);
 
 	// Check for parity errors on command
 	if (cmd_error_check (afu))
@@ -616,7 +600,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	--status.available_credits;
 
 	// Check if PSL is flushing commands
-	if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
+	if ((status.psl_state==PSL_FLUSHING) && (cmd != PSL_COMMAND_RESTART)) {
 		DPRINTF("Response FLUSHED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FLUSHED);
 		return;
@@ -654,6 +638,13 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		add_resp (tag, PSL_RESPONSE_DONE);
 		break;
 	case PSL_COMMAND_LOCK:
+		// Randomly inject paged response
+		if ((rand() % 100) < PAGED_RANDOMIZER) {
+			DPRINTF("Response PAGED tag=0x%02x\n", tag);
+			add_resp (tag, PSL_RESPONSE_PAGED);
+			status.psl_state = PSL_FLUSHING;
+			return;
+		}
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
@@ -663,6 +654,13 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		break;
 	// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
+		// Randomly inject paged response
+		if ((rand() % 100) < PAGED_RANDOMIZER) {
+			DPRINTF("Response PAGED tag=0x%02x\n", tag);
+			add_resp (tag, PSL_RESPONSE_PAGED);
+			status.psl_state = PSL_FLUSHING;
+			return;
+		}
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
@@ -676,6 +674,13 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_RD_GO_S:
 	case PSL_COMMAND_RD_GO_M:
 	case PSL_COMMAND_RWITM:
+		// Randomly inject paged response
+		if ((rand() % 100) < PAGED_RANDOMIZER) {
+			DPRINTF("Response PAGED tag=0x%02x\n", tag);
+			add_resp (tag, PSL_RESPONSE_PAGED);
+			status.psl_state = PSL_FLUSHING;
+			return;
+		}
 		DPRINTF("Read command size=%d tag=0x%02x\n", size, tag);
 		buffer_event (0, tag, addrptr);
 		break;
@@ -688,6 +693,13 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_WRITE_NA:
 	case PSL_COMMAND_WRITE_INJ:
 	case PSL_COMMAND_WRITE_LM:
+		// Randomly inject paged response
+		if ((rand() % 100) < PAGED_RANDOMIZER) {
+			DPRINTF("Response PAGED tag=0x%02x\n", tag);
+			add_resp (tag, PSL_RESPONSE_PAGED);
+			status.psl_state = PSL_FLUSHING;
+			return;
+		}
 		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
 		// Only issue buffer read if no other pending
 		if (!status.first_br) {
@@ -710,6 +722,13 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_CLAIM_U:
 	case PSL_COMMAND_FLUSH:
 	case PSL_COMMAND_EVICT_I:
+		// Randomly inject paged response
+		if ((rand() % 100) < PAGED_RANDOMIZER) {
+			DPRINTF("Response PAGED tag=0x%02x\n", tag);
+			add_resp (tag, PSL_RESPONSE_PAGED);
+			status.psl_state = PSL_FLUSHING;
+			return;
+		}
 		add_resp (tag, PSL_RESPONSE_DONE);
 		break;
 	default:
