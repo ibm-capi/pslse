@@ -419,12 +419,14 @@ static int check_flushing(struct afu_req *req)
 
 static int check_paged(struct afu_req *req)
 {
+	if (req->type != REQ_READ && req->type != REQ_WRITE)
+		return 0;
+
 	if (!PAGED_RANDOMIZER || rand() % PAGED_RANDOMIZER)
 		return 0;
 
 	add_resp(req->tag, PSL_RESPONSE_PAGED);
 	status.psl_state = PSL_FLUSHING;
-	status.buffer_read = NULL;
 	req->type = REQ_EMPTY;
 
 	return 1;
