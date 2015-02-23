@@ -310,8 +310,43 @@ static void push_resp () {
 
 	if (psl_response (status.event, status.first_resp->tag,
 	    status.first_resp->code, credits, 0, 0) == PSL_SUCCESS) {
-		DPRINTF("Response tag=0x%02x credits=%d\n", status.first_resp->tag,
-			credits);
+		DPRINTF("Response ");
+		switch (status.first_resp->code) {
+		case PSL_RESPONSE_DONE:
+			DPRINTF("DONE");
+			break;
+		case PSL_RESPONSE_AERROR:
+			DPRINTF("AERROR");
+			break;
+		case PSL_RESPONSE_DERROR:
+			DPRINTF("DERROR");
+			break;
+		case PSL_RESPONSE_NLOCK:
+			DPRINTF("NLOCK");
+			break;
+		case PSL_RESPONSE_NRES:
+			DPRINTF("NRES");
+			break;
+		case PSL_RESPONSE_FLUSHED:
+			DPRINTF("FLUSHED");
+			break;
+		case PSL_RESPONSE_FAULT:
+			DPRINTF("FAULT");
+			break;
+		case PSL_RESPONSE_FAILED:
+			DPRINTF("FAILED");
+			break;
+		case PSL_RESPONSE_PAGED:
+			DPRINTF("PAGED");
+			break;
+		case PSL_RESPONSE_CONTEXT:
+			DPRINTF("CONTEXT");
+			break;
+		default:
+			DPRINTF("UNKNOWN");
+		}
+		DPRINTF(" tag=0x%02x", status.first_resp->tag);
+		DPRINTF(" credits=%d\n", credits);
 		struct afu_resp *temp;
 		status.active_tags[status.first_resp->tag] = 0;
 		temp = status.first_resp;
@@ -370,7 +405,6 @@ static int check_mem_addr(struct afu_req *req)
 	fprintf(stderr, "%016llx", (long long) req->addr);
 	fprintf(stderr, "\n");
 	fflush(stderr);
-	DPRINTF("Response AERROR tag=0x%02x\n", req->tag);
 	add_resp(req->tag, PSL_RESPONSE_AERROR);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
@@ -383,7 +417,6 @@ static int check_flushing(struct afu_req *req)
 	if (status.psl_state != PSL_FLUSHING)
 		return 0;
 
-	DPRINTF("Response FLUSHED tag=0x%02x\n", req->tag);
 	add_resp(req->tag, PSL_RESPONSE_FLUSHED);
 	req->type = REQ_EMPTY;
 
@@ -397,6 +430,7 @@ static int check_paged(struct afu_req *req)
 
 	add_resp(req->tag, PSL_RESPONSE_PAGED);
 	status.psl_state = PSL_FLUSHING;
+	status.buffer_read = NULL;
 	req->type = REQ_EMPTY;
 
 	return 1;
@@ -461,7 +495,6 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 		do_buffer_write(req->addr, req->tag, 0);
 
 		if (status.psl_state==PSL_NLOCK) {
-			DPRINTF("Nlock response for read, tag=0x%02x\n", req->tag);
 			add_resp(req->tag, PSL_RESPONSE_NLOCK);
 		} else {
 			add_resp(req->tag, PSL_RESPONSE_DONE);
@@ -630,7 +663,6 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 			fail = 1;
 		}
 		if (fail) {
-			DPRINTF("Response FAILED tag=0x%02x\n", tag);
 			add_resp (tag, PSL_RESPONSE_FAILED);
 			return 1;
 		}
@@ -664,7 +696,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "ERROR: Tag already in use:");
 		fprintf (stderr, "0x%02x\n", tag);
 		fflush (stderr);
-		DPRINTF("Response FAILED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FAILED);
 		catastrophic_error (afu);
 		return;
@@ -677,7 +708,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "ERROR: No credits left for command");
 		fprintf (stderr, " tag=0x%02x\n", tag);
 		fflush (stderr);
-		DPRINTF("Response FAILED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FAILED);
 		return;
 	}
@@ -686,7 +716,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 
 	// Check if PSL is flushing commands
 	if ((status.psl_state==PSL_FLUSHING) && (cmd != PSL_COMMAND_RESTART)) {
-		DPRINTF("Response FLUSHED tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_FLUSHED);
 		return;
 	}
@@ -695,7 +724,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	if (((status.psl_state==PSL_LOCK) &&
 	     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
 	    (status.psl_state==PSL_NLOCK)) {
-		DPRINTF("Response NLOCK tag=0x%02x\n", tag);
 		add_resp (tag, PSL_RESPONSE_NLOCK);
 		status.psl_state=PSL_NLOCK;
 		update_pending_resps (PSL_RESPONSE_NLOCK);
@@ -723,13 +751,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		add_resp (tag, PSL_RESPONSE_DONE);
 		break;
 	case PSL_COMMAND_LOCK:
-		// Randomly inject paged response
-		if ((rand() % 100) < PAGED_RANDOMIZER) {
-			DPRINTF("Response PAGED tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-			return;
-		}
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
@@ -739,13 +760,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		break;
 	// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
-		// Randomly inject paged response
-		if ((rand() % 100) < PAGED_RANDOMIZER) {
-			DPRINTF("Response PAGED tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-			return;
-		}
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
@@ -759,13 +773,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_RD_GO_S:
 	case PSL_COMMAND_RD_GO_M:
 	case PSL_COMMAND_RWITM:
-		// Randomly inject paged response
-		if ((rand() % 100) < PAGED_RANDOMIZER) {
-			DPRINTF("Response PAGED tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-			return;
-		}
 		DPRINTF("Read command size=%d tag=0x%02x\n", size, tag);
 		add_buffer_req(REQ_WRITE, tag, size, addrptr,  resp_type);
 		break;
@@ -778,13 +785,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_WRITE_NA:
 	case PSL_COMMAND_WRITE_INJ:
 	case PSL_COMMAND_WRITE_LM:
-		// Randomly inject paged response
-		if ((rand() % 100) < PAGED_RANDOMIZER) {
-			DPRINTF("Response PAGED tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-			return;
-		}
 		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
 		add_buffer_req(REQ_READ, tag, size, addrptr,  resp_type);
 		break;
@@ -802,13 +802,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_CLAIM_U:
 	case PSL_COMMAND_FLUSH:
 	case PSL_COMMAND_EVICT_I:
-		// Randomly inject paged response
-		if ((rand() % 100) < PAGED_RANDOMIZER) {
-			DPRINTF("Response PAGED tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_PAGED);
-			status.psl_state = PSL_FLUSHING;
-			return;
-		}
 		add_resp (tag, PSL_RESPONSE_DONE);
 		break;
 	default:
