@@ -171,22 +171,10 @@ static int establish_protocol (struct AFU_EVENT *event)
 void
 psl_event_reset (struct AFU_EVENT *event)
 {
-  event->job_valid = 0;
-  event->clock = 0;
+  memset(event, 0, sizeof(*event));
   event->proto_primary = PROTOCOL_PRIMARY;
   event->proto_secondary = PROTOCOL_SECONDARY;
   event->proto_tertiary = PROTOCOL_TERTIARY;
-  event->mmio_valid = 0;
-  event->response_valid = 0;
-  event->credits = 0;
-  event->cache_state = 0;
-  event->buffer_read = 0;
-  event->buffer_write = 0;
-  event->command_valid = 0;
-  event->aux1_change = 0;
-  event->aux2_change = 0;
-  event->mmio_ack = 0;
-  event->buffer_rdata_valid = 0;
 }
 
 /* Call this once after creation to initialize the AFU_EVENT structure and
