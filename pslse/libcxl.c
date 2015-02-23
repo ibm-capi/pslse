@@ -28,6 +28,8 @@
 #include "libcxl_internal.h"
 #include "psl_interface/psl_interface.h"
 
+#define PSA_REQUIRED_MASK 0x0100000000000000L
+
 #ifdef DEBUG
 #define DPRINTF(...) printf(__VA_ARGS__)
 #else
@@ -950,8 +952,10 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 			++host;
 		}
 		else {
-			printf ("Invalid format in shim_host.dat.  Expected ',' :%s\n",
-				hostdata);
+			fflush (stdout);
+			fprintf (stderr, "Invalid format in shim_host.dat.");
+			fprintf (stderr, "  Expected ',' :%s\n", hostdata);
+			fflush (stderr);
 			fclose (fp);
 			free (status.event);
 			free (afu);
@@ -964,8 +968,10 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 			++port_str;
 		}
 		else {
-			printf ("Invalid format in shim_host.dat.  Expected ':' :%s\n",
-				hostdata);
+			fflush (stdout);
+			fprintf (stderr, "Invalid format in shim_host.dat.");
+			fprintf (stderr, "  Expected ':' :%s\n", hostdata);
+			fflush (stderr);
 			fclose (fp);
 			free (status.event);
 			free (afu);
@@ -981,7 +987,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Connect to AFU server
 	printf ("Attempting to connect to %s:%d\n", host, port);
 	if (psl_init_afu_event (status.event, host, port) != PSL_SUCCESS) {
-		printf ("Unable to connect to %s:%d\n", host, port);
+		fflush (stdout);
+		fprintf (stderr, "Unable to connect to %s:%d\n", host, port);
+		fflush (stderr);
 		free (status.event);
 		free (afu);
 		errno = ENODEV;
@@ -1025,58 +1033,81 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
 
-	value = be64toh(status.mmio.data);
-	afu->desc.req_prog_model = value && 0xffff;
+	value = status.mmio.data;
+	afu->desc.req_prog_model = (uint16_t) (value & 0xffffl);
         value >>= 16;
-	afu->desc.num_of_afu_CRs = value && 0xffff;
+	afu->desc.num_of_afu_CRs = value & 0xffff;
         value >>= 16;
-	afu->desc.num_of_processes = value && 0xffff;
+	afu->desc.num_of_processes = value & 0xffff;
         value >>= 16;
-	afu->desc.num_ints_per_process = value && 0xffff;
+	afu->desc.num_ints_per_process = value & 0xffff;
 
 	// Offset 0x20
 	status.mmio.addr = 8;
 	status.mmio.request = AFU_REQUEST;
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
-	afu->desc.AFU_CR_len = be64toh(status.mmio.data);
+	afu->desc.AFU_CR_len = status.mmio.data;
 
 	// Offset 0x28
 	status.mmio.addr = 10;
 	status.mmio.request = AFU_REQUEST;
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
-	afu->desc.AFU_CR_offset = be64toh(status.mmio.data);
+	afu->desc.AFU_CR_offset = status.mmio.data;
 
 	// Offset 0x30
 	status.mmio.addr = 12;
 	status.mmio.request = AFU_REQUEST;
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
-	afu->desc.PerProcessPSA = be64toh(status.mmio.data);
+	afu->desc.PerProcessPSA = status.mmio.data;
 
 	// Offset 0x38
 	status.mmio.addr = 14;
 	status.mmio.request = AFU_REQUEST;
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
-	afu->desc.PerProcessPSA_offset = be64toh(status.mmio.data);
+	afu->desc.PerProcessPSA_offset = status.mmio.data;
 
 	// Offset 0x40
 	status.mmio.addr = 16;
 	status.mmio.request = AFU_REQUEST;
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
-	afu->desc.AFU_EB_len = be64toh(status.mmio.data);
+	afu->desc.AFU_EB_len = status.mmio.data;
 
 	// Offset 0x48
 	status.mmio.addr = 18;
 	status.mmio.request = AFU_REQUEST;
 	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
 			  "waiting for the MMIO request to go IDLE");
-	afu->desc.AFU_EB_offset = be64toh(status.mmio.data);
+	afu->desc.AFU_EB_offset = status.mmio.data;
 
 	status.mmio.desc = 0;
+
+	// Verify num_of_processes
+	if (!afu->desc.num_of_processes) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR: ");
+		fprintf (stderr, "AFU descriptor num_of_processes=0!\n");
+		fflush (stderr);
+		free (afu);
+		errno = ENODEV;
+		return NULL;
+	}
+
+	// Verify req_prog_model
+	if (afu->desc.req_prog_model != 0x0010l) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR: ");
+		fprintf (stderr, "AFU descriptor contains unsupported");
+		fprintf (stderr, " req_prog_model value 0x%04x!\n", afu->desc.req_prog_model);
+		fflush (stderr);
+		free (afu);
+		errno = ENODEV;
+		return NULL;
+	}
 
 	// Minimum interrupts is 1
 	status.max_ints = afu->desc.num_ints_per_process;
@@ -1172,10 +1203,19 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 		fflush (stderr);
 		goto err;
 	}
+	
+	if (!(afu->desc.PerProcessPSA & 0x0100000000000000L)) {
+		fflush (stdout);
+		fprintf (stderr, "ERROR: ");
+		fprintf (stderr, "cxl_mmio_map: AFU descriptor ");
+		fprintf (stderr, "Problem State Area Required is not set\n");
+		fflush (stderr);
+		goto err;
+	}
 
 	afu->mmio_flags = flags;
 	// Dedicated Process AFU
-	if (afu->desc.req_prog_model && 0x0010)
+	if (afu->desc.req_prog_model && 0x0010l)
 		afu->mmio_size = 0x4000000; // 64MB, AFU Maximum
 	// Only dedicated mode supported for now
 	else
