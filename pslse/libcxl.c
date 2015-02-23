@@ -126,6 +126,7 @@ struct afu_req {
 struct afu_resp {
 	uint32_t tag;
 	uint32_t code;
+	int credits;
 	struct afu_resp *_next;
 };
 
@@ -144,7 +145,6 @@ struct psl_status {
 	volatile int psl_state;
 	unsigned int max_ints;
 	unsigned int credits;
-	unsigned int available_credits;
 	int active_tags[PSL_TAGS];
 	struct afu_req buffer_req[MAX_CREDITS];
 	struct afu_req *buffer_read;
@@ -283,11 +283,12 @@ static void update_pending_resps (uint32_t code) {
 	}
 }
 
-static void add_resp (uint32_t tag, uint32_t code) {
+static void add_resp (uint32_t tag, uint32_t code, int credits) {
 	struct afu_resp *resp;
 	resp = (struct afu_resp *) malloc (sizeof (struct afu_resp));
 	resp->tag = tag;
 	resp->code = code;
+	resp->credits = credits;
 	resp->_next = NULL;
 	if (status.last_resp == NULL) {
 		status.first_resp = resp;
@@ -304,12 +305,7 @@ static void push_resp () {
 	if (status.first_resp == NULL)
 		return;
 
-	credits = (rand() % (1 + status.available_credits - status.credits));
-	credits++;
-
-	if ((rand() % (1 + status.available_credits)) < status.credits)
-		credits = 0;
-
+	credits = status.first_resp->credits;
 	if (psl_response (status.event, status.first_resp->tag,
 	    status.first_resp->code, credits, 0, 0) == PSL_SUCCESS) {
 		DPRINTF("Response tag=0x%02x credits=%d\n", status.first_resp->tag,
@@ -322,7 +318,6 @@ static void push_resp () {
 			status.last_resp = NULL;
 		}
 		free (temp);
-		status.available_credits++;
 		status.credits += credits;
 	}
 }
@@ -373,7 +368,7 @@ static int check_mem_addr(struct afu_req *req)
 	fprintf(stderr, "\n");
 	fflush(stderr);
 	DPRINTF("Response AERROR tag=0x%02x\n", req->tag);
-	add_resp(req->tag, PSL_RESPONSE_AERROR);
+	add_resp(req->tag, PSL_RESPONSE_AERROR, 1);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
 
@@ -386,7 +381,7 @@ static int check_flushing(struct afu_req *req)
 		return 0;
 
 	DPRINTF("Response FLUSHED tag=0x%02x\n", req->tag);
-	add_resp(req->tag, PSL_RESPONSE_FLUSHED);
+	add_resp(req->tag, PSL_RESPONSE_FLUSHED, 1);
 	req->type = REQ_EMPTY;
 
 	return 1;
@@ -397,7 +392,7 @@ static int check_paged(struct afu_req *req)
 	if (!PAGED_RANDOMIZER || rand() % PAGED_RANDOMIZER)
 		return 0;
 
-	add_resp(req->tag, PSL_RESPONSE_PAGED);
+	add_resp(req->tag, PSL_RESPONSE_PAGED, 1);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
 
@@ -453,7 +448,7 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 		    req->type = REQ_READ_PRELIM;
 
 	} else if (req->type == REQ_READ_GOT_BUFFER) {
-		add_resp(req->tag, PSL_RESPONSE_DONE);
+		add_resp(req->tag, PSL_RESPONSE_DONE, 1);
 		req->type = REQ_EMPTY;
 	} else if (req->type == REQ_WRITE && op == PRELIM_OP) {
 		uint8_t prelim_data[CACHELINE_BYTES];
@@ -464,9 +459,9 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 
 		if (status.psl_state==PSL_NLOCK) {
 			DPRINTF("Nlock response for read, tag=0x%02x\n", req->tag);
-			add_resp(req->tag, PSL_RESPONSE_NLOCK);
+			add_resp(req->tag, PSL_RESPONSE_NLOCK, 1);
 		} else {
-			add_resp(req->tag, PSL_RESPONSE_DONE);
+			add_resp(req->tag, PSL_RESPONSE_DONE, 1);
 		}
 
 		req->type = REQ_EMPTY;
@@ -570,7 +565,7 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 		}
 		fprintf (stderr, "\n");
 		fflush (stderr);
-		add_resp (req->tag, PSL_RESPONSE_DERROR);
+		add_resp (req->tag, PSL_RESPONSE_DERROR, 1);
 		status.psl_state = PSL_FLUSHING;
 		goto cleanup;
 	}
@@ -633,7 +628,7 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 		}
 		if (fail) {
 			DPRINTF("Response FAILED tag=0x%02x\n", tag);
-			add_resp (tag, PSL_RESPONSE_FAILED);
+			add_resp (tag, PSL_RESPONSE_FAILED, 1);
 			return 1;
 		}
 	}
@@ -667,7 +662,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "0x%02x\n", tag);
 		fflush (stderr);
 		DPRINTF("Response FAILED tag=0x%02x\n", tag);
-		add_resp (tag, PSL_RESPONSE_FAILED);
+		add_resp (tag, PSL_RESPONSE_FAILED, 1);
 		catastrophic_error (afu);
 		return;
 	}
@@ -680,16 +675,15 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, " tag=0x%02x\n", tag);
 		fflush (stderr);
 		DPRINTF("Response FAILED tag=0x%02x\n", tag);
-		add_resp (tag, PSL_RESPONSE_FAILED);
+		add_resp (tag, PSL_RESPONSE_FAILED, 1);
 		return;
 	}
 	--status.credits;
-	--status.available_credits;
 
 	// Check if PSL is flushing commands
 	if ((status.psl_state==PSL_FLUSHING) && (cmd != 1)) {
 		DPRINTF("Response FLUSHED tag=0x%02x\n", tag);
-		add_resp (tag, PSL_RESPONSE_FLUSHED);
+		add_resp (tag, PSL_RESPONSE_FLUSHED, 1);
 		return;
 	}
 
@@ -698,7 +692,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
 	    (status.psl_state==PSL_NLOCK)) {
 		DPRINTF("Response NLOCK tag=0x%02x\n", tag);
-		add_resp (tag, PSL_RESPONSE_NLOCK);
+		add_resp (tag, PSL_RESPONSE_NLOCK, 1);
 		status.psl_state=PSL_NLOCK;
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		DPRINTF("Dumping lock intervening command, tag=0x%02x\n", tag);
@@ -712,17 +706,17 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_INTREQ:
 		printf ("AFU interrupt command received\n");
 		if (add_interrupt (&(status.event_list), addr)) {
-			add_resp (tag, PSL_RESPONSE_FAILED);
+			add_resp (tag, PSL_RESPONSE_FAILED, 1);
 		}
 		else {
-			add_resp (tag, PSL_RESPONSE_DONE);
+			add_resp (tag, PSL_RESPONSE_DONE, 1);
 		}
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
 		status.psl_state = PSL_RUNNING;
 		DPRINTF("AFU restart command received\n");
-		add_resp (tag, PSL_RESPONSE_DONE);
+		add_resp (tag, PSL_RESPONSE_DONE, 1);
 		break;
 	case PSL_COMMAND_LOCK:
 		update_pending_resps (PSL_RESPONSE_NLOCK);
@@ -776,7 +770,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_CLAIM_U:
 	case PSL_COMMAND_FLUSH:
 	case PSL_COMMAND_EVICT_I:
-		add_resp (tag, PSL_RESPONSE_DONE);
+		add_resp (tag, PSL_RESPONSE_DONE, 1);
 		break;
 	default:
 		fflush (stdout);
@@ -784,7 +778,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, " 0x%04x\n", cmd);
 		fflush (stderr);
 		++status.credits;
-		++status.available_credits;
 		break;
 	}
 }
@@ -961,7 +954,6 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.psl_state = PSL_INIT;
 	status.event_list = NULL;
 	status.credits = MAX_CREDITS;
-	status.available_credits = MAX_CREDITS;
 	memset(status.active_tags, 0, sizeof(status.active_tags));
 	memset(status.buffer_req, 0, sizeof(status.buffer_req));
 	status.buffer_read = NULL;
