@@ -42,11 +42,15 @@
  */
 // TODO: Clean this up with better method
 
+#ifndef PAGED_RANDOMIZER
 #define PAGED_RANDOMIZER 5	// Percent chance of getting paged response
+#endif
 
+#ifndef RESP_RANDOMIZER
 #define RESP_RANDOMIZER 5	// Setting to 1 achieves fastest responses,
 				// Large values increase response delays
 				// Zero is an illegal value
+#endif
 
 /*
  * System constants
@@ -1183,7 +1187,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 		fflush (stderr);
 		goto err;
 	}
-	
+
 	if (!(afu->desc.PerProcessPSA & 0x0100000000000000L)) {
 		fflush (stdout);
 		fprintf (stderr, "ERROR: ");
