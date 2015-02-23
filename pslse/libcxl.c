@@ -121,6 +121,7 @@ struct afu_req {
 	uint32_t size;
 	uint8_t *addr;
 	uint8_t resp_type;
+	int credits;
 };
 
 struct afu_resp {
@@ -350,6 +351,7 @@ static void add_buffer_req(int type, uint32_t tag, uint32_t size,
 	status.buffer_req[i].size = size;
 	status.buffer_req[i].addr = addr;
 	status.buffer_req[i].resp_type = resp_type;
+	status.buffer_req[i].credits = 1;
 }
 
 static int check_mem_addr(struct afu_req *req)
@@ -368,7 +370,7 @@ static int check_mem_addr(struct afu_req *req)
 	fprintf(stderr, "\n");
 	fflush(stderr);
 	DPRINTF("Response AERROR tag=0x%02x\n", req->tag);
-	add_resp(req->tag, PSL_RESPONSE_AERROR, 1);
+	add_resp(req->tag, PSL_RESPONSE_AERROR, req->credits);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
 
@@ -381,7 +383,7 @@ static int check_flushing(struct afu_req *req)
 		return 0;
 
 	DPRINTF("Response FLUSHED tag=0x%02x\n", req->tag);
-	add_resp(req->tag, PSL_RESPONSE_FLUSHED, 1);
+	add_resp(req->tag, PSL_RESPONSE_FLUSHED, req->credits);
 	req->type = REQ_EMPTY;
 
 	return 1;
@@ -397,6 +399,20 @@ static int check_paged(struct afu_req *req)
 	req->type = REQ_EMPTY;
 
 	return 1;
+}
+
+static void move_credits(struct afu_req *req)
+{
+	if (req->credits == 0)
+		return;
+
+	struct afu_req *dest = &status.buffer_req[find_buffer_req(0)];
+
+	if (dest->type == REQ_EMPTY)
+		return;
+
+	dest->credits++;
+	req->credits--;
 }
 
 static void do_buffer_write(uint8_t *addr, uint32_t tag, int prelim)
@@ -448,7 +464,8 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 		    req->type = REQ_READ_PRELIM;
 
 	} else if (req->type == REQ_READ_GOT_BUFFER) {
-		add_resp(req->tag, PSL_RESPONSE_DONE, 1);
+		move_credits(req);
+		add_resp(req->tag, PSL_RESPONSE_DONE, req->credits);
 		req->type = REQ_EMPTY;
 	} else if (req->type == REQ_WRITE && op == PRELIM_OP) {
 		uint8_t prelim_data[CACHELINE_BYTES];
@@ -457,11 +474,13 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 	} else if (req->type == REQ_WRITE && op == COMPLETE) {
 		do_buffer_write(req->addr, req->tag, 0);
 
+		move_credits(req);
+
 		if (status.psl_state==PSL_NLOCK) {
 			DPRINTF("Nlock response for read, tag=0x%02x\n", req->tag);
-			add_resp(req->tag, PSL_RESPONSE_NLOCK, 1);
+			add_resp(req->tag, PSL_RESPONSE_NLOCK, req->credits);
 		} else {
-			add_resp(req->tag, PSL_RESPONSE_DONE, 1);
+			add_resp(req->tag, PSL_RESPONSE_DONE, req->credits);
 		}
 
 		req->type = REQ_EMPTY;
