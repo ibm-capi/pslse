@@ -142,7 +142,6 @@ struct psl_status {
 	volatile int psl_state;
 	unsigned int max_ints;
 	unsigned int credits;
-	unsigned int available_credits;
 	int active_tags[PSL_TAGS];
 	struct afu_req buffer_req[MAX_CREDITS];
 	struct afu_req *buffer_read;
@@ -298,18 +297,11 @@ static void add_resp (uint32_t tag, uint32_t code) {
 }
 
 static void push_resp () {
-	int credits;
 	if (status.first_resp == NULL)
 		return;
 
-	credits = (rand() % (1 + status.available_credits - status.credits));
-	credits++;
-
-	if ((rand() % (1 + status.available_credits)) < status.credits)
-		credits = 0;
-
 	if (psl_response (status.event, status.first_resp->tag,
-	    status.first_resp->code, credits, 0, 0) == PSL_SUCCESS) {
+	    status.first_resp->code, 1, 0, 0) == PSL_SUCCESS) {
 		DPRINTF("Response ");
 		switch (status.first_resp->code) {
 		case PSL_RESPONSE_DONE:
@@ -345,8 +337,7 @@ static void push_resp () {
 		default:
 			DPRINTF("UNKNOWN");
 		}
-		DPRINTF(" tag=0x%02x", status.first_resp->tag);
-		DPRINTF(" credits=%d\n", credits);
+		DPRINTF(" tag=0x%02x\n", status.first_resp->tag);
 		struct afu_resp *temp;
 		status.active_tags[status.first_resp->tag] = 0;
 		temp = status.first_resp;
@@ -355,8 +346,7 @@ static void push_resp () {
 			status.last_resp = NULL;
 		}
 		free (temp);
-		status.available_credits++;
-		status.credits += credits;
+		++status.credits;
 	}
 }
 
@@ -712,7 +702,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		return;
 	}
 	--status.credits;
-	--status.available_credits;
 
 	// Check if PSL is flushing commands
 	if ((status.psl_state==PSL_FLUSHING) && (cmd != PSL_COMMAND_RESTART)) {
@@ -810,7 +799,6 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, " 0x%04x\n", cmd);
 		fflush (stderr);
 		++status.credits;
-		++status.available_credits;
 		break;
 	}
 }
@@ -993,7 +981,6 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.psl_state = PSL_INIT;
 	status.event_list = NULL;
 	status.credits = MAX_CREDITS;
-	status.available_credits = MAX_CREDITS;
 	memset(status.active_tags, 0, sizeof(status.active_tags));
 	memset(status.buffer_req, 0, sizeof(status.buffer_req));
 	status.buffer_read = NULL;
