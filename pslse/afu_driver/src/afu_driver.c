@@ -1,12 +1,12 @@
 /*
  * Copyright 2014 International Business Machines
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -677,8 +677,8 @@ static void psl () {
   }
   // Error case
   if (rc < 0) {
-    error_message ("Socket error!  Terminating connection.");
-    psl_close_afu_event (&event);
+    info_message("Socket closed: Ending Simulation.");
+    vpi_control(vpiFinish, 1);
   }
 
   // Job
@@ -693,7 +693,7 @@ static void psl () {
   if (event.buffer_read)
     set_buffer_read();
 
-  // Buffer write 
+  // Buffer write
   if (event.buffer_write)
     set_buffer_write();
   --bw_delay;
@@ -825,5 +825,5 @@ void (*vlog_startup_routines[ ] ) () = {
  registerRegRdBufferSystfs,
  registerRegWrBufferSystfs,
  registerRegResponseSystfs,
- 0  // last entry must be 0 
-}; 
+ 0  // last entry must be 0
+};
