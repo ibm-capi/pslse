@@ -558,13 +558,15 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 	unsigned i;
 	struct afu_req *req = status.buffer_read;
 
-	if (req == NULL)
-		return;
-
 	buffer = (uint8_t *) malloc (CACHELINE_BYTES);
 	if (psl_get_buffer_read_data (status.event, buffer, parity)
 	    != PSL_SUCCESS)
 		goto cleanup;
+
+	if (req == NULL || req->type == REQ_EMPTY) {
+		status.buffer_read = NULL;
+		goto cleanup;
+	}
 
 	offset = (uint64_t) req->addr;
 	offset &= 0x7Fll;
