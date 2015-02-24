@@ -42,11 +42,15 @@
  */
 // TODO: Clean this up with better method
 
+#ifndef PAGED_RANDOMIZER
 #define PAGED_RANDOMIZER 5	// Percent chance of getting paged response
+#endif
 
+#ifndef RESP_RANDOMIZER
 #define RESP_RANDOMIZER 5	// Setting to 1 achieves fastest responses,
 				// Large values increase response delays
 				// Zero is an illegal value
+#endif
 
 /*
  * System constants
@@ -415,12 +419,14 @@ static int check_flushing(struct afu_req *req)
 
 static int check_paged(struct afu_req *req)
 {
+	if (req->type != REQ_READ && req->type != REQ_WRITE)
+		return 0;
+
 	if (!PAGED_RANDOMIZER || rand() % PAGED_RANDOMIZER)
 		return 0;
 
 	add_resp(req->tag, PSL_RESPONSE_PAGED);
 	status.psl_state = PSL_FLUSHING;
-	status.buffer_read = NULL;
 	req->type = REQ_EMPTY;
 
 	return 1;
@@ -552,13 +558,15 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 	unsigned i;
 	struct afu_req *req = status.buffer_read;
 
-	if (req == NULL)
-		return;
-
 	buffer = (uint8_t *) malloc (CACHELINE_BYTES);
 	if (psl_get_buffer_read_data (status.event, buffer, parity)
 	    != PSL_SUCCESS)
 		goto cleanup;
+
+	if (req == NULL || req->type == REQ_EMPTY) {
+		status.buffer_read = NULL;
+		goto cleanup;
+	}
 
 	offset = (uint64_t) req->addr;
 	offset &= 0x7Fll;
@@ -1183,7 +1191,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 		fflush (stderr);
 		goto err;
 	}
-	
+
 	if (!(afu->desc.PerProcessPSA & 0x0100000000000000L)) {
 		fflush (stdout);
 		fprintf (stderr, "ERROR: ");
