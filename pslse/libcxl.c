@@ -42,6 +42,8 @@
  */
 // TODO: Clean this up with better method
 
+#define TIMEOUT_SECONDS 10	// Seconds to wait before triggering timeout
+
 #define PAGED_RANDOMIZER 5	// Percent chance of getting paged response
 
 #define RESP_RANDOMIZER 5	// Setting to 1 achieves fastest responses,
@@ -163,7 +165,8 @@ static void start_timeout(unsigned int timeout_seconds)
 {
 	signal(SIGALRM, alarm_handler);
 	timeout_occured = 0;
-	alarm(timeout_seconds);
+	if(timeout_seconds)
+		alarm(timeout_seconds);
 }
 
 static void short_delay () {
@@ -998,7 +1001,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.cmd.addr = 0;
 	status.cmd.request = AFU_REQUEST;
 
-	wait_with_timeout(status.cmd.request != AFU_IDLE, 10,
+	wait_with_timeout(status.cmd.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the AFU to go IDLE");
 
 	// Read AFU descriptor
@@ -1010,7 +1013,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.mmio.addr = 0;
 	status.mmio.request = AFU_REQUEST;
 
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 
 	value = status.mmio.data;
@@ -1025,42 +1028,42 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Offset 0x20
 	status.mmio.addr = 8;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_len = status.mmio.data;
 
 	// Offset 0x28
 	status.mmio.addr = 10;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_offset = status.mmio.data;
 
 	// Offset 0x30
 	status.mmio.addr = 12;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA = status.mmio.data;
 
 	// Offset 0x38
 	status.mmio.addr = 14;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA_offset = status.mmio.data;
 
 	// Offset 0x40
 	status.mmio.addr = 16;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_len = status.mmio.data;
 
 	// Offset 0x48
 	status.mmio.addr = 18;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, 10,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_offset = status.mmio.data;
 
@@ -1104,18 +1107,18 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		return -1;
 	}
 
-	wait_with_timeout(status.cmd.request != AFU_IDLE, 10,
+	wait_with_timeout(status.cmd.request != AFU_IDLE, TIMEOUT_SECONDS,
 			  "waiting for the AFU to go IDLE");
 
 	// Start AFU
 	status.cmd.code = PSL_JOB_START;
 	status.cmd.addr = wed;
 	status.cmd.request = AFU_REQUEST;
-	wait_with_timeout(status.cmd.request == AFU_REQUEST, 10,
+	wait_with_timeout(status.cmd.request == AFU_REQUEST, TIMEOUT_SECONDS,
 			  "waiting for the AFU to start");
 
 	// Wait for job_running
-	wait_with_timeout(!afu->running, 10,
+	wait_with_timeout(!afu->running, TIMEOUT_SECONDS,
 			  "waiting for the AFU to start");
 
 	afu->attached = 1;
