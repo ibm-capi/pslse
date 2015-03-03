@@ -28,8 +28,6 @@
 #include "libcxl_internal.h"
 #include "psl_interface/psl_interface.h"
 
-#define PSA_REQUIRED_MASK 0x0100000000000000L
-
 #ifdef DEBUG
 #define DPRINTF(...) printf(__VA_ARGS__)
 #else
@@ -67,6 +65,11 @@
 #define BYTES_PER_DWORD 8
 #define WORD_OFFSET 4
 
+#define PSA_REQUIRED_MASK 0x0100000000000000L
+#define IRQ_MASK          0x00000000000007FFL
+#define CACHELINE_MASK    0xFFFFFFFFFFFFFF80L
+
+
 /*
  * Enumerations
  */
@@ -76,7 +79,6 @@ enum PSL_STATE {
 	PSL_RUNNING,
 	PSL_FLUSHING,
 	PSL_LOCK,
-	PSL_NLOCK,
 	PSL_DONE
 };
 
@@ -128,6 +130,10 @@ struct afu_req {
 };
 
 struct afu_resp {
+	enum {
+		RESP_EARLY,
+		RESP_LATE,
+	} type;
 	uint32_t tag;
 	uint32_t code;
 	struct afu_resp *_next;
@@ -146,6 +152,8 @@ struct psl_status {
 	struct afu_resp *first_resp;
 	struct afu_resp *last_resp;
 	volatile int psl_state;
+	uint64_t res_addr;
+	uint64_t lock_addr;
 	unsigned int max_ints;
 	unsigned int credits;
 	int active_tags[PSL_TAGS];
@@ -254,7 +262,7 @@ static int add_interrupt (volatile struct cxl_event_wrapper **head,
 	struct cxl_event_wrapper *new_event;
 
 	// Check for legal interrupt number
-	irq &= 0x7FFL;
+	irq &= IRQ_MASK;
 	if (!irq || (irq > status.max_ints))
 		return 1;
 
@@ -282,15 +290,17 @@ static void update_pending_resps (uint32_t code) {
 	struct afu_resp *resp;
 	resp = status.first_resp;
 	while (resp != NULL) {
-		resp->code = code;
+		if (resp->type == RESP_EARLY)
+			resp->code = code;
 		resp = resp->_next;
 	}
 }
 
-static void add_resp (uint32_t tag, uint32_t code) {
+static void add_resp (uint32_t tag, int type, uint32_t code) {
 	struct afu_resp *resp;
 	resp = (struct afu_resp *) malloc (sizeof (struct afu_resp));
 	resp->tag = tag;
+	resp->type = type;
 	resp->code = code;
 	resp->_next = NULL;
 	if (status.last_resp == NULL) {
@@ -402,9 +412,17 @@ static int check_mem_addr(struct afu_req *req)
 	fprintf(stderr, "%016llx", (long long) req->addr);
 	fprintf(stderr, "\n");
 	fflush(stderr);
-	add_resp(req->tag, PSL_RESPONSE_AERROR);
+	add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_AERROR);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
+
+	return 1;
+}
+
+static int check_lock_addr(uint64_t addr)
+{
+	if ((addr & CACHELINE_MASK) == status.lock_addr)
+		return 0;
 
 	return 1;
 }
@@ -414,7 +432,7 @@ static int check_flushing(struct afu_req *req)
 	if (status.psl_state != PSL_FLUSHING)
 		return 0;
 
-	add_resp(req->tag, PSL_RESPONSE_FLUSHED);
+	add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_FLUSHED);
 	req->type = REQ_EMPTY;
 
 	return 1;
@@ -422,17 +440,21 @@ static int check_flushing(struct afu_req *req)
 
 static int check_paged(struct afu_req *req)
 {
+#if PAGED_RANDOMIZER
 	if (req->type != REQ_READ && req->type != REQ_WRITE)
 		return 0;
 
-	if (!PAGED_RANDOMIZER || rand() % PAGED_RANDOMIZER)
+	if (rand() % PAGED_RANDOMIZER)
 		return 0;
 
-	add_resp(req->tag, PSL_RESPONSE_PAGED);
+	add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_PAGED);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
 
 	return 1;
+#else
+	return 0;
+#endif	/* #if PAGED_RANDOMIZER */
 }
 
 static void do_buffer_write(uint8_t *addr, uint32_t tag, int prelim)
@@ -484,7 +506,7 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 		    req->type = REQ_READ_PRELIM;
 
 	} else if (req->type == REQ_READ_GOT_BUFFER) {
-		add_resp(req->tag, PSL_RESPONSE_DONE);
+		add_resp(req->tag, RESP_LATE, PSL_RESPONSE_DONE);
 		req->type = REQ_EMPTY;
 	} else if (req->type == REQ_WRITE && op == PRELIM_OP) {
 		uint8_t prelim_data[CACHELINE_BYTES];
@@ -492,12 +514,7 @@ static void handle_buffer_req(struct cxl_afu_h* afu)
 		do_buffer_write(prelim_data, req->tag, 1);
 	} else if (req->type == REQ_WRITE && op == COMPLETE) {
 		do_buffer_write(req->addr, req->tag, 0);
-
-		if (status.psl_state==PSL_NLOCK) {
-			add_resp(req->tag, PSL_RESPONSE_NLOCK);
-		} else {
-			add_resp(req->tag, PSL_RESPONSE_DONE);
-		}
+		add_resp(req->tag, RESP_LATE, PSL_RESPONSE_DONE);
 
 		req->type = REQ_EMPTY;
 	}
@@ -572,16 +589,16 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 	}
 
 	offset = (uint64_t) req->addr;
-	offset &= 0x7Fll;
+	offset &= ~CACHELINE_MASK;
 
 	if (req->type != REQ_READ_PRELIM) {
 		memcpy (req->addr, &(buffer[offset]), req->size);
 
 		if ((req->resp_type==RESP_UNLOCK) &&
-		    ((status.psl_state==PSL_LOCK) ||
-		     (status.psl_state==PSL_NLOCK))) {
+		    (status.psl_state==PSL_LOCK)) {
 			DPRINTF("Lock sequence completed\n");
 			status.psl_state = PSL_RUNNING;
+			status.res_addr = 0L;
 		}
 	}
 
@@ -602,7 +619,7 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 		}
 		fprintf (stderr, "\n");
 		fflush (stderr);
-		add_resp (req->tag, PSL_RESPONSE_DERROR);
+		add_resp (req->tag, RESP_EARLY, PSL_RESPONSE_DERROR);
 		status.psl_state = PSL_FLUSHING;
 		goto cleanup;
 	}
@@ -664,7 +681,7 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 			fail = 1;
 		}
 		if (fail) {
-			add_resp (tag, PSL_RESPONSE_FAILED);
+			add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 			return 1;
 		}
 	}
@@ -697,7 +714,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "ERROR: Tag already in use:");
 		fprintf (stderr, "0x%02x\n", tag);
 		fflush (stderr);
-		add_resp (tag, PSL_RESPONSE_FAILED);
+		add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		catastrophic_error (afu);
 		return;
 	}
@@ -709,24 +726,20 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		fprintf (stderr, "ERROR: No credits left for command");
 		fprintf (stderr, " tag=0x%02x\n", tag);
 		fflush (stderr);
-		add_resp (tag, PSL_RESPONSE_FAILED);
+		add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		return;
 	}
 	--status.credits;
 
 	// Check if PSL is flushing commands
 	if ((status.psl_state==PSL_FLUSHING) && (cmd != PSL_COMMAND_RESTART)) {
-		add_resp (tag, PSL_RESPONSE_FLUSHED);
+		add_resp (tag, RESP_EARLY, PSL_RESPONSE_FLUSHED);
 		return;
 	}
 
 	// Check for lock violations
-	if (((status.psl_state==PSL_LOCK) &&
-	     (cmd !=PSL_COMMAND_WRITE_UNLOCK)) ||
-	    (status.psl_state==PSL_NLOCK)) {
-		add_resp (tag, PSL_RESPONSE_NLOCK);
-		status.psl_state=PSL_NLOCK;
-		update_pending_resps (PSL_RESPONSE_NLOCK);
+	if ((status.psl_state==PSL_LOCK) && check_lock_addr(addr)) {
+		add_resp (tag, RESP_LATE, PSL_RESPONSE_NLOCK);
 		DPRINTF("Dumping lock intervening command, tag=0x%02x\n", tag);
 		return;
 	}
@@ -738,21 +751,22 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_INTREQ:
 		printf ("AFU interrupt command received\n");
 		if (add_interrupt (&(status.event_list), addr)) {
-			add_resp (tag, PSL_RESPONSE_FAILED);
+			add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		}
 		else {
-			add_resp (tag, PSL_RESPONSE_DONE);
+			add_resp (tag, RESP_EARLY, PSL_RESPONSE_DONE);
 		}
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
 		status.psl_state = PSL_RUNNING;
 		DPRINTF("AFU restart command received\n");
-		add_resp (tag, PSL_RESPONSE_DONE);
+		add_resp (tag, RESP_LATE, PSL_RESPONSE_DONE);
 		break;
 	case PSL_COMMAND_LOCK:
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
+		status.lock_addr = addr & CACHELINE_MASK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
 		break;
 	case PSL_COMMAND_UNLOCK:
@@ -762,11 +776,14 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_READ_CL_LCK:
 		update_pending_resps (PSL_RESPONSE_NLOCK);
 		status.psl_state = PSL_LOCK;
+		status.lock_addr = addr & CACHELINE_MASK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
+	case PSL_COMMAND_READ_CL_RES:
+		if (status.psl_state != PSL_LOCK)
+			status.res_addr = addr & CACHELINE_MASK;
 	case PSL_COMMAND_READ_CL_NA:
 	case PSL_COMMAND_READ_CL_S:
 	case PSL_COMMAND_READ_CL_M:
-	case PSL_COMMAND_READ_CL_RES:
 	case PSL_COMMAND_READ_PNA:
 	case PSL_COMMAND_READ_LS:
 	case PSL_COMMAND_READ_LM:
@@ -780,6 +797,8 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_WRITE_UNLOCK:
 		resp_type = RESP_UNLOCK;
 	case PSL_COMMAND_WRITE_C:
+		if (resp_type != RESP_UNLOCK)
+			status.res_addr = 0L;
 	case PSL_COMMAND_WRITE_MI:
 	case PSL_COMMAND_WRITE_MS:
 	case PSL_COMMAND_WRITE_NA:
@@ -788,21 +807,30 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
 		add_buffer_req(REQ_READ, tag, size, addrptr,  resp_type);
 		break;
+	case PSL_COMMAND_EVICT_I:
+		if ((status.psl_state==PSL_LOCK) && status.res_addr) {
+			add_resp (tag, RESP_LATE, PSL_RESPONSE_NRES);
+			DPRINTF("Dumping lock intervening command,");
+			DPRINTF(" tag=0x%02x\n", tag);
+			break;
+		}
+	case PSL_COMMAND_PUSH_I:
+	case PSL_COMMAND_PUSH_S:
+		if (status.psl_state==PSL_LOCK) {
+			add_resp (tag, RESP_LATE, PSL_RESPONSE_NLOCK);
+			DPRINTF("Dumping lock intervening command,");
+			DPRINTF(" tag=0x%02x\n", tag);
+			break;
+		}
 	case PSL_COMMAND_TOUCH_I:
 	case PSL_COMMAND_TOUCH_S:
 	case PSL_COMMAND_TOUCH_M:
 	case PSL_COMMAND_TOUCH_LS:
 	case PSL_COMMAND_TOUCH_LM:
-	case PSL_COMMAND_PUSH_I:
-	case PSL_COMMAND_PUSH_S:
 	case PSL_COMMAND_INVALIDATE:
-	case PSL_COMMAND_CASTOUT_I:
-	case PSL_COMMAND_CASTOUT_S:
 	case PSL_COMMAND_CLAIM_M:
 	case PSL_COMMAND_CLAIM_U:
-	case PSL_COMMAND_FLUSH:
-	case PSL_COMMAND_EVICT_I:
-		add_resp (tag, PSL_RESPONSE_DONE);
+		add_resp (tag, RESP_EARLY, PSL_RESPONSE_DONE);
 		break;
 	default:
 		fflush (stdout);
@@ -992,6 +1020,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.psl_state = PSL_INIT;
 	status.event_list = NULL;
 	status.credits = MAX_CREDITS;
+	status.res_addr = 0L;
 	memset(status.active_tags, 0, sizeof(status.active_tags));
 	memset(status.buffer_req, 0, sizeof(status.buffer_req));
 	status.buffer_read = NULL;
