@@ -1001,6 +1001,18 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	}
 	fclose (fp);
 
+	// Test for valid host & port values
+	if (!host || !port_str) {
+		fflush (stdout);
+		fprintf (stderr, "Invalid format in shim_host.dat.");
+		fprintf (stderr, "  Hostname or port not found\n");
+		fflush (stderr);
+		free (status.event);
+		free (afu);
+		errno = ENODEV;
+		return NULL;
+	}
+
 	// Convert port to int
 	port = atoi (port_str);
 
@@ -1021,10 +1033,11 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	status.event_list = NULL;
 	status.credits = MAX_CREDITS;
 	status.res_addr = 0L;
-	memset(status.active_tags, 0, sizeof(status.active_tags));
-	memset(status.buffer_req, 0, sizeof(status.buffer_req));
+	memset (status.active_tags, 0, sizeof(status.active_tags));
+	memset (status.buffer_req, 0, sizeof(status.buffer_req));
 	status.buffer_read = NULL;
-	afu->id = afu_id;
+	afu->id = (char *) malloc (strlen(afu_id) + 1);
+	strcpy (afu->id, afu_id);
 	afu->mmio_size = 0;
 	afu->attached = 0;
 	afu->running = 0;
@@ -1118,7 +1131,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	}
 
 	// Verify req_prog_model
-	if ((afu->desc.req_prog_model && 0x7fffl ) != 0x0010l) {
+	if ((afu->desc.req_prog_model & 0x7fffl ) != 0x0010l) {
 		fflush (stdout);
 		fprintf (stderr, "ERROR: ");
 		fprintf (stderr, "AFU descriptor contains unsupported");
@@ -1235,7 +1248,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 
 	afu->mmio_flags = flags;
 	// Dedicated Process AFU
-	if (afu->desc.req_prog_model && 0x0010l)
+	if (afu->desc.req_prog_model & 0x0010l)
 		afu->mmio_size = 0x4000000; // 64MB, AFU Maximum
 	// Only dedicated mode supported for now
 	else

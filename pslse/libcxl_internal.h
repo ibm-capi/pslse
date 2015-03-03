@@ -43,7 +43,7 @@ struct afu_descriptor {
 };
 
 struct cxl_afu_h {
-	const char *id;
+	char *id;
 	pthread_t thread;
 	volatile __u32 mmio_flags;
 	volatile int started;
