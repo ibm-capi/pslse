@@ -1118,7 +1118,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	}
 
 	// Verify req_prog_model
-	if (afu->desc.req_prog_model != 0x0010l) {
+	if ((afu->desc.req_prog_model && 0x7fffl ) != 0x0010l) {
 		fflush (stdout);
 		fprintf (stderr, "ERROR: ");
 		fprintf (stderr, "AFU descriptor contains unsupported");
