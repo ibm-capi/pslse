@@ -751,6 +751,11 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_INTREQ:
 		printf ("AFU interrupt command received\n");
 		if (add_interrupt (&(status.event_list), addr)) {
+			fflush (stdout);
+			fprintf (stderr, "AFU interrupt with duplicate source");
+			fprintf (stderr, " ID=");
+			fprintf (stderr, "0x%03lx\n", (long) (addr & IRQ_MASK));
+			fflush (stderr);
 			add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		}
 		else {
