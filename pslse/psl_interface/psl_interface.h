@@ -21,7 +21,7 @@
 
 /* Call this at startup to reset all the event indicators */
 
-void psl_event_reset (struct AFU_EVENT *event);
+void psl_event_reset(struct AFU_EVENT *event);
 
 /* Call this once after creation to initialize the AFU_EVENT structure and open
  * a socket conection to an AFU server.  This function initializes the PSL side
@@ -29,99 +29,100 @@ void psl_event_reset (struct AFU_EVENT *event);
  * should be the name of the server hosting the simulation of the AFU and port
  * is the active port on that server */
 
-int psl_init_afu_event (struct AFU_EVENT *event, char *server_host, int port);
+int psl_init_afu_event(struct AFU_EVENT *event, char *server_host, int port);
 
 /* Call this to close the socket connection from either side */
 
-int psl_close_afu_event (struct AFU_EVENT *event);
+int psl_close_afu_event(struct AFU_EVENT *event);
 
 /* Call this once after creation to initialize the AFU_EVENT structure.  This
  * function initializes the AFU side of the interface which is the server in
  * the socket connection */
 
-int psl_serv_afu_event (struct AFU_EVENT *event, int port);
+int psl_serv_afu_event(struct AFU_EVENT *event, int port);
 
 /* Call this to change auxilliary signals (room) */
 
-int psl_aux1_change (struct AFU_EVENT *event, uint32_t room);
+int psl_aux1_change(struct AFU_EVENT *event, uint32_t room);
 
 /* Call this to create an accelerator control command */
 
-int psl_job_control (struct AFU_EVENT *event,
-		     uint32_t job_code, uint64_t address);
+int psl_job_control(struct AFU_EVENT *event,
+		    uint32_t job_code, uint64_t address);
 
 /* Call this to create an MMIO read command. If the dbl argument is 1, 64 bits
  * are transferred.  If it is 0, 32 bits are transferred */
 
-int psl_mmio_read (struct AFU_EVENT *event, uint32_t dbl, uint32_t address, uint32_t afudescaccess);
+int psl_mmio_read(struct AFU_EVENT *event, uint32_t dbl, uint32_t address,
+		  uint32_t afudescaccess);
 
 /* Call this to create an MMIO write command. If the dbl argument is 1, 64 bits
  * are transferred.  If it is 0, 32 bits are transferred (least significant
  * 32 bits of write_data */
 
-int psl_mmio_write (struct AFU_EVENT *event,
-		    uint32_t dbl, uint32_t address, uint64_t write_data, uint32_t afudescaccess);
+int psl_mmio_write(struct AFU_EVENT *event,
+		   uint32_t dbl, uint32_t address, uint64_t write_data,
+		   uint32_t afudescaccess);
 
 /* Call this to create a command response */
 
-int psl_response (struct AFU_EVENT *event,
-		  uint32_t tag,
-		  uint32_t response_code,
-		  int credits, uint32_t cache_state, uint32_t cache_position);
+int psl_response(struct AFU_EVENT *event,
+		 uint32_t tag,
+		 uint32_t response_code,
+		 int credits, uint32_t cache_state, uint32_t cache_position);
 
 /* Call this to read a buffer.  Length must be either 64 or 128 which is the
  * transfer size in bytes. For 64B transfers, only the first half of the array
  * is used */
 
-int psl_buffer_read (struct AFU_EVENT *event,
-		     uint32_t tag, uint64_t address, uint32_t length);
+int psl_buffer_read(struct AFU_EVENT *event,
+		    uint32_t tag, uint64_t address, uint32_t length);
 
 /* Call this to write a buffer, write_data is a 32 element array of 32-bit
  * values, write_parity is a 4 element array of 32-bit values.  Length must be
  * either 64 or 128 which is the transfer size in bytes.  For 64B transfers,
  * only the first half of the array is used. */
 
-int psl_buffer_write (struct AFU_EVENT *event,
-		      uint32_t tag,
-		      uint64_t address,
-		      uint32_t length,
-		      uint8_t * write_data, uint8_t * write_parity);
+int psl_buffer_write(struct AFU_EVENT *event,
+		     uint32_t tag,
+		     uint64_t address,
+		     uint32_t length,
+		     uint8_t * write_data, uint8_t * write_parity);
 
 /* Call after an event is received from the AFU to see if previous MMIO
  * operation has been acknowledged and extract read MMIO data if available. */
 
-int psl_get_mmio_acknowledge (struct AFU_EVENT *event, uint64_t * read_data, uint32_t *read_data_parity);
+int psl_get_mmio_acknowledge(struct AFU_EVENT *event, uint64_t * read_data,
+			     uint32_t * read_data_parity);
 
 /* Call after an event is received from the AFU to extract read buffer data if
  * available. read_data is a 32 element array of 32-bit values, read_parity is
  * a 4 element array of 32-bit values.
  * Note: fields in AFU_EVENT structre can also be accessed directly */
 
-int psl_get_buffer_read_data (struct AFU_EVENT *event,
-			      uint8_t * read_data, uint8_t * read_parity);
+int psl_get_buffer_read_data(struct AFU_EVENT *event,
+			     uint8_t * read_data, uint8_t * read_parity);
 
 /* Call after an event is received from the AFU to extract a PSL command if
  * available.
  * Note: fields in AFU_EVENT structre can also be accessed directly */
 
-int psl_get_command (struct AFU_EVENT *event,
-		     uint32_t * command,
-		     uint32_t * command_parity,
-		     uint32_t * tag,
-		     uint32_t * tag_parity,
-		     uint64_t * address,
-		     uint64_t * address_parity,
-		     uint32_t * size,
-		     uint32_t * abort,
-		     uint32_t *handle);
+int psl_get_command(struct AFU_EVENT *event,
+		    uint32_t * command,
+		    uint32_t * command_parity,
+		    uint32_t * tag,
+		    uint32_t * tag_parity,
+		    uint64_t * address,
+		    uint64_t * address_parity,
+		    uint32_t * size, uint32_t * abort, uint32_t * handle);
 
 /* Call this periodically to send events and clocking synchronization to AFU */
 
-int psl_signal_afu_model (struct AFU_EVENT *event);
+int psl_signal_afu_model(struct AFU_EVENT *event);
 
 /* Call this periodically to send events and clocking synchronization to PSL */
 
-int psl_signal_psl_model (struct AFU_EVENT *event);
+int psl_signal_psl_model(struct AFU_EVENT *event);
 
 /* This function checks the socket connection for data from the external AFU
  * simulator. It needs to be called periodically to poll the socket connection.
@@ -138,63 +139,60 @@ int psl_signal_psl_model (struct AFU_EVENT *event);
  * outstanding actions, these need not be called. The check in these functions
  * is very quick though so it also probably wouldn't hurt to always call them */
 
-int psl_get_afu_events (struct AFU_EVENT *event);
+int psl_get_afu_events(struct AFU_EVENT *event);
 
 /* This function checks the socket connection for data from the external PSL
  * simulator. It  needs to be called periodically to poll the socket connection.
  * (every clock cycle)  It will update the AFU_EVENT structure and returns a 1
  * if there are new events to process */
 
-int psl_get_psl_events (struct AFU_EVENT *event);
+int psl_get_psl_events(struct AFU_EVENT *event);
 
 /* Call this on the AFU side to build a command to send to PSL */
 
-int psl_afu_command (struct AFU_EVENT *event,
-		     uint32_t tag,
-		     uint32_t tag_parity,
-		     uint32_t code,
-		     uint32_t code_parity,
-		     uint64_t address,
-		     uint64_t address_parity,
-		     uint32_t size, uint32_t abort, uint32_t pad);
+int psl_afu_command(struct AFU_EVENT *event,
+		    uint32_t tag,
+		    uint32_t tag_parity,
+		    uint32_t code,
+		    uint32_t code_parity,
+		    uint64_t address,
+		    uint64_t address_parity,
+		    uint32_t size, uint32_t abort, uint32_t pad);
 
 /* Call this on the AFU side to build an MMIO acknowledge. Read data is used
  * only for MMIO reads, ignored otherwise */
 
-int psl_afu_mmio_ack (struct AFU_EVENT *event,
-		      uint64_t read_data,
-		      uint32_t read_data_parity);
+int psl_afu_mmio_ack(struct AFU_EVENT *event,
+		     uint64_t read_data, uint32_t read_data_parity);
 
 /* Call this on the AFU side to build buffer read data. Length should be
  * 64 or 128 */
 
-int psl_afu_read_buffer_data (struct AFU_EVENT *event,
-			      uint32_t length,
-			      uint8_t * read_data, uint8_t * read_parity);
+int psl_afu_read_buffer_data(struct AFU_EVENT *event,
+			     uint32_t length,
+			     uint8_t * read_data, uint8_t * read_parity);
 
 /* Call this on the AFU side to change the auxilliary signals
  * (running, done, job error, buffer read latency) */
 
-int psl_afu_aux2_change (struct AFU_EVENT *event,
-			 uint32_t running,
-			 uint32_t done,
-			 uint32_t cack_llcmd,
-			 uint64_t job_error,
-			 uint32_t yield,
-			 uint32_t tb_request,
-			 uint32_t par_enable,
-		         uint32_t read_latency);
+int psl_afu_aux2_change(struct AFU_EVENT *event,
+			uint32_t running,
+			uint32_t done,
+			uint32_t cack_llcmd,
+			uint64_t job_error,
+			uint32_t yield,
+			uint32_t tb_request,
+			uint32_t par_enable, uint32_t read_latency);
 
 /* Call after an event is received from the AFU to see if any of the auxilliary
  * signals have changed values */
 
-int psl_get_aux2_change (struct AFU_EVENT *event,
-			 uint32_t * job_running,
-			 uint32_t * job_done,
-			 uint32_t * job_cack_llcmd,
-			 uint64_t * job_error,
-			 uint32_t * job_yield,
-			 uint32_t * tb_request,
-			 uint32_t * par_enable,
-		         uint32_t * read_latency);
+int psl_get_aux2_change(struct AFU_EVENT *event,
+			uint32_t * job_running,
+			uint32_t * job_done,
+			uint32_t * job_cack_llcmd,
+			uint64_t * job_error,
+			uint32_t * job_yield,
+			uint32_t * tb_request,
+			uint32_t * par_enable, uint32_t * read_latency);
 #endif

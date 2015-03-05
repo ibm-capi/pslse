@@ -96,7 +96,7 @@ enum cxl_views {
  * descriptor that has already been opened. The AFU file descriptor will be
  * closed by cxl_afu_free() regardless of how it was opened.
  */
-struct cxl_afu_h * cxl_afu_open_dev(char *path);
+struct cxl_afu_h *cxl_afu_open_dev(char *path);
 //struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
 //struct cxl_afu_h * cxl_afu_fd_to_h(int fd);
 void cxl_afu_free(struct cxl_afu_h *afu);
@@ -105,7 +105,7 @@ void cxl_afu_free(struct cxl_afu_h *afu);
  * Attach AFU context to this process
  */
 //int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-//			__u64 amr);
+//                      __u64 amr);
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
 
 /*
@@ -214,8 +214,8 @@ int cxl_mmio_unmap(struct cxl_afu_h *afu);
 void *cxl_mmio_ptr(struct cxl_afu_h *afu);
 
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data);
-int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data);
+int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data);
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data);
-int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data);
+int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
 
 #endif
