@@ -16,7 +16,9 @@
 
 #include <malloc.h>
 #include <pthread.h>
+#include <inttypes.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -92,6 +94,13 @@ enum AFU_STATE {
 enum RESP_TYPE {
 	RESP_NORMAL,
 	RESP_UNLOCK
+};
+
+enum ERROR_MSG_POSITION {
+	ERR_BEGIN,
+	ERR_CONT,
+	ERR_END,
+	ERR_ALL
 };
 
 /*
@@ -244,14 +253,28 @@ static void generate_cl_parity (uint8_t *data, uint8_t *parity) {
 	}
 }
 
+static void print_error (int position, char *format, ...) {
+	va_list args;
+
+	if ((position==ERR_BEGIN) || (position==ERR_ALL)){
+		fflush (stdout);
+		fprintf (stderr, "ERROR: ");
+	}
+
+	va_start (args, format);
+	vfprintf (stderr, format, args);
+	va_end (args);
+
+	if ((position==ERR_END) || (position==ERR_ALL))
+		fflush (stderr);
+}
+
 /*
  * PSL thread functions
  */
 
 static void catastrophic_error (struct cxl_afu_h* afu) {
-	fflush (stdout);
-	fprintf (stderr, "CATASTROPHIC ERROR: Shutting down!\n");
-	fflush (stderr);
+	print_error (ERR_ALL, "CATASTROPHIC ERROR: Shutting down!");
 	afu->running = 0;
 	afu->catastrophic = 1;
 	status.psl_state = PSL_DONE;
@@ -402,16 +425,11 @@ static int check_mem_addr(struct afu_req *req)
 	if (testmemaddr(req->addr))
 		return 0;
 
-	fflush(stdout);
-	fprintf(stderr, "AFU attempted ");
 	if (req->type == REQ_WRITE)
-		fprintf(stderr, "write");
+		print_error (ERR_BEGIN, "Invalid write");
 	else
-		fprintf(stderr, "read");
-	fprintf(stderr, " to invalid address 0x");
-	fprintf(stderr, "%016llx", (long long) req->addr);
-	fprintf(stderr, "\n");
-	fflush(stderr);
+		print_error (ERR_BEGIN, "Invalid read");
+	print_error (ERR_END, " address:0x%016"PRIx64"\n", req->addr);
 	add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_AERROR);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
@@ -529,12 +547,8 @@ static void handle_aux2_change (struct cxl_afu_h* afu) {
 
 	// AFU done
 	if (status.event->job_done) {
-		if (status.event->job_running) {
-			fflush (stdout);
-			fprintf (stderr, "ERROR: ");
-			fprintf (stderr, "jdone=1 while jrunning=1!");
-			fflush (stderr);
-		}
+		if (status.event->job_running)
+			print_error (ERR_ALL, "jrunning=1 while jdone=1");
 		if (status.cmd.request==AFU_RESET)
 			status.cmd.request = AFU_IDLE;
 		afu->running = 0;
@@ -560,12 +574,10 @@ static void handle_mmio_acknowledge (struct cxl_afu_h* afu) {
 	if (afu->parity_enable && status.event->mmio_read &&
 	    (status.mmio.parity !=
 	     generate_parity(status.mmio.data, ODD_PARITY))) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: MMIO read data parity error\n");
-		fprintf (stderr, " Data:0x%016llx\n",
-			 (long long) status.mmio.data);
-		fprintf (stderr, " Parity:%d\n", status.mmio.parity);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "MMIO read data parity error\n");
+		print_error (ERR_CONT, " Data:0x%016"PRIx64"\n",
+			     status.mmio.data);
+		print_error (ERR_END, " Parity:%d\n", status.mmio.parity);
 		status.mmio.data = ~0ull;
 	}
 }
@@ -605,20 +617,17 @@ static void handle_buffer_read (struct cxl_afu_h* afu) {
 	generate_cl_parity(buffer, parity_check);
 	if (afu->parity_enable &&
 	    memcmp(parity, parity_check, sizeof(parity))) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: Buffer read parity error");
-		fprintf (stderr, ", tag=0x%02x\n", req->tag);
+		print_error (ERR_BEGIN, "Buffer read parity error, ");
+		print_error (ERR_CONT, "tag=0x%02x\n", req->tag);
 		for (i=0; i<CACHELINE_BYTES; i++) {
 			if (!(i%32))
-				fprintf (stderr, "\n  0x");
-			fprintf (stderr, "%02x", buffer[i]);
+				print_error (ERR_CONT, "\n  0x");
+			print_error (ERR_CONT, "%02x", buffer[i]);
 		}
-		fprintf (stderr, "\n  0x");
-		for (i=0; i<DWORDS_PER_CACHELINE/8; i++) {
-			fprintf (stderr, "%02x", parity[i]);
-		}
-		fprintf (stderr, "\n");
-		fflush (stderr);
+		print_error (ERR_CONT, "\n  0x");
+		for (i=0; i<DWORDS_PER_CACHELINE/8; i++)
+			print_error (ERR_CONT, "%02x", parity[i]);
+		print_error (ERR_END, "");
 		add_resp (req->tag, RESP_EARLY, PSL_RESPONSE_DERROR);
 		status.psl_state = PSL_FLUSHING;
 		goto cleanup;
@@ -636,11 +645,9 @@ cleanup:
 }
 
 static void cmd_parity_error (const char *msg, uint64_t value, uint64_t parity) {
-	fflush (stdout);
-	fprintf (stderr, "ERROR: Common %s parity error", msg);
-	fprintf (stderr, " 0x%llx", (long long) value);
-	fprintf (stderr, ",%d\n", (int) parity);
-	fflush (stderr);
+	print_error (ERR_BEGIN, "Command %s parity error", msg);
+	print_error (ERR_CONT, " 0x%04"PRIx64, value);
+	print_error (ERR_END, ",%d\n", (int) parity);
 }
 
 static int cmd_error_check (struct cxl_afu_h* afu) {
@@ -658,10 +665,8 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 	addrpar = status.event->command_address_parity;
 
 	if (!afu->running) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: Command without jrunning=1,");
-		fprintf (stderr, " tag=0x%02x\n", tag);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "Command without jrunning=1,");
+		print_error (ERR_END, " tag=0x%02x\n", tag);
 	}
 
 	if (afu->parity_enable) {
@@ -691,7 +696,7 @@ static int cmd_error_check (struct cxl_afu_h* afu) {
 
 static void handle_command_valid (struct cxl_afu_h* afu) {
 	uint32_t tag, size, cmd;
-	uint64_t addr;
+	uint64_t addr, irq;
 	uint8_t *addrptr;
 	uint8_t resp_type;
 
@@ -701,6 +706,7 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	cmd = status.event->command_code;
 	addr = status.event->command_address;
 	addrptr = (uint8_t *) status.event->command_address;
+	irq = addr & IRQ_MASK;
 
 	DPRINTF("Command %04x tag=0x%02x\n", cmd, tag);
 
@@ -710,10 +716,8 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 
 	// Check for valid tag
 	if (status.active_tags[tag]) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: Tag already in use:");
-		fprintf (stderr, "0x%02x\n", tag);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "Tag already in use:");
+		print_error (ERR_END, "0x%02x\n", tag);
 		add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		catastrophic_error (afu);
 		return;
@@ -722,10 +726,8 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 
 	// Check credits
 	if (!status.credits) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: No credits left for command");
-		fprintf (stderr, " tag=0x%02x\n", tag);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "No credits left for command");
+		print_error (ERR_END, " tag=0x%02x\n", tag);
 		add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		return;
 	}
@@ -751,11 +753,9 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 	case PSL_COMMAND_INTREQ:
 		printf ("AFU interrupt command received\n");
 		if (add_interrupt (&(status.event_list), addr)) {
-			fflush (stdout);
-			fprintf (stderr, "AFU interrupt with duplicate source");
-			fprintf (stderr, " ID=");
-			fprintf (stderr, "0x%03lx\n", (long) (addr & IRQ_MASK));
-			fflush (stderr);
+			print_error (ERR_BEGIN, "AFU interrupt with ");
+			print_error (ERR_CONT, "duplicate source ID=0x");
+			print_error (ERR_END, "%03"PRIx64"x\n", irq);
 			add_resp (tag, RESP_EARLY, PSL_RESPONSE_FAILED);
 		}
 		else {
@@ -838,10 +838,8 @@ static void handle_command_valid (struct cxl_afu_h* afu) {
 		add_resp (tag, RESP_EARLY, PSL_RESPONSE_DONE);
 		break;
 	default:
-		fflush (stdout);
-		fprintf (stderr, "ERROR: Command currently unsupported");
-		fprintf (stderr, " 0x%04x\n", cmd);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "Command currently unsupported");
+		print_error (ERR_END, " 0x%04x\n", cmd);
 		++status.credits;
 		break;
 	}
@@ -977,10 +975,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 			++host;
 		}
 		else {
-			fflush (stdout);
-			fprintf (stderr, "Invalid format in shim_host.dat.");
-			fprintf (stderr, "  Expected ',' :%s\n", hostdata);
-			fflush (stderr);
+			print_error (ERR_BEGIN, "Invalid format in ");
+			print_error (ERR_CONT, "shim_host.dat.");
+			print_error (ERR_END, "  Expected ',' :%s\n", hostdata);
 			fclose (fp);
 			free (status.event);
 			free (afu);
@@ -993,10 +990,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 			++port_str;
 		}
 		else {
-			fflush (stdout);
-			fprintf (stderr, "Invalid format in shim_host.dat.");
-			fprintf (stderr, "  Expected ':' :%s\n", hostdata);
-			fflush (stderr);
+			print_error (ERR_BEGIN, "Invalid format in ");
+			print_error (ERR_CONT, "shim_host.dat.");
+			print_error (ERR_END, "  Expected ':' :%s\n", hostdata);
 			fclose (fp);
 			free (status.event);
 			free (afu);
@@ -1008,10 +1004,8 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 
 	// Test for valid host & port values
 	if (!host || !port_str) {
-		fflush (stdout);
-		fprintf (stderr, "Invalid format in shim_host.dat.");
-		fprintf (stderr, "  Hostname or port not found\n");
-		fflush (stderr);
+		print_error (ERR_BEGIN, "Invalid format in shim_host.dat.");
+		print_error (ERR_END, "  Hostname or port not found\n");
 		free (status.event);
 		free (afu);
 		errno = ENODEV;
@@ -1024,9 +1018,8 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Connect to AFU server
 	printf ("Attempting to connect to %s:%d\n", host, port);
 	if (psl_init_afu_event (status.event, host, port) != PSL_SUCCESS) {
-		fflush (stdout);
-		fprintf (stderr, "Unable to connect to %s:%d\n", host, port);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "Unable to connect to ");
+		print_error (ERR_END, "%s:%d\n", host, port);
 		free (status.event);
 		free (afu);
 		errno = ENODEV;
@@ -1126,10 +1119,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 
 	// Verify num_of_processes
 	if (!afu->desc.num_of_processes) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: ");
-		fprintf (stderr, "AFU descriptor num_of_processes=0!\n");
-		fflush (stderr);
+		print_error (ERR_ALL, "AFU descriptor num_of_processes=0!\n");
 		free (afu);
 		errno = ENODEV;
 		return NULL;
@@ -1137,11 +1127,9 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 
 	// Verify req_prog_model
 	if ((afu->desc.req_prog_model & 0x7fffl ) != 0x0010l) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: ");
-		fprintf (stderr, "AFU descriptor contains unsupported");
-		fprintf (stderr, " req_prog_model value 0x%04x!\n", afu->desc.req_prog_model);
-		fflush (stderr);
+		print_error (ERR_BEGIN, "AFU descriptor contains unsupported");
+		print_error (ERR_CONT, " req_prog_model value ");
+		print_error (ERR_END, "0x%04x!\n", afu->desc.req_prog_model);
 		free (afu);
 		errno = ENODEV;
 		return NULL;
@@ -1235,19 +1223,14 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags) {
 	if (flags & ~(CXL_MMIO_FLAGS_FULL))
 		goto err;
 	if (!afu->running) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: ");
-		fprintf (stderr, "cxl_mmio_map: Must attach AFU first!\n");
-		fflush (stderr);
+		print_error (ERR_ALL, "cxl_mmio_map: Must attach AFU first!\n");
 		goto err;
 	}
 
 	if (!(afu->desc.PerProcessPSA & 0x0100000000000000L)) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: ");
-		fprintf (stderr, "cxl_mmio_map: AFU descriptor ");
-		fprintf (stderr, "Problem State Area Required is not set\n");
-		fflush (stderr);
+		print_error (ERR_BEGIN, "cxl_mmio_map: AFU descriptor ");
+		print_error (ERR_CONT, "Problem State Area Required ");
+		print_error (ERR_END, "is not set\n");
 		goto err;
 	}
 
@@ -1272,10 +1255,7 @@ int cxl_mmio_unmap(struct cxl_afu_h *afu) {
 }
 
 void *cxl_mmio_ptr(struct cxl_afu_h *afu) {
-	fflush (stdout);
-	fprintf(stderr, "cxl_mmio_ptr:PSLSE does not support direct access");
-	fprintf(stderr, " to MMIO address space!\n");
-	fflush (stderr);
+	print_error(ERR_BEGIN, "PSLSE does not support cxl_mmio_ptr()\n");
 	return NULL;
 }
 
@@ -1286,9 +1266,7 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data) {
 	}
 
 	if (!afu->running) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: MMIO write without jrunning=1\n");
-		fflush (stderr);
+		print_error (ERR_ALL, "MMIO write without jrunning=1\n");
 		errno = EADDRNOTAVAIL;
 		return -1;
 	}
@@ -1313,9 +1291,7 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data) {
 	}
 
 	if (!afu->running) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: MMIO read without jrunning=1\n");
-		fflush (stderr);
+		print_error (ERR_ALL, "MMIO read without jrunning=1\n");
 		errno = EADDRNOTAVAIL;
 		*data = 0xfeedb00ffeedb00fl;
 		return -1;
@@ -1343,9 +1319,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data) {
 	}
 
 	if (!afu->running) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: MMIO write without jrunning=1\n");
-		fflush (stderr);
+		print_error (ERR_ALL, "MMIO write without jrunning=1\n");
 		errno = EADDRNOTAVAIL;
 		return -1;
 	}
@@ -1373,9 +1347,7 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data) {
 	}
 
 	if (!afu->running) {
-		fflush (stdout);
-		fprintf (stderr, "ERROR: MMIO read without jrunning=1\n");
-		fflush (stderr);
+		print_error (ERR_ALL, "MMIO read without jrunning=1\n");
 		errno = EADDRNOTAVAIL;
 		*data = 0xfeedb00fl;
 		return -1;
