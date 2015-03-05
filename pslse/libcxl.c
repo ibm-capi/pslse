@@ -1120,6 +1120,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 	// Verify num_of_processes
 	if (!afu->desc.num_of_processes) {
 		print_error (ERR_ALL, "AFU descriptor num_of_processes=0!\n");
+		free (afu->id);
 		free (afu);
 		errno = ENODEV;
 		return NULL;
@@ -1130,6 +1131,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path) {
 		print_error (ERR_BEGIN, "AFU descriptor contains unsupported");
 		print_error (ERR_CONT, " req_prog_model value ");
 		print_error (ERR_END, "0x%04x!\n", afu->desc.req_prog_model);
+		free (afu->id);
 		free (afu);
 		errno = ENODEV;
 		return NULL;
@@ -1192,6 +1194,7 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	psl_close_afu_event (status.event);
 
 	// Free memory
+	free (afu->id);
 	free (afu);
 }
 
