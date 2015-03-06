@@ -644,11 +644,9 @@ int psl_signal_psl_model(struct AFU_EVENT *event)
 	if (event->aux2_change) {
 		event->tbuf[0] = event->tbuf[0] | 0x08;
 		event->tbuf[bp++] =
-		    (((event->buffer_read_latency) << 4) & 0xF0) | (((event->
-								      job_running)
-								     << 1) &
-								    0x2) |
-		    (event->job_done & 1);
+		    (((event->buffer_read_latency) << 4) & 0xF0) |
+		    (((event->job_running)
+		      << 1) & 0x2) | (event->job_done & 1);
 		for (i = 0; i < 8; i++) {
 			event->tbuf[bp++] =
 			    ((event->job_error) >> ((7 - i) * 8)) & 0xFF;
@@ -685,14 +683,11 @@ int psl_signal_psl_model(struct AFU_EVENT *event)
 		    (((event->command_code) >> 8) & 0x0F);
 		event->tbuf[bp++] = event->command_code & 0xFF;
 		event->tbuf[bp++] =
-		    (((event->command_tag_parity) << 6) & 0x40) | (((event->
-								     command_code_parity)
-								    << 5) &
-								   0x20) |
-		    (((event->command_address_parity) << 4) & 0x10) | (((event->
-									 command_size)
-									>> 8) &
-								       0x0F);
+		    (((event->command_tag_parity) << 6) & 0x40) |
+		    (((event->command_code_parity)
+		      << 5) & 0x20) | (((event->command_address_parity) << 4) &
+				       0x10) | (((event->command_size)
+						 >> 8) & 0x0F);
 		event->tbuf[bp++] = event->command_size & 0xFF;
 		for (i = 0; i < 8; i++) {
 			event->tbuf[bp++] =
@@ -838,8 +833,8 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		event->command_address = 0;
 		for (bc = 0; bc < 8; bc++) {
 			event->command_address =
-			    ((event->command_address) << 8) | event->
-			    rbuf[rbc++];
+			    ((event->
+			      command_address) << 8) | event->rbuf[rbc++];
 		}
 		event->command_handle = 0;
 		for (bc = 0; bc < 2; bc++) {
