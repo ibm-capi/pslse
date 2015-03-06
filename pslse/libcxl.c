@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 International Business Machines
+ * Copyright 2014,2015 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,7 +135,6 @@ struct cxl_event_wrapper {
 };
 
 struct parms {
-	unsigned int seed;
 	unsigned int timeout;
 	unsigned int resp_percent;
 	unsigned int paged_percent;
@@ -267,19 +266,6 @@ static void print_error(int position, char *format, ...)
  * Parse parameters
  */
 
-static void seed_test(unsigned int seed)
-{
-	if (status.parms.seed)
-		return;
-
-	if (seed)
-		status.parms.seed = seed;
-	else
-		status.parms.seed = (unsigned int)time(NULL);
-
-	srand(status.parms.seed);
-}
-
 static void percent_parm(char *value, unsigned int *parm)
 {
 	unsigned min, max;
@@ -312,7 +298,6 @@ static int parse_parms()
 	char *value;
 
 	// Set default parameter values
-	status.parms.seed = 0;
 	status.parms.timeout = 10;
 	status.parms.resp_percent = 20;
 	status.parms.paged_percent = 5;
@@ -353,17 +338,12 @@ static int parse_parms()
 			}
 
 			// Set valid parms
-			if (!(strcmp(parm, "SEED"))) {
-				seed_test(atoi(value));
-			} else if (!(strcmp(parm, "TIMEOUT"))) {
-				seed_test(0);
+			if (!(strcmp(parm, "TIMEOUT"))) {
 				status.parms.timeout = atoi(value);
 			} else if (!(strcmp(parm, "RESPONSE_PERCENT"))) {
-				seed_test(0);
 				percent_parm(value,
 					     &(status.parms.resp_percent));
 			} else if (!(strcmp(parm, "PAGED_PERCENT"))) {
-				seed_test(0);
 				percent_parm(value,
 					     &(status.parms.paged_percent));
 			} else {
@@ -388,7 +368,6 @@ static int parse_parms()
 	}
 
 	printf("PSLSE parm values:\n");
-	printf("\tSeed     = %d\n", status.parms.seed);
 	if (status.parms.timeout)
 		printf("\tTimeout  = %d seconds\n", status.parms.timeout);
 	else
@@ -1060,6 +1039,9 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	int port;
 	uint64_t value;
 
+	// Seed test
+	srand((unsigned int)time(NULL));
+
 	// Isolate AFU id from full path
 	x = strrchr(path, '/');
 	x++;
@@ -1331,7 +1313,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	free(afu);
 }
 
-bool cxl_pending_event(struct cxl_afu_h * afu)
+int cxl_pending_event(struct cxl_afu_h *afu)
 {
 	if (status.event_list)
 		return true;
@@ -1359,7 +1341,7 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 {
 
-	if (flags & ~(CXL_MMIO_FLAGS_FULL))
+	if (flags & ~(CXL_MMIO_FLAGS))
 		goto err;
 	if (!afu->running) {
 		print_error(ERR_ALL, "cxl_mmio_map: Must attach AFU first!\n");
