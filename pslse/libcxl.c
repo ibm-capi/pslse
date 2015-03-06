@@ -906,8 +906,8 @@ static void *psl(void *ptr)
 							      status.mmio.dw,
 							      status.mmio.addr,
 							      status.mmio.data,
-							      status.mmio.
-							      desc) ==
+							      status.
+							      mmio.desc) ==
 			   PSL_SUCCESS) {
 			DPRINTF("MMIO Write %d\n", status.mmio.addr);
 			status.mmio.request = AFU_PENDING;
@@ -1293,9 +1293,10 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	status.mmio.data = data;
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE)
-		short_delay();
+
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+			  "waiting for the MMIO write to complete!");
+
 	DPRINTF("MMIO write complete\n");
 	return 0;
 }
@@ -1320,9 +1321,10 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	status.mmio.addr = offset >> 2;
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE)
-		short_delay();
+
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+			  "waiting for the MMIO read to complete!");
+
 	*data = status.mmio.data;
 	DPRINTF("MMIO read complete\n");
 	return 0;
@@ -1353,9 +1355,10 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	status.mmio.data = value;
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE)
-		short_delay();
+
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+			  "waiting for the MMIO write to complete!");
+
 	DPRINTF("MMIO write complete\n");
 	return 0;
 }
@@ -1380,9 +1383,10 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	status.mmio.addr = offset >> 2;
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
-	// FIXME: Add timeout
-	while (status.mmio.request != AFU_IDLE)
-		short_delay();
+
+	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+			  "waiting for the MMIO read to complete!");
+
 	*data = (uint32_t) status.mmio.data;
 
 	DPRINTF("MMIO read complete\n");
