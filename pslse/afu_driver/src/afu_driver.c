@@ -677,8 +677,8 @@ static void psl () {
   }
   // Error case
   if (rc < 0) {
-    info_message("Socket closed: Ending Simulation.");
-    vpi_control(vpiFinish, 1);
+    info_message("Socket closed: Stopping Simulation.");
+    vpi_control(vpiStop, 1);
   }
 
   // Job

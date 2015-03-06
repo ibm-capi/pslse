@@ -1154,6 +1154,7 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	// Parse parameters
 	if (parse_parms()) {
 		free(status.event);
+		free(afu->id);
 		free(afu);
 		errno = ENODEV;
 		return NULL;
