@@ -833,8 +833,8 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		event->command_address = 0;
 		for (bc = 0; bc < 8; bc++) {
 			event->command_address =
-			    ((event->
-			      command_address) << 8) | event->rbuf[rbc++];
+			    ((event->command_address) << 8) |
+			    event->rbuf[rbc++];
 		}
 		event->command_handle = 0;
 		for (bc = 0; bc < 2; bc++) {

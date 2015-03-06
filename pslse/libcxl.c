@@ -1025,13 +1025,10 @@ static void *psl(void *ptr)
 			status.mmio.request = AFU_PENDING;
 			continue;
 		} else if ((status.mmio.request == AFU_REQUEST) &&
-			   !status.mmio.rnw && psl_mmio_write(status.event,
-							      status.mmio.dw,
-							      status.mmio.addr,
-							      status.mmio.data,
-							      status.mmio.
-							      desc) ==
-			   PSL_SUCCESS) {
+			   !status.mmio.rnw &&
+			   psl_mmio_write(status.event, status.mmio.dw,
+					  status.mmio.addr, status.mmio.data,
+					  status.mmio.desc) == PSL_SUCCESS) {
 			DPRINTF("MMIO Write %d\n", status.mmio.addr);
 			status.mmio.request = AFU_PENDING;
 			continue;
