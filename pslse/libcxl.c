@@ -37,23 +37,6 @@
 #endif
 
 /*
- * Simulation parms
- */
-// TODO: Clean this up with better method
-
-#define TIMEOUT_SECONDS 10	// Seconds to wait before triggering timeout
-
-#ifndef PAGED_RANDOMIZER
-#define PAGED_RANDOMIZER 5	// Percent chance of getting paged response
-#endif
-
-#ifndef RESP_RANDOMIZER
-#define RESP_RANDOMIZER 5	// Setting to 1 achieves fastest responses,
-				// Large values increase response delays
-				// Zero is an illegal value
-#endif
-
-/*
  * System constants
  */
 
@@ -151,6 +134,13 @@ struct cxl_event_wrapper {
 	struct cxl_event_wrapper *_next;
 };
 
+struct parms {
+	unsigned int seed;
+	unsigned int timeout;
+	unsigned int resp_percent;
+	unsigned int paged_percent;
+};
+
 struct psl_status {
 	struct AFU_EVENT *event;
 	volatile struct cxl_event_wrapper *event_list;
@@ -166,6 +156,7 @@ struct psl_status {
 	int active_tags[PSL_TAGS];
 	struct afu_req buffer_req[MAX_CREDITS];
 	struct afu_req *buffer_read;
+	struct parms parms;
 };
 
 static struct psl_status status;
@@ -270,6 +261,142 @@ static void print_error(int position, char *format, ...)
 
 	if ((position == ERR_END) || (position == ERR_ALL))
 		fflush(stderr);
+}
+
+/*
+ * Parse parameters
+ */
+
+static void seed_test(unsigned int seed)
+{
+	if (status.parms.seed)
+		return;
+
+	if (seed)
+		status.parms.seed = seed;
+	else
+		status.parms.seed = (unsigned int)time(NULL);
+
+	srand(status.parms.seed);
+}
+
+static void percent_parm(char *value, unsigned int *parm)
+{
+	unsigned min, max;
+	char *comma;
+
+	*parm = atoi(value);
+	comma = strchr(value, ',');
+	if (comma) {
+		min = *parm;
+		*comma = '\0';
+		++comma;
+		max = atoi(comma);
+		if (max < min) {
+			min = max;
+			max = *parm;
+		}
+		*parm = min + (rand() % (1 + max - min));
+	}
+}
+
+static int percent_chance(unsigned int chance)
+{
+	return ((rand() % 100) < chance);
+}
+
+static int parse_parms()
+{
+	FILE *fp;
+	char parm[MAX_LINE_CHARS];
+	char *value;
+
+	// Set default parameter values
+	status.parms.seed = 0;
+	status.parms.timeout = 10;
+	status.parms.resp_percent = 20;
+	status.parms.paged_percent = 5;
+
+	fp = fopen("pslse.parms", "r");
+	if (fp) {
+		while (fgets(parm, MAX_LINE_CHARS, fp)) {
+			// Strip newline char
+			value = strchr(parm, '\n');
+			if (value)
+				*value = '\0';
+
+			// Skip comment lines
+			value = strchr(parm, '#');
+			if (value)
+				continue;
+
+			// Skip blank lines
+			value = strchr(parm, ' ');
+			if (value)
+				*value = '\0';
+			value = strchr(parm, '\t');
+			if (value)
+				*value = '\0';
+			if (!strlen(parm))
+				continue;
+
+			// Look for valid parms
+			value = strchr(parm, ':');
+			if (value) {
+				*value = '\0';
+				++value;
+			} else {
+				print_error(ERR_BEGIN, "Invalid format in ");
+				print_error(ERR_CONT, "pslse.parms.  Expected");
+				print_error(ERR_END, " ':' :%s\n", parm);
+				continue;
+			}
+
+			// Set valid parms
+			if (!(strcmp(parm, "SEED"))) {
+				seed_test(atoi(value));
+			} else if (!(strcmp(parm, "TIMEOUT"))) {
+				seed_test(0);
+				status.parms.timeout = atoi(value);
+			} else if (!(strcmp(parm, "RESPONSE_PERCENT"))) {
+				seed_test(0);
+				percent_parm(value,
+					     &(status.parms.resp_percent));
+			} else if (!(strcmp(parm, "PAGED_PERCENT"))) {
+				seed_test(0);
+				percent_parm(value,
+					     &(status.parms.paged_percent));
+			} else {
+				print_error(ERR_BEGIN, "Ignoring invalid ");
+				print_error(ERR_CONT, "parm in pslse.parms: ");
+				print_error(ERR_END, "%s\n", parm);
+			}
+		}
+		fclose(fp);
+	}
+	// Check for valid parm values
+	if ((status.parms.resp_percent > 100)
+	    || (status.parms.resp_percent <= 0)) {
+		print_error(ERR_ALL, "RESPONSE_PERCENT must be 1-100!\n");
+		return -1;
+	}
+
+	if ((status.parms.paged_percent < 0)
+	    || (status.parms.paged_percent >= 100)) {
+		print_error(ERR_ALL, "PAGED_PERCENT must be 0-99!\n");
+		return -1;
+	}
+
+	printf("PSLSE parm values:\n");
+	printf("\tSeed     = %d\n", status.parms.seed);
+	if (status.parms.timeout)
+		printf("\tTimeout  = %d seconds\n", status.parms.timeout);
+	else
+		printf("\tTimeout  = DISABLED\n");
+	printf("\tResponse = %d%%\n", status.parms.resp_percent);
+	printf("\tPaged    = %d%%\n", status.parms.paged_percent);
+
+	return 0;
 }
 
 /*
@@ -464,11 +591,10 @@ static int check_flushing(struct afu_req *req)
 
 static int check_paged(struct afu_req *req)
 {
-#if PAGED_RANDOMIZER
 	if (req->type != REQ_READ && req->type != REQ_WRITE)
 		return 0;
 
-	if (rand() % PAGED_RANDOMIZER)
+	if (!percent_chance(status.parms.paged_percent))
 		return 0;
 
 	add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_PAGED);
@@ -476,9 +602,6 @@ static int check_paged(struct afu_req *req)
 	req->type = REQ_EMPTY;
 
 	return 1;
-#else
-	return 0;
-#endif				/* #if PAGED_RANDOMIZER */
 }
 
 static void do_buffer_write(uint8_t * addr, uint32_t tag, int prelim)
@@ -906,14 +1029,14 @@ static void *psl(void *ptr)
 							      status.mmio.dw,
 							      status.mmio.addr,
 							      status.mmio.data,
-							      status.
-							      mmio.desc) ==
+							      status.mmio.
+							      desc) ==
 			   PSL_SUCCESS) {
 			DPRINTF("MMIO Write %d\n", status.mmio.addr);
 			status.mmio.request = AFU_PENDING;
 			continue;
 		}
-		if (!(rand() % RESP_RANDOMIZER))
+		if (percent_chance(status.parms.resp_percent))
 			push_resp();
 		psl_signal_afu_model(status.event);
 		if (psl_get_afu_events(status.event) > 0) {
@@ -1049,12 +1172,19 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	pthread_create(&(afu->thread), NULL, psl, (void *)afu);
 	psl_aux1_change(status.event, status.credits);
 
+	// Parse parameters
+	if (parse_parms()) {
+		free(status.event);
+		free(afu);
+		errno = ENODEV;
+		return NULL;
+	}
 	// Reset AFU
 	status.cmd.code = PSL_JOB_RESET;
 	status.cmd.addr = 0;
 	status.cmd.request = AFU_REQUEST;
 
-	wait_with_timeout(status.cmd.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.cmd.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the AFU to go IDLE");
 
 	// Read AFU descriptor
@@ -1066,7 +1196,7 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	status.mmio.addr = 0;
 	status.mmio.request = AFU_REQUEST;
 
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 
 	value = status.mmio.data;
@@ -1081,42 +1211,42 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	// Offset 0x20
 	status.mmio.addr = 8;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_len = status.mmio.data;
 
 	// Offset 0x28
 	status.mmio.addr = 10;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_CR_offset = status.mmio.data;
 
 	// Offset 0x30
 	status.mmio.addr = 12;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA = status.mmio.data;
 
 	// Offset 0x38
 	status.mmio.addr = 14;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.PerProcessPSA_offset = status.mmio.data;
 
 	// Offset 0x40
 	status.mmio.addr = 16;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_len = status.mmio.data;
 
 	// Offset 0x48
 	status.mmio.addr = 18;
 	status.mmio.request = AFU_REQUEST;
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO request to go IDLE");
 	afu->desc.AFU_EB_offset = status.mmio.data;
 
@@ -1156,18 +1286,18 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 		return -1;
 	}
 
-	wait_with_timeout(status.cmd.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.cmd.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the AFU to go IDLE");
 
 	// Start AFU
 	status.cmd.code = PSL_JOB_START;
 	status.cmd.addr = wed;
 	status.cmd.request = AFU_REQUEST;
-	wait_with_timeout(status.cmd.request == AFU_REQUEST, TIMEOUT_SECONDS,
-			  "waiting for the AFU to start");
+	wait_with_timeout(status.cmd.request == AFU_REQUEST,
+			  status.parms.timeout, "waiting for the AFU to start");
 
 	// Wait for job_running
-	wait_with_timeout(!afu->running, TIMEOUT_SECONDS,
+	wait_with_timeout(!afu->running, status.parms.timeout,
 			  "waiting for the AFU to start");
 
 	afu->attached = 1;
@@ -1294,7 +1424,7 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
 
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO write to complete!");
 
 	DPRINTF("MMIO write complete\n");
@@ -1322,7 +1452,7 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
 
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO read to complete!");
 
 	*data = status.mmio.data;
@@ -1356,7 +1486,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
 
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO write to complete!");
 
 	DPRINTF("MMIO write complete\n");
@@ -1384,7 +1514,7 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	status.mmio.request = AFU_REQUEST;
 	DPRINTF("Waiting for MMIO ack from AFU\n");
 
-	wait_with_timeout(status.mmio.request != AFU_IDLE, TIMEOUT_SECONDS,
+	wait_with_timeout(status.mmio.request != AFU_IDLE, status.parms.timeout,
 			  "waiting for the MMIO read to complete!");
 
 	*data = (uint32_t) status.mmio.data;
