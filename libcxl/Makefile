@@ -8,7 +8,7 @@ all: libcxl.so libcxl.a
 libcxl.o libcxl_sysfs.o : CFLAGS += -fPIC
 
 libcxl.so: libcxl.o libcxl_sysfs.o
-	$(CC) $(CFLAGS) -shared libcxl.o libcxl_sysfs.o -o libcxl.so
+	$(CC) $(CFLAGS) -fPIC -shared libcxl.o libcxl_sysfs.o -o libcxl.so
 
 libcxl.a: libcxl.o libcxl_sysfs.o
 	ar rcs libcxl.a libcxl.o libcxl_sysfs.o
