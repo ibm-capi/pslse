@@ -824,6 +824,72 @@ void *cxl_mmio_ptr(struct cxl_afu_h *afu)
 	return afu->mmio_addr;
 }
 
+#ifdef __powerpc__
+
+static inline void store64(uint64_t src, uint64_t *dst)
+{
+	__asm__ __volatile__("sync ; std%U0%X0 %1,%0"
+			     : "=m"(*dst)
+			     : "r"(src));
+}
+
+static inline uint64_t load64(uint64_t *src)
+{
+	uint64_t ret;
+
+	__asm__ __volatile__("ld%U1%X1 %0,%1; sync"
+			     : "=r"(ret)
+			     : "m"(*src));
+	return ret;
+}
+
+static inline void store32(uint32_t src, uint32_t *dst)
+{
+	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
+			     : "=m"(*dst)
+			     : "r"(src));
+}
+
+static inline uint32_t load32(uint32_t *src)
+{
+	uint32_t ret;
+	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
+			     : "=r"(ret)
+			     : "m"(*src));
+	return ret;
+}
+
+#else
+
+static inline void store64(uint64_t src, uint64_t *dst)
+{
+	__sync_synchronize();
+	*dst = src;
+}
+
+static inline uint64_t load64(uint64_t *src)
+{
+	uint64_t ret = *src;
+	__sync_synchronize();
+	return ret;
+}
+
+static inline void store32(uint32_t src, uint32_t *dst)
+{
+	__sync_synchronize();
+	*dst = src;
+}
+
+static inline uint32_t load32(uint32_t *src)
+{
+	uint32_t ret = *src;
+	__sync_synchronize();
+	return ret;
+}
+
+#endif
+
+
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 {
 	if (!afu->mmio_addr)
@@ -840,9 +906,8 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	    CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
 		data = htobe64(data);
 
-	__asm__ __volatile__("sync ; std%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
-			     : "r"(data));
+	store64(data, (uint64_t *) (afu->mmio_addr + offset));
+
 	return 0;
 }
 
@@ -857,11 +922,9 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data)
 	if (offset & 0x7)
 		return -1;
 
-	__asm__ __volatile__("ld%U1%X1 %0,%1; sync"
-			     : "=r"(d)
-			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
-
+	d = load64((uint64_t *)(afu->mmio_addr + offset));
 	*data = d;
+
 	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
 	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
 		*data = le64toh(d);
@@ -887,9 +950,8 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	    CXL_MMIO_FLAGS_AFU_BIG_ENDIAN)
 		data = htobe32(data);
 
-	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
-			     : "r"(data));
+	store32(data, (uint32_t *)(afu->mmio_addr + offset));
+
 	return 0;
 }
 
@@ -904,11 +966,9 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data)
 	if (offset & 0x3)
 		return -1;
 
-	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
-			     : "=r"(d)
-			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
-
+	d = load32((uint32_t *)(afu->mmio_addr + offset));
 	*data = d;
+
 	if ((afu->mmio_flags & CXL_MMIO_FLAGS_AFU_ENDIAN_MASK) ==
 	    CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN)
 		*data = le32toh(d);
