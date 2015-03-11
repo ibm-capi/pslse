@@ -152,6 +152,7 @@ struct psl_status {
 	uint64_t lock_addr;
 	unsigned int max_ints;
 	unsigned int credits;
+	unsigned int latency;
 	int active_tags[PSL_TAGS];
 	struct afu_req buffer_req[MAX_CREDITS];
 	struct afu_req *buffer_read;
@@ -678,6 +679,15 @@ static void handle_aux2_change(struct cxl_afu_h *afu)
 			(long long)status.event->job_error);
 	}
 	DPRINTF("\n");
+
+	if ((status.event->buffer_read_latency != status.latency) &&
+	    (status.event->buffer_read_latency != 1) &&
+	    (status.event->buffer_read_latency != 3)) {
+		print_error(ERR_BEGIN, "Unsupported read buffer latency:");
+		print_error(ERR_CONT, "%d", status.event->buffer_read_latency);
+		print_error(ERR_END, "\n\tValid latency values are 1 or 3\n");
+	}
+	status.latency = status.event->buffer_read_latency;
 }
 
 static void handle_mmio_acknowledge(struct cxl_afu_h *afu)
