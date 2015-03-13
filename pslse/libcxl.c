@@ -587,7 +587,7 @@ static int check_paged(struct afu_req *req)
 static void do_buffer_write(uint8_t * addr, uint32_t tag, int prelim)
 {
 	uint8_t parity[DWORDS_PER_CACHELINE / 8];
-	DPRINTF("Buffer %s Write tag=0x%02x\n", prelim ? "Prelim" : "", tag);
+	DPRINTF("Buffer%s Write tag=0x%02x\n", prelim ? " Prelim" : "", tag);
 	generate_cl_parity(addr, parity);
 	psl_buffer_write(status.event, tag, (uint64_t) addr,
 			 CACHELINE_BYTES, addr, parity);
@@ -750,7 +750,7 @@ static void handle_buffer_read(struct cxl_afu_h *afu)
 		print_error(ERR_CONT, "\n  0x");
 		for (i = 0; i < DWORDS_PER_CACHELINE / 8; i++)
 			print_error(ERR_CONT, "%02x", parity[i]);
-		print_error(ERR_END, "");
+		print_error(ERR_END, "\n");
 		add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_DERROR);
 		status.psl_state = PSL_FLUSHING;
 		goto cleanup;
