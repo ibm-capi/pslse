@@ -241,41 +241,46 @@ static void add_response()
   resp_ptr->__next = new_resp;
 }
 
+static int test_change (uint32_t previous, uint32_t current, const char *sig) {
+
+  if (previous != current) {
+#ifdef DEBUG
+    if (current)
+      info_message ("%s=%d\n", sig, current);
+#endif /* #ifdef DEBUG */
+    return 1;
+  }
+
+  return 0;
+}
+
 PLI_INT32 aux2 () {
   uint64_t error;
-  uint32_t running, done, llcmd_ack, yield, tbreq, paren, lat;
+  uint32_t done, running, llcmd_ack, yield, tbreq, paren, lat;
+  int change = 0;
 
-  get_signal32(jrunning, &running);
   get_signal32(jdone, &done);
-  get_signal32(jcack, &llcmd_ack);
   get_signal64(jerror, &error);
+  get_signal32(jrunning, &running);
+  get_signal32(jcack, &llcmd_ack);
   get_signal32(jyield, &yield);
   get_signal32(timebase_req, &tbreq);
   get_signal32(parity_enabled, &paren);
   get_signal32(latency, &lat);
 
-#ifdef DEBUG
-  if (running && !event.job_running)
-    info_message ("jrunning=1\n");
-  if (done) {
-    info_message ("jdone=1\n");
-    if (error)
-      info_message ("jerror=0x%016llx\n", (long long) error);
-  }
-  if (llcmd_ack)
-    info_message ("jcack=1\n");
-  if (yield)
-    info_message ("jyield=1\n");
-  if (tbreq)
-    info_message ("tbreq=1\n");
-#endif /* #ifdef DEBUG */
+  change = test_change (event.job_done, done, "jdone");
+  if (change && error)
+    info_message ("jerror=0x%016llx\n", (long long) error);
+  change = test_change (event.job_running, running, "jrunning");
+  change = test_change (event.job_cack_llcmd, llcmd_ack, "jcack");
+  change = test_change (event.job_yield, yield, "jyield");
+  change = test_change (event.timebase_request, tbreq, "jtbreq");
+  change = test_change (event.parity_enable, paren, "paren");
+  change = test_change (event.buffer_read_latency, lat, "brlat");
 
-  if (running && done) {
-    error_message ("jrunning and jdone asserted at same time!");
-  }
-
-  psl_afu_aux2_change(&event, running, done, llcmd_ack, error, yield, tbreq,
-                      paren, lat);
+  if (change)
+    psl_afu_aux2_change(&event, running, done, llcmd_ack, error, yield, tbreq,
+                        paren, lat);
 
   return 0;
 }
@@ -362,6 +367,7 @@ PLI_INT32 clock_edge ()
   get_signal32(pclock, &clock);
 
   if (!clock) {
+    aux2 ();
     mmio ();
     buffer_read ();
     return 0;
@@ -439,14 +445,6 @@ PLI_INT32 register_control()
   cl_jval = 0;
 
   set_signal32(jval, 0);
-
-  set_callback_signal(aux2, jrunning);
-  set_callback_signal(aux2, jdone);
-  set_callback_signal(aux2, jcack);
-  set_callback_signal(aux2, jyield);
-  set_callback_signal(aux2, timebase_req);
-  set_callback_signal(aux2, parity_enabled);
-  set_callback_signal(aux2, latency);
 
   return 0;
 }
@@ -677,8 +675,8 @@ static void psl () {
   }
   // Error case
   if (rc < 0) {
-    info_message("Socket closed: Stopping Simulation.");
-    vpi_control(vpiStop, 1);
+    info_message("Socket closed: Ending Simulation.");
+    vpi_control(vpiFinish, 1);
   }
 
   // Job
