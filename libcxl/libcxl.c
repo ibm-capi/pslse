@@ -40,6 +40,7 @@
 #include "cxl.h"
 
 #include "libcxl_internal.h"
+#include "load_store.h"
 
 #undef DEBUG
 
@@ -624,13 +625,13 @@ static int
 cxl_fprint_data_storage(FILE *stream, struct cxl_event_data_storage *event)
 {
 	return fprintf(stream, "AFU Invalid memory reference: 0x%"PRIx64"\n",
-		       event->addr);
+                   (uint64_t)event->addr);
 }
 
 static int
 cxl_fprint_afu_error(FILE *stream, struct cxl_event_afu_error *event)
 {
-	return fprintf(stream, "AFU Error: 0x%"PRIx64"\n", event->error);
+	return fprintf(stream, "AFU Error: 0x%"PRIx64"\n", (uint64_t) event->error);
 }
 
 static int hexdump(FILE *stream, __u8 *addr, ssize_t size)
@@ -891,59 +892,6 @@ static inline void cxl_mmio_success()
 	cxl_sigbus_jmp_enabled = 0;
 }
 
-#ifdef __PPC64__
-
-static inline void _cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
-{
-	__asm__ __volatile__("sync ; std%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
-			     : "r"(data));
-}
-
-static inline uint64_t _cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset)
-{
-	uint64_t d;
-
-	__asm__ __volatile__("ld%U1%X1 %0,%1; sync"
-			     : "=r"(d)
-			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
-	return d;
-}
-
-#else /* __PPC64__ */
-
-static inline void _cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
-{
-	uint32_t d32;
-
-	d32 = (data >> 32);
-	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
-			     : "r"(d32));
-	d32 = data;
-	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr + offset + 4))
-			     : "r"(d32));
-}
-
-static inline uint64_t _cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset)
-{
-	uint64_t d;
-	uint32_t d32;
-
-	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
-			     : "=r"(d32)
-			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
-	d = d32;
-	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
-			     : "=r"(d32)
-			     : "m"(*(__u64 *)(afu->mmio_addr + offset + 4)));
-
-	return (d << 32) | d32;
-}
-
-#endif /* __PPC64__ */
-
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 {
 	if (!afu || !afu->mmio_addr)
@@ -960,7 +908,7 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 
 	if (cxl_mmio_try())
 		goto fail;
-	_cxl_mmio_write64(afu, offset, data);
+	store64(data, (uint64_t *) (afu->mmio_addr + offset));
 	cxl_mmio_success();
 
 	return 0;
@@ -992,7 +940,7 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data)
 
 	if (cxl_mmio_try())
 		goto fail;
-	d = _cxl_mmio_read64(afu, offset);
+	d = load64((uint64_t *)(afu->mmio_addr + offset));
 	cxl_mmio_success();
 
 	if (d == 0xffffffffffffffff)
@@ -1037,9 +985,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 
 	if (cxl_mmio_try())
 		goto fail;
-	__asm__ __volatile__("sync ; stw%U0%X0 %1,%0"
-			     : "=m"(*(__u64 *)(afu->mmio_addr + offset))
-			     : "r"(data));
+	store32(data, (uint32_t *)(afu->mmio_addr + offset));
 	cxl_mmio_success();
 
 	return 0;
@@ -1072,9 +1018,7 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data)
 
 	if (cxl_mmio_try())
 		goto fail;
-	__asm__ __volatile__("lwz%U1%X1 %0,%1; sync"
-			     : "=r"(d)
-			     : "m"(*(__u64 *)(afu->mmio_addr + offset)));
+	d = load32((uint32_t *)(afu->mmio_addr + offset));
 	cxl_mmio_success();
 
 	if (d == 0xffffffff)
