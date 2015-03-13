@@ -2,6 +2,6 @@
 -include $(OBJS:.o=.d)
 
 %.o : %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-	$(CC) -MM $(CFLAGS) $^ > $*.d
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+	$(CC) -MM $(CPPFLAGS) $(CFLAGS) $^ > $*.d
 	sed -i -e "s#^$(@F)#$@#" $*.d

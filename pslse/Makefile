@@ -16,11 +16,11 @@ libcxl.a: $(OBJ_DIR)/libcxl.o $(OBJ_DIR)/psl_interface.o
 
 $(OBJ_DIR)/libcxl.o: libcxl.c libcxl.h
 	if [ ! -d $(OBJ_DIR) ];then mkdir $(OBJ_DIR);fi
-	${CC} ${PSL_FLAGS} -fPIC -c libcxl.c -o $@
+	${CC} ${CPPFLAGS} ${PSL_FLAGS} -fPIC -c libcxl.c -o $@
 
 $(OBJ_DIR)/psl_interface.o: $(PSL_DIR)/psl_interface*
 	if [ ! -d $(OBJ_DIR) ];then mkdir $(OBJ_DIR);fi
-	${CC} ${PSL_FLAGS} -fPIC -c $(PSL_DIR)/psl_interface.c -o $@
+	${CC} ${CPPFLAGS} ${PSL_FLAGS} -fPIC -c $(PSL_DIR)/psl_interface.c -o $@
 
 clean:
 	/bin/rm -f ${APP} *.a $(OBJ_DIR)/*.o
