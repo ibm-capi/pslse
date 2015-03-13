@@ -1049,9 +1049,6 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	int port;
 	uint64_t value;
 
-	// Seed test
-	srand((unsigned int)time(NULL));
-
 	// Isolate AFU id from full path
 	x = strrchr(path, '/');
 	x++;
