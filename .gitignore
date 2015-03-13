@@ -4,4 +4,5 @@
 *.o
 *.sl
 pslse/cxl.h
+libcxl/cxl.h
 obj
