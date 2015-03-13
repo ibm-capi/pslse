@@ -20,6 +20,5 @@ include Makefile.rules
 
 clean:
 	rm -f *.o *.d libcxl.so libcxl.a
-	$(MAKE) -C clean
 
 .PHONY: clean all
