@@ -18,7 +18,12 @@
 #define _LIBCXL_H
 
 #include <stdint.h>
+
+#ifdef HAVE_MISC_CXL_H
+#include <misc/cxl.h>
+#else
 #include "cxl.h"
+#endif
 
 #define CXL_KERNEL_API_VERSION 1
 

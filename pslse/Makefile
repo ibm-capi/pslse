@@ -9,10 +9,16 @@ LIBCFLAGS += -O2 -Wall -m64
 #LIBCFLAGS += -g -Wall -m64 -DDEBUG
 PSL_FLAGS= $(LIBCFLAGS) -I$(PSL_DIR)
 
-all: cxl.h libcxl.a
+CHECK_HEADER = $(shell echo -e \\\#include $(1) | \
+	         $(CC) $(CPPFLAGS) -E - 2>&1 > /dev/null || echo fail)
 
-cxl.h:
-	$(error 'Please symlink include/uapi/misc/cxl.h from the Linux kernel tree')
+ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),)
+  PSL_FLAGS += -DHAVE_MISC_CXL_H
+else ifneq ($(call CHECK_HEADER,'"cxl.h"'),)
+  $(error 'Please symlink include/uapi/misc/cxl.h from the Linux kernel tree')
+endif
+
+all: libcxl.a
 
 libcxl.a: $(OBJ_DIR)/libcxl.o $(OBJ_DIR)/psl_interface.o
 	ar rcs $@ $^
