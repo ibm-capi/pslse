@@ -52,6 +52,9 @@
 #define PSA_REQUIRED_MASK 0x0100000000000000L
 #define IRQ_MASK          0x00000000000007FFL
 #define CACHELINE_MASK    0xFFFFFFFFFFFFFF80L
+#define FOURK_MASK           0xFFFFFFFFFFFFF000L
+
+#define DSISR 0x4000000040000000L	// FIXME: Better value here?
 
 /*
  * Enumerations
@@ -391,6 +394,33 @@ static void catastrophic_error(struct cxl_afu_h *afu)
 	status.psl_state = PSL_DONE;
 }
 
+static int add_dsi(volatile struct cxl_event_wrapper **head, uint64_t addr)
+{
+	struct cxl_event_wrapper *new_event;
+
+	addr &= FOURK_MASK;
+
+	// Find end of list searching for duplicates
+	if (*head) {
+		if (((*head)->event->header.type == CXL_EVENT_DATA_STORAGE) &&
+		    ((*head)->event->fault.addr == addr))
+			return 1;
+		return add_dsi((volatile struct cxl_event_wrapper **)
+				     &((*head)->_next), addr);
+	}
+
+	new_event = (struct cxl_event_wrapper *)
+	    malloc(sizeof(struct cxl_event_wrapper));
+	new_event->event = (struct cxl_event *)malloc(sizeof(struct cxl_event));
+	new_event->event->header.type = CXL_EVENT_DATA_STORAGE;
+	new_event->event->header.size = 40;
+	new_event->event->header.process_element = 0;
+	new_event->event->fault.addr = addr;
+	new_event->event->fault.dsisr = DSISR;
+	*head = new_event;
+	return 0;
+}
+
 static int add_interrupt(volatile struct cxl_event_wrapper **head, uint64_t irq)
 {
 	struct cxl_event_wrapper *new_event;
@@ -402,7 +432,8 @@ static int add_interrupt(volatile struct cxl_event_wrapper **head, uint64_t irq)
 
 	// Find end of list searching for duplicates
 	if (*head) {
-		if ((*head)->event->irq.irq == (__u16) irq)
+		if (((*head)->event->header.type == CXL_EVENT_AFU_INTERRUPT) &&
+		    ((*head)->event->irq.irq == (__u16) irq))
 			return 1;
 		return add_interrupt((volatile struct cxl_event_wrapper **)
 				     &((*head)->_next), irq);
@@ -546,6 +577,8 @@ static int check_mem_addr(struct afu_req *req)
 	add_resp(req->tag, RESP_EARLY, PSL_RESPONSE_AERROR);
 	status.psl_state = PSL_FLUSHING;
 	req->type = REQ_EMPTY;
+
+	add_dsi(&(status.event_list), (uint64_t) req->addr);
 
 	return 1;
 }
@@ -1321,7 +1354,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	free(afu);
 }
 
-int cxl_pending_event(struct cxl_afu_h *afu)
+int cxl_event_pending(struct cxl_afu_h *afu)
 {
 	if (status.event_list)
 		return true;
