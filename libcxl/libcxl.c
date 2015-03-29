@@ -427,6 +427,11 @@ static int open_afu_dev(struct cxl_afu_h *afu, char *path)
 	long api_version;
 	int fd;
 
+#ifndef __PPC__
+	fprintf(stderr, "Error : Code works only on POWER with CAPI support\n");
+	return -1;
+#endif /* __PPC__ */
+
 	if ((fd = open(path, O_RDWR | O_CLOEXEC)) < 0)
 		return fd;
 	afu->fd = fd;
@@ -624,13 +629,14 @@ static int
 cxl_fprint_data_storage(FILE *stream, struct cxl_event_data_storage *event)
 {
 	return fprintf(stream, "AFU Invalid memory reference: 0x%"PRIx64"\n",
-		       event->addr);
+		       (uint64_t) event->addr);
 }
 
 static int
 cxl_fprint_afu_error(FILE *stream, struct cxl_event_afu_error *event)
 {
-	return fprintf(stream, "AFU Error: 0x%"PRIx64"\n", event->error);
+	return fprintf(stream, "AFU Error: 0x%"PRIx64"\n",
+		       (uint64_t) event->error);
 }
 
 static int hexdump(FILE *stream, __u8 *addr, ssize_t size)
@@ -891,6 +897,7 @@ static inline void cxl_mmio_success()
 	cxl_sigbus_jmp_enabled = 0;
 }
 
+#ifdef __PPC__
 #ifdef __PPC64__
 
 static inline void _cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
@@ -943,6 +950,19 @@ static inline uint64_t _cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset)
 }
 
 #endif /* __PPC64__ */
+
+#else /* __PPC__ */
+
+static inline void _cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
+{
+}
+
+static inline uint64_t _cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset)
+{
+	return 0;
+}
+
+#endif /* __PPC__ */
 
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 {
@@ -1021,6 +1041,7 @@ fail:
 	return -1;
 }
 
+#ifdef __PPC__
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 {
 	if (!afu || !afu->mmio_addr)
@@ -1101,6 +1122,7 @@ fail:
 	errno = EIO;
 	return -1;
 }
+#endif /* __PPC__ */
 
 static void cxl_sigbus_action(int sig, siginfo_t *info, void *context)
 {
