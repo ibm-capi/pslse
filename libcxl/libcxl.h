@@ -159,7 +159,7 @@ int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp);
 /*
  * Events
  */
-int cxl_pending_event(struct cxl_afu_h *afu);
+int cxl_event_pending(struct cxl_afu_h *afu);
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
 int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
 			    __u32 type, __u16 irq);
