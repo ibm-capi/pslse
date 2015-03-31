@@ -966,6 +966,10 @@ static void handle_command_valid(struct cxl_afu_h *afu)
 	case PSL_COMMAND_WRITE_INJ:
 	case PSL_COMMAND_WRITE_LM:
 		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
+		if ((status.latency != 1) && (status.latency != 3)) {
+			print_error(ERR_ALL, "Write with invalid br_lat");
+			exit(-1);
+		}
 		add_buffer_req(REQ_READ, tag, size, addrptr, resp_type);
 		break;
 	case PSL_COMMAND_EVICT_I:
