@@ -271,12 +271,12 @@ PLI_INT32 aux2 () {
   change = test_change (event.job_done, done, "jdone");
   if (change && error)
     info_message ("jerror=0x%016llx\n", (long long) error);
-  change = test_change (event.job_running, running, "jrunning");
-  change = test_change (event.job_cack_llcmd, llcmd_ack, "jcack");
-  change = test_change (event.job_yield, yield, "jyield");
-  change = test_change (event.timebase_request, tbreq, "jtbreq");
-  change = test_change (event.parity_enable, paren, "paren");
-  change = test_change (event.buffer_read_latency, lat, "brlat");
+  change += test_change (event.job_running, running, "jrunning");
+  change += test_change (event.job_cack_llcmd, llcmd_ack, "jcack");
+  change += test_change (event.job_yield, yield, "jyield");
+  change += test_change (event.timebase_request, tbreq, "jtbreq");
+  change += test_change (event.parity_enable, paren, "paren");
+  change += test_change (event.buffer_read_latency, lat, "brlat");
 
   if (change)
     psl_afu_aux2_change(&event, running, done, llcmd_ack, error, yield, tbreq,
@@ -676,7 +676,7 @@ static void psl () {
   // Error case
   if (rc < 0) {
     info_message("Socket closed: Ending Simulation.");
-    vpi_control(vpiFinish, 1);
+    vpi_control(vpiStop, 1);
   }
 
   // Job
