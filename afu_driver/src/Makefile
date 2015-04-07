@@ -1,7 +1,7 @@
 CC := $(CROSS_COMPILE)$(CC)
 
 OBJ_DIR=obj
-PSL_DIR=../../psl_interface
+PSL_DIR=../../libcxl
 LINK_FLAGS=-shared -E
 PSL_FLAGS=-Wall -c -DDEBUG -I$(PSL_DIR) -fPIC
 VLI_FLAGS=-Wall -g -c -fPIC -I$(VPI_USER_H_DIR) -I$(PSL_DIR) -DDEBUG
