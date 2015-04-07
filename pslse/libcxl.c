@@ -54,7 +54,7 @@
 #define CACHELINE_MASK    0xFFFFFFFFFFFFFF80L
 #define FOURK_MASK           0xFFFFFFFFFFFFF000L
 
-#define DSISR 0x4000000040000000L	// FIXME: Better value here?
+#define DSISR 0x4000000040000000L
 
 /*
  * Enumerations
