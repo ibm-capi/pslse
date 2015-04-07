@@ -28,7 +28,7 @@
 
 #include "libcxl.h"
 #include "libcxl_internal.h"
-#include "psl_interface/psl_interface.h"
+#include "psl_interface.h"
 
 #ifdef DEBUG
 #define DPRINTF(...) printf(__VA_ARGS__)
