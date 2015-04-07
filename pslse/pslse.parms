@@ -1,0 +1,26 @@
+# pslse.parms is a hard coded file name for the PSLSE parameters file.
+# This file can be used to override the default settings of parameters.
+#
+# File may contain comment lines starting with '#' or blank lines.
+#
+# For parameter lines the format is the following:
+# PARM:{value}
+# PARM:{min_value},{max_value}
+#
+# When min_value and max_value are provided then for each run PSLSE
+# will pick a random value in that range.
+#
+
+# Timeout delay in seconds: If 0 then timeouts are disabled.
+TIMEOUT:10
+
+# Percentage chance of PSL driving any pending responses in a clock cycle.
+# Can not be 0 otherwise PSL will never generate responses to commands.
+# Setting to 100 will cause all responses to be very rapid and generally
+# those responses will be in order.
+# Lower values introduces delays on responses and allows for greater
+# randomization of response ordering.
+RESPONSE_PERCENT:10,20
+
+# Percentage chance of PSL responding with PAGED for any response.
+PAGED_PERCENT:2,4

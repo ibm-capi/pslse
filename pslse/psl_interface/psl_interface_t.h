@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 International Business Machines
+ * Copyright 2014,2015 International Business Machines
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,30 +31,29 @@
 #define PROTOCOL_SECONDARY 9908
 #define PROTOCOL_TERTIARY 0
 
-
 /* Return codes for interface functions */
 
 #define PSL_SUCCESS 0
-#define PSL_DOUBLE_COMMAND 1			/* A command has been issued
-						   before the preceeding
-						   command of the same type has
-						   been acknowledged */
-#define PSL_MMIO_ACK_NOT_VALID 4		/* Read data from previos MMIO
-						   read is not available */
+#define PSL_DOUBLE_COMMAND 1	/* A command has been issued
+				   before the preceeding
+				   command of the same type has
+				   been acknowledged */
+#define PSL_MMIO_ACK_NOT_VALID 4	/* Read data from previos MMIO
+					   read is not available */
 #define PSL_BUFFER_READ_DATA_NOT_VALID 8	/* Read data from previous
 						   buffer read is not
 						   available */
-#define PSL_COMMAND_NOT_VALID 32		/* There is no PSL command
-						   available */
-#define PSL_BAD_SOCKET 16			/* The socket connection could
-						   not be established */
-#define PSL_TRANSMISSION_ERROR 64		/* There was an error sending
-						   data across the socket
-						   interface */
-#define PSL_CLOSE_ERROR 128			/* There was an error closing
-						   the socket */
-#define PSL_AUX2_NOT_VALID 256			/* There auxilliary signals
-						   have not changed */
+#define PSL_COMMAND_NOT_VALID 32	/* There is no PSL command
+					   available */
+#define PSL_BAD_SOCKET 16	/* The socket connection could
+				   not be established */
+#define PSL_TRANSMISSION_ERROR 64	/* There was an error sending
+					   data across the socket
+					   interface */
+#define PSL_CLOSE_ERROR 128	/* There was an error closing
+				   the socket */
+#define PSL_AUX2_NOT_VALID 256	/* There auxilliary signals
+				   have not changed */
 
 /* Job Control Codes */
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 International Business Machines
+ * Copyright 2014,2015 International Business Machines
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,21 +18,12 @@
 #define _LIBCXL_H
 
 #include <linux/types.h>
-#include <misc/cxl.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-#define CXL_KERNEL_API_VERSION 1
+#include "cxl.h"
 
-/*
- * This is a very early library to simplify userspace code accessing a CXL
- * device.
- *
- * Currently there are only a couple of functions here - more is on the way.
- *
- * Suggestions to improve the library, simplify it's usage, add additional
- * functionality, etc. are welcome
- */
+#define CXL_KERNEL_API_VERSION 1
 
 #define CXL_SYSFS_CLASS "/sys/class/cxl"
 #define CXL_DEV_DIR "/dev/cxl"
@@ -96,16 +87,17 @@ enum cxl_views {
  * descriptor that has already been opened. The AFU file descriptor will be
  * closed by cxl_afu_free() regardless of how it was opened.
  */
-struct cxl_afu_h * cxl_afu_open_dev(char *path);
+struct cxl_afu_h *cxl_afu_open_dev(char *path);
 //struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
 //struct cxl_afu_h * cxl_afu_fd_to_h(int fd);
 void cxl_afu_free(struct cxl_afu_h *afu);
+int cxl_afu_opened(struct cxl_afu_h *afu);
 
 /*
  * Attach AFU context to this process
  */
 //int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-//			__u64 amr);
+//                      __u64 amr);
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
 
 /*
@@ -120,12 +112,6 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
 //int cxl_afu_fd(struct cxl_afu_h *afu);
 
 /*
- * TODO: All in one function - opens an AFU, verifies the operating mode and
- * attaches the context.
- * int cxl_afu_open_and_attach(struct cxl_afu_h *afu, mode)
- */
-
-/*
  * sysfs helpers
  */
 
@@ -133,7 +119,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
  * NOTE: On success, this function automatically allocates the returned
  * buffer, which must be freed by the caller (much like asprintf).
  */
-//int cxl_afu_sysfs_pci(char **pathp, struct cxl_afu_h *afu);
+//int cxl_afu_sysfs_pci(struct cxl_afu_h *afu, char **pathp);
 
 /* Flags for cxl_get/set_mode and cxl_get_modes_supported */
 #define CXL_MODE_DEDICATED   0x1
@@ -155,7 +141,7 @@ enum cxl_image {
 
 /*
  * Get/set attribute values.
- * Return 0 on succes, -1 on error.
+ * Return 0 on success, -1 on error.
  */
 //int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
@@ -171,27 +157,28 @@ enum cxl_image {
 //int cxl_get_dev(struct cxl_afu_h *afu, long *majorp, long *minorp);
 //int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_base_image(struct cxl_adapter_h *afu, long *valp);
-//int cxl_get_caia_version(struct cxl_adapter_h *afu, long *majorp, long *minorp);
-//int cxl_get_image_loaded(struct cxl_adapter_h *afu, enum cxl_image *valp);
-//int cxl_get_psl_revision(struct cxl_adapter_h *afu, long *valp);
+//int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp);
+//int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,
+//                       long *minorp);
+//int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp);
+//int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp);
 
 /*
  * Events
  */
-bool cxl_pending_event(struct cxl_afu_h *afu);
+int cxl_event_pending(struct cxl_afu_h *afu);
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
 /*int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
 			    __u32 type, __u16 irq);*/
 
 /*
  * fprint wrappers to print out CXL events - useful for debugging.
- * fprint_cxl_event will select the appropriate implementation based on the
- * event type and fprint_cxl_unknown_event will print out a hex dump of the
+ * cxl_fprint_event will select the appropriate implementation based on the
+ * event type and cxl_fprint_unknown_event will print out a hex dump of the
  * raw event.
  */
-//int fprint_cxl_event(FILE *stream, struct cxl_event *event);
-//int fprint_cxl_unknown_event(FILE *stream, struct cxl_event *event);
+//int cxl_fprint_event(FILE *stream, struct cxl_event *event);
+//int cxl_fprint_unknown_event(FILE *stream, struct cxl_event *event);
 
 /*
  * AFU MMIO functions
@@ -200,11 +187,11 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
  * full memory barrier 'sync' will proceed a write and follow a read.  More
  * relaxed assessors can be created using a pointer derived from cxl_mmio_ptr().
  */
-#define CXL_MMIO_FLAGS_AFU_BIG_ENDIAN           0x1
-#define CXL_MMIO_FLAGS_AFU_LITTLE_ENDIAN        0x2
-#define CXL_MMIO_FLAGS_AFU_HOST_ENDIAN          0x3
-#define CXL_MMIO_FLAGS_AFU_ENDIAN_MASK          0x3
-#define CXL_MMIO_FLAGS_FULL                     0x3
+#define CXL_MMIO_BIG_ENDIAN 0x1
+#define CXL_MMIO_LITTLE_ENDIAN 0x2
+#define CXL_MMIO_HOST_ENDIAN 0x3
+#define CXL_MMIO_ENDIAN_MASK 0x3
+#define CXL_MMIO_FLAGS 0x3
 int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags);
 int cxl_mmio_unmap(struct cxl_afu_h *afu);
 
@@ -214,8 +201,18 @@ int cxl_mmio_unmap(struct cxl_afu_h *afu);
 void *cxl_mmio_ptr(struct cxl_afu_h *afu);
 
 int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data);
-int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t *data);
+int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data);
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data);
-int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t *data);
+int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
+
+/*
+ * Calling this function will install the libcxl SIGBUS handler. This will
+ * catch bad MMIO accesses (e.g. due to hardware failures) that would otherwise
+ * terminate the program and make the above mmio functions return errors
+ * instead.
+ *
+ * Call this once per process prior to any MMIO accesses.
+ */
+//int cxl_mmio_install_sigbus_handler();
 
 #endif

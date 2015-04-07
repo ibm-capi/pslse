@@ -1,12 +1,12 @@
 /*
- * Copyright 2014 International Business Machines
- * 
+ * Copyright 2014,2015 International Business Machines
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,13 +19,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <misc/cxl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
 
+#include "cxl.h"
 #include "libcxl.h"
+
 #include "libcxl_internal.h"
 
 enum cxl_sysfs_attr {
@@ -181,7 +182,8 @@ static char *sysfs_attr_name(enum cxl_sysfs_attr attr)
 
 static char *sysfs_get_path(char *path, enum cxl_sysfs_attr attr)
 {
-	char *attr_path, *new_path;
+	char *attr_path = NULL;
+	char *new_path;
 	struct stat sb;
 	char *attr_name;
 
@@ -198,7 +200,7 @@ static char *sysfs_get_path(char *path, enum cxl_sysfs_attr attr)
 	 */
 	while (stat(path, &sb) != -1) {
 		if (asprintf(&attr_path, "%s/%s", path, attr_name) == -1)
-			goto out2;
+			goto out;
 
 		if (stat(attr_path, &sb) == 0) {
 			free(path);
@@ -207,20 +209,22 @@ static char *sysfs_get_path(char *path, enum cxl_sysfs_attr attr)
 
 		if (errno != ENOENT)
 			/* Something unexpected beside it not existing */
-			goto out1;
+			goto enodev;
 
 		/* If it doesn't exist, walk down "device/" link */
 		if (asprintf(&new_path, "%s/device", path) == -1)
-			goto out1;
+			goto out;
 
 		free(path);
 		path = new_path;
 		free(attr_path);
 	}
 	/* Directory doesn't exist */
-out1:
-	free(attr_path);
-out2:
+enodev:
+	errno = ENODEV;
+out:
+	if (attr_path)
+		free(attr_path);
 	free(path);
 	return NULL;
 }
