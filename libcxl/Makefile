@@ -1,28 +1,33 @@
-# (c) Copyright International Business Machines 2014
+srcdir = $(PWD)
+include Makefile.vars
+include Makefile.rules
 
-OBJ_DIR=obj
+OBJS = libcxl.o psl_interface.o
+CFLAGS += -Iinclude -fPIC
 
-CFLAGS += -O2 -Wall -m64
-LIBCFLAGS += -O2 -Wall -m64
-#CFLAGS += -g -Wall -m64
-#LIBCFLAGS += -g -Wall -m64 -DDEBUG
-PSL_FLAGS= $(LIBCFLAGS)
+all: libcxl.so libcxl.a
 
-all: cxl.h libcxl.a
+libcxl.so: libcxl.o psl_interface.o
+	$(call Q,CC, $(CC) $(CFLAGS) -shared libcxl.o psl_interface.o -o libcxl.so, libcxl.so) -Wl,--version-script symver.map
 
-cxl.h:
-	$(error 'Please symlink include/uapi/misc/cxl.h from the Linux kernel tree')
+libcxl.a: libcxl.o psl_interface.o
+	$(call Q,AR, ar rcs libcxl.a libcxl.o psl_interface.o, libcxl.a)
 
-libcxl.a: $(OBJ_DIR)/libcxl.o $(OBJ_DIR)/psl_interface.o
-	ar rcs $@ $^
+libcxl.o : include/misc/cxl.h
 
-$(OBJ_DIR)/libcxl.o: libcxl.c libcxl.h
-	if [ ! -d $(OBJ_DIR) ];then mkdir $(OBJ_DIR);fi
-	$(CC) $(PSL_FLAGS) -fPIC -c libcxl.c -o $@
+CHECK_HEADER = $(shell echo \\\#include\ $(1) | $(CC) $(CFLAGS) -E - > /dev/null 2>&1 && echo y || echo n)
 
-$(OBJ_DIR)/psl_interface.o: psl_interface*
-	if [ ! -d $(OBJ_DIR) ];then mkdir $(OBJ_DIR);fi
-	$(CC) $(PSL_FLAGS) -fPIC -c psl_interface.c -o $@
+include/misc/cxl.h:
+ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),n)
+	@echo $(WGET)
+	$(call Q,WGET include/misc/cxl.h, wget -P include/misc -q http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/include/uapi/misc/cxl.h)
+else
+	@echo "Hello World"
+endif
+
+psl_interface.o :
 
 clean:
-	/bin/rm -f $(APP) *.a $(OBJ_DIR)/*.o
+	rm -f *.o *.d libcxl.so libcxl.a include/misc/cxl.h
+
+.PHONY: clean all

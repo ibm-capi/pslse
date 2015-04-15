@@ -18,10 +18,9 @@
 #define _LIBCXL_H
 
 #include <linux/types.h>
+#include <misc/cxl.h>
 #include <stdbool.h>
 #include <stdint.h>
-
-#include "cxl.h"
 
 #define CXL_KERNEL_API_VERSION 1
 
