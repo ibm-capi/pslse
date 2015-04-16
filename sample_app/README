@@ -1,0 +1,11 @@
+* app.c is a C code application shell which shows the order of the most basic
+	libcxl function calls.
+
+* Makefile_a is a sample Makefile for using the libcxl.a archive library to
+	compile an application.
+
+* Makefile_so is a sample Makefile for using the libcxl.so shared object to
+	compile an application.
+
+* shim_host.dat maps devices paths to simulator hostname and port.  These
+	are provided by the afu_driver code when simulation is started.

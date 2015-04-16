@@ -1,0 +1,22 @@
+# This example Makefile is used to build an application using the libcxl
+# shared object file (libcxl.so) file.  This means your code is dynamically
+# linked at runtime.  If building with this you will need to modify the
+# environment variable LD_LIBRARY_PATH to include the directory containing
+# libcxl.so before running your application.  The advantage to this method is
+# that is the libcxl library ever changes, such as moving to the hardware
+# libcxl library, no recompile of your application code is neccessary.
+#
+CC=gcc
+APP=app
+LIBCXL_DIR=../libcxl
+LINKFLAGS=-lpthread -lcxl
+CFLAGS=-g -DDEBUG
+
+all: $(APP).o
+	$(CC) -L $(LIBCXL_DIR) -o $(APP) $^ $(LINKFLAGS)
+
+$(APP).o: $(APP).c
+	$(CC) $(CFLAGS) -c -I $(LIBCXL_DIR) $^
+
+clean:
+	rm -f $(APP) *.o
