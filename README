@@ -5,14 +5,14 @@
 This repository contains code for simulation and testing of a customer designed Accelerated Functional Unit (AFU) and it's accompanying application by
 simulating the connection to the Power Service Layer (PSL) as part of IBM's
 CAPI interconnect on Power8 systems.  The "libcxl" directory contains a
-simulation only version of the libcxl library functions provided at
-https://github.com/ibm-capi/libcxl.  This code is an abstraction layer that
+simulation only version of the libcxl library functions for hardware provided
+at https://github.com/ibm-capi/libcxl.  That code is an abstraction layer that
 interfaces with kernel level "cxl" code for communicating with an AFU in real
-hardware.  This code serves two purposes.  First, it provides a simple
-nterface to write code to for interfacing with AFU devices.  Second, if code is
-written using this abstraction layer then the same code can be compiled with
-the alternate version of libcxl.c and libcxl.h found on this repository for
-co-simulation with the AFU on most industry standard Verilog simulators.
+hardware.  The libcxl code server two purposes.  First, it provides a simple
+programming interface for accessing AFU devices.  Second, if code is written
+using this abstraction layer then the same code can be compiled with the
+alternate version of libcxl.c and libcxl.h found on this repository for
+co-simulation of the AFU on most industry standard Verilog simulators.
 
 It should be noted that only a handful of functions are currently supported in
 both environments.  This list should grow but in programming of applications
