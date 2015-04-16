@@ -24,9 +24,9 @@ ifndef VPI_USER_H_DIR
 $(error Must set VPI_USER_H_DIR to point to include path for the simulator)
 endif
 
-all: afu_driver.sl libvpi.so
+all: veriuser.sl libvpi.so
 
-libvpi.so afu_driver.sl: $(OBJ_DIR)/afu_driver.o $(OBJ_DIR)/psl_interface.o
+libvpi.so veriuser.sl: $(OBJ_DIR)/afu_driver.o $(OBJ_DIR)/psl_interface.o
 	ld $(LINK_FLAGS) -o $@ $^
 
 $(OBJ_DIR)/afu_driver.o: afu_driver.c $(PSL_DIR)/psl_interface.h
@@ -38,4 +38,4 @@ $(OBJ_DIR)/psl_interface.o: $(PSL_DIR)/psl_interface*
 	$(CC) $(PSL_FLAGS) -o $@ $(PSL_DIR)/psl_interface.c
 
 clean:
-	rm -f $(OBJ_DIR)/*.o afu_driver.sl libvpi.so
+	rm -f $(OBJ_DIR)/*.o veriuser.sl libvpi.so
