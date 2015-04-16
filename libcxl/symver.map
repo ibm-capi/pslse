@@ -1,0 +1,21 @@
+LIBCXL_1 {
+	global:
+		cxl_afu_open_dev;
+		cxl_afu_free;
+		cxl_afu_opened;
+		cxl_afu_attach;
+
+		cxl_pending_event;
+		cxl_read_event;
+
+		cxl_mmio_map;
+		cxl_mmio_unmap;
+		cxl_mmio_ptr;
+		cxl_mmio_write64;
+		cxl_mmio_read64;
+		cxl_mmio_write32;
+		cxl_mmio_read32;
+
+	local:
+		*;
+};

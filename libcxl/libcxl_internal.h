@@ -1,12 +1,12 @@
 /*
  * Copyright 2014,2015 International Business Machines
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,20 +26,33 @@ struct cxl_adapter_h {
 	char *sysfs_path;
 };
 
+struct afu_descriptor {
+	uint16_t num_ints_per_process;
+	uint16_t num_of_processes;
+	uint16_t num_of_afu_CRs;
+	uint16_t req_prog_model;
+	uint64_t reserved1;
+	uint64_t reserved2;
+	uint64_t reserved3;
+	uint64_t AFU_CR_len;
+	uint64_t AFU_CR_offset;
+	uint64_t PerProcessPSA;
+	uint64_t PerProcessPSA_offset;
+	uint64_t AFU_EB_len;
+	uint64_t AFU_EB_offset;
+};
+
 struct cxl_afu_h {
-	struct cxl_adapter_h *adapter; /* Only used if allocated by us */
-	DIR *enum_dir;
-	int process_element;
-	struct dirent *enum_ent;
-	struct cxl_event *event_buf;		/* Event buffer storage */
-	struct cxl_event *event_buf_first;	/* First event to read */
-	struct cxl_event *event_buf_end;	/* End of events */
-	char *dev_name;
-	char *sysfs_path;
-	int fd;
-	void *mmio_addr;
-	__u32 mmio_flags;
-	size_t mmio_size;
+	char *id;
+	pthread_t thread;
+	volatile __u32 mmio_flags;
+	volatile int started;
+	volatile int attached;
+	volatile int running;
+	volatile int parity_enable;
+	volatile int catastrophic;
+	volatile size_t mmio_size;
+	volatile struct afu_descriptor desc;
 };
 
 #endif
