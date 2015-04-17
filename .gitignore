@@ -3,5 +3,5 @@
 *.d
 *.o
 *.sl
-pslse/cxl.h
 obj
+libcxl/include
