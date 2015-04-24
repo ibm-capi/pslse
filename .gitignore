@@ -3,5 +3,4 @@
 *.d
 *.o
 *.sl
-obj
 libcxl/include

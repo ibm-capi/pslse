@@ -36,7 +36,7 @@ struct resp_event {
 
 // Global variables
 
-static int bw_delay;
+static unsigned int bw_delay;
 static struct AFU_EVENT event;
 static struct resp_event *resp_list;
 static vpiHandle pclock;
@@ -694,7 +694,8 @@ static void psl () {
   // Buffer write
   if (event.buffer_write)
     set_buffer_write();
-  --bw_delay;
+  if (bw_delay > 0)
+    --bw_delay;
   if (resp_list && !(bw_delay%2))
     set_response();
 
@@ -707,8 +708,6 @@ static void psl () {
     set_signal32(croom, event.room);
     event.aux1_change = 0;
   }
-
-  psl_signal_psl_model (&event);
 }
 
 PLI_INT32 afu_close ()
