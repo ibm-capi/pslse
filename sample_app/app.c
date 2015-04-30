@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015 International Business Machines
+ */
+
 #include <inttypes.h>
 #include <libcxl.h>
 #include <stdio.h>

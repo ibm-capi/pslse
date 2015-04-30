@@ -1,9 +1,9 @@
 srcdir = $(PWD)
+COMMON_DIR=../../common
 include Makefile.vars
 include Makefile.rules
 
-OBJS = afu_driver.o $(COMMON_DIR)/psl_interface.o
-COMMON_DIR=../../common
+OBJS = afu_driver.o psl_interface.o
 
 ifdef CDS_INST_DIR
   VPI_USER_H_DIR=$(CDS_INST_DIR)/tools/include
@@ -15,15 +15,13 @@ endif
 
 all: veriuser.sl libvpi.so
 
-veriuser.sl : afu_driver.o $(COMMON_DIR)/psl_interface.o
-	$(call Q,LD, ld $(LINK_FLAGS) -o $@ $^, veriuser.sl)
+veriuser.sl : afu_driver.o psl_interface.o
+	$(call Q,LD, $(LD) $(LINK_FLAGS) -o $@ $^, veriuser.sl)
 
-libvpi.so : afu_driver.o $(COMMON_DIR)/psl_interface.o
-	$(call Q,LD, ld $(LINK_FLAGS) -o $@ $^, libvpi.so)
+libvpi.so : afu_driver.o psl_interface.o
+	$(call Q,LD, $(LD) $(LINK_FLAGS) -o $@ $^, libvpi.so)
 
-afu_driver.o: CFLAGS += -fPIC -I$(VPI_USER_H_DIR) -I$(COMMON_DIR)
-
-$(COMMON_DIR)/psl_interface.o: CFLAGS += -fPIC
+afu_driver.o: CFLAGS += -I$(VPI_USER_H_DIR) -I$(COMMON_DIR)
 
 clean:
-	rm -f *.[od] $(COMMON_DIR)/*.[od] veriuser.sl libvpi.so
+	rm -f *.[od] veriuser.sl libvpi.so

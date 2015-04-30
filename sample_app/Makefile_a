@@ -10,7 +10,11 @@ CC=gcc
 APP=app
 LIBCXL_DIR=../libcxl
 LINKFLAGS=-lpthread
-CFLAGS=-g -DDEBUG
+CFLAGS=-O2
+
+ifdef DEBUG
+  CFLAGS = -g -DDEBUG
+endif
 
 all: $(APP).o $(LIBCXL_DIR)/libcxl.a
 	$(CC) -o $(APP) $^ $(LINKFLAGS)

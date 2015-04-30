@@ -31,19 +31,35 @@ Functions currenty supported in both "libcxl" and "pslse":
 - void cxl_mmio_write32 (struct cxl_afu_h *afu, uint64_t offset, uint632t data);
 - uint32_t cxl_mmio_read32 (struct cxl_afu_h *afu, uint64_t offset);
 
-The "libcxl" directory contains the replacement libcxl.c file in addition to a
-shim_host.dat file.  When compiling for simulation the libcxl.c would replace
-the real hardware version of libcxl.c during code compilation.  The "afu_driver"
-directory contains the code that will be needed by the Verilog simulator.
+The directories contain the following:
 
-The afu_driver directory contains two directories src and verilog.  The verilog
-directory contains the file top.v which is a top level wrapper that will
-instantiate your AFU Verilog code.  The src directory contains afu_driver.c
-which works hand in hand with top.v.  You'll need to set the environment
-variable VPI_USER_H_DIR to point to the directory that contains the file
-vpi_user.h necessary for the Verilog PLI 2.0 interface.  This file should be
-part of the simulator installation and is completely seperate from this code.
-Once this has been set then you should be able to "make" the afu_driver.sl
-using gcc.  This is the shared code that the Verilog simulator use for the
-Verilog PSI 2.0 interface with top.v.  The exact setup details depend on which
-simulator you are using.
+afu_driver/src:		Contains the code that will be needed by the Verilog
+			simulator.
+
+afu_driver/verilog:	Contains the file top.v which is a top level wrapper
+			that will instantiate your AFU Verilog code.
+
+common:			Contains code used in multiple places.
+
+libcxl:			Contains the replacement libcxl.c file in addition to a
+			pslse_server.dat file.
+
+pslse:			Contains the code for the PSLSE server.
+
+sample_app:		Contains shell code a sample application.
+
+QUICK START:
+
+1) cd afu_driver/src
+
+2) Set the environment variable VPI_USER_H_DIR.  The value must point to the
+	directory that contains the file "vpi_user.h".  This file is provided
+	by the Verilog simulator.
+
+3) Use "make" to compile this code.  It will build "veriuser.sl" and "libvpi.so"	for your simulator.  Refer to your simulator's documentation for details
+	on how to use Verilog VPI.
+
+4) Use top.v in afu_driver/verilog as a top level wrapper around your AFU
+	Verilog.  Build a model as required for your simulator.
+
+5) 

@@ -3,4 +3,6 @@
 *.d
 *.o
 *.sl
+.*.swp
 libcxl/include
+pslse/pslse

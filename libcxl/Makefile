@@ -1,10 +1,9 @@
 srcdir = $(PWD)
+COMMON_DIR=../common
 include Makefile.vars
 include Makefile.rules
 
-OBJS = libcxl.o $(COMMON_DIR)/psl_interface.o
-COMMON_DIR=../common
-CFLAGS += -Iinclude -I$(COMMON_DIR) -fPIC
+OBJS = libcxl.o psl_interface.o utils.o
 
 all: include/misc/cxl.h libcxl.so libcxl.a
 
@@ -15,13 +14,11 @@ ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),n)
 	$(call Q,WGET include/misc/cxl.h, wget -P include/misc -q http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/include/uapi/misc/cxl.h)
 endif
 
-libcxl.so: libcxl.o $(COMMON_DIR)/psl_interface.o
-	$(call Q,CC, $(CC) $(CFLAGS) -shared libcxl.o $(COMMON_DIR)/psl_interface.o -o libcxl.so, libcxl.so) -Wl,--version-script symver.map
+libcxl.so: $(OBJS)
+	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o libcxl.so, libcxl.so) -Wl,--version-script symver.map
 
-libcxl.a: libcxl.o $(COMMON_DIR)/psl_interface.o
-	$(call Q,AR, ar rcs libcxl.a libcxl.o $(COMMON_DIR)/psl_interface.o, libcxl.a)
-
-libcxl.o $(COMMON_DIR)/psl_interface.o:
+libcxl.a: $(OBJS)
+	$(call Q,AR, $(AR) rcs libcxl.a $^, libcxl.a)
 
 clean:
 	rm -f *.[od] $(COMMON_DIR)/*.[od] libcxl.so libcxl.a include/misc/cxl.h

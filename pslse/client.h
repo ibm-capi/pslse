@@ -1,48 +1,35 @@
 /*
  * Copyright 2014,2015 International Business Machines
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef _CLIENT_H_
+#define _CLIENT_H_
 
-#ifndef _LIBCXL_INTERNAL_H
-#define _LIBCXL_INTERNAL_H
+#include <stdint.h>
 
-#include <dirent.h>
-#include <inttypes.h>
-#include <linux/types.h>
-#include <poll.h>
-#include <pthread.h>
-
-struct cxl_adapter_h {
-	DIR *enum_dir;
-	struct dirent *enum_ent;
-	char *sysfs_path;
-};
-
-struct cxl_afu_h {
-	pthread_t thread;
-	pthread_mutex_t lock;
-	struct cxl_event *irq;
-	struct cxl_event *dsi;
-	struct cxl_event *first_event;
-	char *id;
-	uint8_t context;
+struct client {
+	struct job_event *job;
+	int valid;
+	int idle_cycles;
 	int fd;
-	int opened;
-	int attached;
-	int mapped;
-	volatile int mmio_pending;
-	uint64_t mmio_data;
+	int context;
+	char type;
+	uint32_t mmio_offset;
+	uint32_t mmio_size;
+	void *mem_access;
+	void *mmio_access;
+	char *ip;
 };
 
-#endif
+#endif /* _CLIENT_H_ */

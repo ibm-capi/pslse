@@ -1,0 +1,18 @@
+If your simulator requires that you build 32-bit code even on a 64-bit
+machine then you can force this with BIT32.
+
+Example:
+
+Instead of building like this:
+
+>make
+
+Do this:
+
+>BIT32=y make
+
+If you have attempted to build and it fails to link then start over fresh with:
+
+>make clean
+
+After make clean attempt 32-bit build again.

@@ -22,6 +22,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+
 #define CXL_KERNEL_API_VERSION 1
 
 #define CXL_SYSFS_CLASS "/sys/class/cxl"
