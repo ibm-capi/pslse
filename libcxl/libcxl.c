@@ -261,6 +261,7 @@ static void *_psl_loop(void *ptr)
 			_delay_1ms();
 			continue;
 		}
+		DPRINTF("PSL EVENT\n");
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
 			free(buffer);
@@ -503,17 +504,25 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	buffer[9] = '\0';
 	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes(afu->fd, 9, buffer, 10000) != 9) {
+		afu->opened = 0;
 		pthread_mutex_unlock(&(afu->lock));
 		errno = ENODEV;
 		return -1;
 	}
 	free(buffer);
-	if ((buffer = get_bytes(afu->fd, 1, 10000)) == NULL) {
+	buffer = get_bytes(afu->fd, 1, 10000);
+	while ((buffer != NULL) && (buffer[0] == '\0')) {
+		free(buffer);
+		buffer = get_bytes(afu->fd, 1, 10000);
+	}
+	if (buffer == NULL) {
+		afu->opened = 0;
 		pthread_mutex_unlock(&(afu->lock));
 		errno = ENODEV;
 		return -1;
 	}
 	if (buffer[0]!=(uint8_t) PSLSE_ATTACH) {
+		afu->opened = 0;
 		pthread_mutex_unlock(&(afu->lock));
 		free(buffer);
 		errno = ENODEV;

@@ -448,6 +448,11 @@ void handle_buffer_write(struct cmd *cmd)
 		return;
 
 	client = &(cmd->client[event->context]);
+	if ((!client->valid) && (event->state != MEM_RECEIVED)) {
+		event->resp = PSL_RESPONSE_AERROR;
+		event->state = MEM_DONE;
+		return;
+	}
 	if ((event->state == MEM_IDLE) && allow_buffer(cmd->parms)) {
 		// Buffer write with bogus data
 		DPRINTF("Bogus buffer write tag=0x%02x\n", event->tag);
@@ -575,6 +580,11 @@ void handle_touch(struct cmd *cmd)
 
 	// Abort if another memory access to client already in progress
 	client = &(cmd->client[event->context]);
+	if (!client->valid) {
+		event->resp = PSL_RESPONSE_AERROR;
+		event->state = MEM_DONE;
+		return;
+	}
 	if(client->mem_access != NULL)
 		return;
 
@@ -622,6 +632,11 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send interrupt to client
 	client = &(cmd->client[event->context]);
+	if (!client->valid) {
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+		return;
+	}
 	buffer[0] = PSLSE_INTERRUPT;
 	irq = htole16(cmd->irq);
 	memcpy(&(buffer[1]), &irq, 2);
@@ -629,6 +644,7 @@ void handle_interrupt(struct cmd *cmd)
 	put_bytes(client->fd, 3, buffer, 1);
 	pthread_mutex_unlock(cmd->psl_lock);
 	DPRINTF("Interrupt=0x%03x tag=0x%02x\n", (int) event->addr, event->tag);
+	event->state = MEM_DONE;
 }
 
 void handle_buffer_data(struct cmd *cmd)
@@ -644,15 +660,17 @@ void handle_buffer_data(struct cmd *cmd)
 	// Check if there is pending buffer read request
 	if ((cmd == NULL) || (cmd->client == NULL) ||
 	    (cmd->buffer_read == NULL)) {
-		pthread_mutex_unlock(&(cmd->lock));
-		pthread_mutex_unlock(cmd->psl_lock);
-		return;
+		goto buffer_data_fail;
 	}
 	client = &(cmd->client[cmd->buffer_read->context]);
+	if (!client->valid) {
+		cmd->buffer_read->resp = PSL_RESPONSE_AERROR;
+		cmd->buffer_read->state = MEM_DONE;
+		cmd->buffer_read = NULL;
+		goto buffer_data_fail;
+	}
 	if (client->mem_access != NULL) {
-		pthread_mutex_unlock(&(cmd->lock));
-		pthread_mutex_unlock(cmd->psl_lock);
-		return;
+		goto buffer_data_fail;
 	}
 
 	// Check if buffer read data has returned from AFU and if so
@@ -700,10 +718,11 @@ void handle_buffer_data(struct cmd *cmd)
 	}
 
 buffer_data_done:
-	pthread_mutex_unlock(&(cmd->lock));
-	pthread_mutex_unlock(cmd->psl_lock);
 	free(parity);
 	free(data);
+buffer_data_fail:
+	pthread_mutex_unlock(&(cmd->lock));
+	pthread_mutex_unlock(cmd->psl_lock);
 }
 
 // Handle data returning from client for memory read

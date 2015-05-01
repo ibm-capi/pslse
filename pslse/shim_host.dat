@@ -7,4 +7,4 @@
 # AFU_DEVICE,HOSTNAME:PORT
 #
 afu0.0,localhost:32768
-afu1.0,lx2173:32768
+afu1.0,localhost:32769

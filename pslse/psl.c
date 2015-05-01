@@ -68,16 +68,24 @@ attach_done:
 // Client release from AFU
 static void _free(struct psl *psl, struct client* client)
 {
+	struct cmd_event *mem_access;
+
 	info_msg("%s client disconnect from %s context %d", client->ip,
 		 psl->name, client->context);
 	pthread_mutex_lock(&(psl->lock));
-	assert(client->mem_access == NULL);
 	close(client->fd);
 	client->fd = -1;
 	client->idle_cycles = 0;
 	if (client->ip)
 		free(client->ip);
 	client->ip = NULL;
+	mem_access =  (struct cmd_event *) client->mem_access;
+	if (mem_access != NULL) {
+		if (mem_access->state != MEM_DONE) {
+			mem_access->resp = PSL_RESPONSE_AERROR;
+			mem_access->state = MEM_DONE;
+		}
+	}
 	client->mem_access = NULL;
 	client->mmio_access = NULL;
 	if (client->job)

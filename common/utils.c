@@ -121,7 +121,7 @@ uint8_t * get_bytes(int fd, unsigned size, int timeout)
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
 			free(data);
 			data = NULL;
-DPRINTF("Socket disconnect\n");
+			DPRINTF("Socket disconnect\n");
 			break;
 		}
 	}
