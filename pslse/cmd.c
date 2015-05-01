@@ -78,7 +78,6 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 static void _update_pending_resps(struct cmd *cmd, uint32_t code)
 {
 	struct cmd_event *event;
-	pthread_mutex_lock(&(cmd->lock));
 	event = cmd->list;
 	while (event) {
 		if (event->state == MEM_IDLE) {
@@ -87,7 +86,6 @@ static void _update_pending_resps(struct cmd *cmd, uint32_t code)
 		}
 		event = event->_next;
 	}
-	pthread_mutex_unlock(&(cmd->lock));
 }
 
 // Add new command to list
@@ -257,7 +255,9 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 	// Cacheline lock
 	case PSL_COMMAND_LOCK:
+		pthread_mutex_lock(&(cmd->lock));
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
+		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
 		_add_touch(cmd, handle, tag, addr, 0);
@@ -265,7 +265,9 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 	// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
+		pthread_mutex_lock(&(cmd->lock));
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
+		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
 		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
