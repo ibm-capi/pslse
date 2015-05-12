@@ -196,7 +196,7 @@ void send_mmio(struct mmio *mmio)
 }
 
 // Handle MMIO ack if returned by AFU
-void handle_mmio_ack(struct mmio *mmio)
+void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 {
 	uint64_t read_data;
 	uint8_t parity;
@@ -215,9 +215,11 @@ void handle_mmio_ack(struct mmio *mmio)
 		}
 		// Keep data for MMIO reads
 		if (mmio->list->rnw) {
-			parity = generate_parity(read_data, ODD_PARITY);
-			if(read_data_parity != parity)
-				error_msg("Parity error on MMIO read data");
+			if (parity_enabled) {
+				parity = generate_parity(read_data, ODD_PARITY);
+				if(read_data_parity != parity)
+					error_msg("Parity error on MMIO read data");
+			}
 			mmio->list->data = read_data;
 			DPRINTF("\tAddr:0x%06x Data:0x%016"PRIx64"\n",
 				mmio->list->addr, mmio->list->data);

@@ -98,7 +98,7 @@ static void _free(struct psl *psl, struct client* client)
 static void _handle_afu(struct psl *psl)
 {
 	handle_aux2(psl->job, &(psl->parity_enabled), &(psl->latency));
-	handle_mmio_ack(psl->mmio);
+	handle_mmio_ack(psl->mmio, psl->parity_enabled);
 	if (psl->cmd != NULL) {
 		handle_response(psl->cmd);
 		handle_buffer_write(psl->cmd);
