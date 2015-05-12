@@ -44,6 +44,7 @@
 
 #include "cmd.h"
 #include "mmio.h"
+#include "../common/debug.h"
 #include "../common/utils.h"
 
 #define MAX_CREDITS    64
@@ -53,7 +54,7 @@
 // Initialize cmd structure for tracking AFU command activity
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     pthread_mutex_t *lock)
+		     pthread_mutex_t *lock, FILE *dbg_fp, uint8_t dbg_id)
 {
 	struct cmd *cmd = (struct cmd*) malloc(sizeof(struct cmd));
 
@@ -70,56 +71,10 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 	cmd->psl_lock = lock;
 	pthread_mutex_init(&(cmd->lock), NULL);
 	cmd->credits = MAX_CREDITS;
+	cmd->dbg_fp = dbg_fp;
+	cmd->dbg_id = dbg_id;
 
 	return cmd;
-}
-
-// Update all pending responses at once to new state
-static void _update_pending_resps(struct cmd *cmd, uint32_t code)
-{
-	struct cmd_event *event;
-	event = cmd->list;
-	while (event) {
-		if (event->state == MEM_IDLE) {
-			event->state = MEM_DONE;
-			event->resp = code;
-		}
-		event = event->_next;
-	}
-}
-
-// Add new command to list
-static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
-		    enum cmd_type type, uint64_t addr, uint32_t size,
-		    enum mem_state state, uint32_t resp, uint8_t unlock,
-		    uint8_t restart)
-{
-	struct cmd_event **head;
-	struct cmd_event *event;
-
-	event = (struct cmd_event*) malloc(sizeof(struct cmd_event));
-	memset(event, 0, sizeof(struct cmd_event));
-	event->context = context;
-	event->tag = tag;
-	event->type = type;
-	event->addr = addr;
-	event->size = size;
-	event->state = state;
-	event->resp = resp;
-	event->unlock = unlock;
-	event->restart = restart;
-	event->data = (uint8_t*)malloc(CACHELINE_BYTES);
-	memset(event->data, 0xFF, CACHELINE_BYTES);
-	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
-	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
-
-	pthread_mutex_lock(&(cmd->lock));
-	head = &(cmd->list);
-	while ((*head != NULL) && !allow_reorder(cmd->parms))
-		head = &((*head)->_next);
-	event->_next = *head;
-	*head = event;
-	pthread_mutex_unlock(&(cmd->lock));
 }
 
 static void _print_event(struct cmd_event *event)
@@ -165,9 +120,60 @@ static void _print_event(struct cmd_event *event)
 	       event->unlock, event->restart);
 }
 
+// Update all pending responses at once to new state
+static void _update_pending_resps(struct cmd *cmd, uint32_t resp)
+{
+	struct cmd_event *event;
+	event = cmd->list;
+	while (event) {
+		if (event->state == MEM_IDLE) {
+			event->state = MEM_DONE;
+			event->resp = resp;
+			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+					 event->context, event->resp);
+		}
+		event = event->_next;
+	}
+}
+
+// Add new command to list
+static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
+		     uint32_t command, enum cmd_type type, uint64_t addr,
+		     uint32_t size, enum mem_state state, uint32_t resp,
+		     uint8_t unlock, uint8_t restart)
+{
+	struct cmd_event **head;
+	struct cmd_event *event;
+
+	event = (struct cmd_event*) malloc(sizeof(struct cmd_event));
+	memset(event, 0, sizeof(struct cmd_event));
+	event->context = context;
+	event->tag = tag;
+	event->type = type;
+	event->addr = addr;
+	event->size = size;
+	event->state = state;
+	event->resp = resp;
+	event->unlock = unlock;
+	event->restart = restart;
+	event->data = (uint8_t*)malloc(CACHELINE_BYTES);
+	memset(event->data, 0xFF, CACHELINE_BYTES);
+	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
+	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
+
+	pthread_mutex_lock(&(cmd->lock));
+	head = &(cmd->list);
+	while ((*head != NULL) && !allow_reorder(cmd->parms))
+		head = &((*head)->_next);
+	event->_next = *head;
+	*head = event;
+	debug_cmd_add(cmd->dbg_fp, cmd->dbg_id, tag, context, command);
+	pthread_mutex_unlock(&(cmd->lock));
+}
+
 // Format and add interrupt to command list
 static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
-			  uint16_t irq)
+			   uint32_t command, uint16_t irq)
 {
 	uint32_t resp = PSL_RESPONSE_DONE;
 	enum cmd_type type = CMD_INTERRUPT;
@@ -183,52 +189,53 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	if (!cmd->irq)
 		cmd->irq = irq;
 int_done:
-	_add_cmd(cmd, handle, tag, type, (uint64_t) irq, 0, MEM_DONE,
+	_add_cmd(cmd, handle, tag, command, type, (uint64_t) irq, 0, MEM_DONE,
 		 resp, 0, 0);
 }
 
 // Format and add memory touch to command list
 static void _add_touch(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		      uint64_t addr, uint8_t unlock)
+		       uint32_t command, uint64_t addr, uint8_t unlock)
 {
-	_add_cmd(cmd, handle, tag, CMD_TOUCH, addr, CACHELINE_BYTES,
-		MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
+	_add_cmd(cmd, handle, tag, command, CMD_TOUCH, addr, CACHELINE_BYTES,
+		 MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
 }
 
 // Format and add unlock to command list
-static void _add_unlock(struct cmd *cmd, uint32_t handle, uint32_t tag)
+static void _add_unlock(struct cmd *cmd, uint32_t handle, uint32_t tag,
+			uint32_t command)
 {
-	_add_cmd(cmd, handle, tag, CMD_OTHER, 0, 0, MEM_DONE,
-		PSL_RESPONSE_DONE, 0, 0);
+	_add_cmd(cmd, handle, tag, command, CMD_OTHER, 0, 0, MEM_DONE,
+		 PSL_RESPONSE_DONE, 0, 0);
 }
 
 // Format and add memory read to command list
 static void _add_read(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		     uint64_t addr, uint32_t size)
+		      uint32_t command, uint64_t addr, uint32_t size)
 {
 	// Reads will be added to the list and will next be processed
 	// in the function handle_buffer_write()
-	_add_cmd(cmd, handle, tag, CMD_READ, addr, size, MEM_IDLE,
-		PSL_RESPONSE_DONE, 0, 0);
+	_add_cmd(cmd, handle, tag, command, CMD_READ, addr, size, MEM_IDLE,
+		 PSL_RESPONSE_DONE, 0, 0);
 }
 
 // Format and add memory write to command list
 static void _add_write(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		      uint64_t addr, uint32_t size, uint8_t unlock)
+		       uint32_t command, uint64_t addr, uint32_t size,
+		       uint8_t unlock)
 {
 	// Writes will be added to the list and will next be processed
 	// in the function handle_buffer_read()
-	_add_cmd(cmd, handle, tag, CMD_WRITE, addr, size, MEM_IDLE,
-		PSL_RESPONSE_DONE, unlock, 0);
+	_add_cmd(cmd, handle, tag, command, CMD_WRITE, addr, size, MEM_IDLE,
+		 PSL_RESPONSE_DONE, unlock, 0);
 }
 
 // Format and add misc. command to list
 static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		      uint32_t resp,
-		      uint8_t restart)
+		       uint32_t command, uint32_t resp, uint8_t restart)
 {
-	_add_cmd(cmd, handle, tag, CMD_OTHER, 0, 0, MEM_DONE, resp,
-		0, restart);
+	_add_cmd(cmd, handle, tag, command, CMD_OTHER, 0, 0, MEM_DONE, resp,
+		 0, restart);
 }
 
 // Determine what type of command to add to list
@@ -239,19 +246,17 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	uint16_t irq = (uint16_t) (addr & IRQ_MASK);
 	uint8_t unlock = 0;
 	if (handle >= cmd->mmio->desc.num_of_processes) {
-		_add_other(cmd, handle, tag, PSL_RESPONSE_CONTEXT, 0);
+		_add_other(cmd, handle, tag, command, PSL_RESPONSE_CONTEXT, 0);
 		return;
 	}
 	switch (command) {
 	// Interrupt
 	case PSL_COMMAND_INTREQ:
-		DPRINTF("AFU interrupt command received");
-		_add_interrupt(cmd, handle, tag, irq);
+		_add_interrupt(cmd, handle, tag, command, irq);
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
-		DPRINTF("AFU restart command received\n");
-		_add_other(cmd, handle, tag, PSL_RESPONSE_DONE, 1);
+		_add_other(cmd, handle, tag, command, PSL_RESPONSE_DONE, 1);
 		break;
 	// Cacheline lock
 	case PSL_COMMAND_LOCK:
@@ -260,8 +265,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
-		_add_touch(cmd, handle, tag, addr, 0);
-		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
+		_add_touch(cmd, handle, tag, command, addr, 0);
 		break;
 	// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
@@ -270,7 +274,6 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
-		DPRINTF("Starting lock sequence, tag=0x%02x\n", tag);
 	case PSL_COMMAND_READ_CL_RES:	/*fall through*/
 		if (!cmd->locked)
 			cmd->res_addr = addr & CACHELINE_MASK;
@@ -283,12 +286,11 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_RD_GO_S:	/*fall through*/
 	case PSL_COMMAND_RD_GO_M:	/*fall through*/
 	case PSL_COMMAND_RWITM:		/*fall through*/
-		DPRINTF("Read command size=%d tag=0x%02x\n", size, tag);
-		_add_read(cmd, handle, tag, addr, size);
+		_add_read(cmd, handle, tag, command, addr, size);
 		break;
 	// Cacheline unlock
 	case PSL_COMMAND_UNLOCK:
-		_add_unlock(cmd, handle, tag);
+		_add_unlock(cmd, handle, tag, command);
 		break;
 	// Memory Writes
 	case PSL_COMMAND_WRITE_UNLOCK:
@@ -301,25 +303,22 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_WRITE_NA:	/*fall through*/
 	case PSL_COMMAND_WRITE_INJ:	/*fall through*/
 	case PSL_COMMAND_WRITE_LM:	/*fall through*/
-		DPRINTF("Write command size=%d, tag=0x%02x\n", size, tag);
 		if (!(latency % 2) || (latency > 3))
 			error_msg("Write with invalid br_lat=%d", latency);
-		_add_write(cmd, handle, tag, addr, size, unlock);
+		_add_write(cmd, handle, tag, command, addr, size, unlock);
 		break;
 	// Treat these as memory touch to test for valid addresses
 	case PSL_COMMAND_EVICT_I:
 		if (cmd->locked && cmd->res_addr) {
-			_add_other(cmd, handle, tag, PSL_RESPONSE_NRES, 0);
-			DPRINTF("Dumping lock intervening command,");
-			DPRINTF(" tag=0x%02x\n", tag);
+			_add_other(cmd, handle, tag, command,
+				   PSL_RESPONSE_NRES, 0);
 			break;
 		}
 	case PSL_COMMAND_PUSH_I:	/*fall through*/
 	case PSL_COMMAND_PUSH_S:	/*fall through*/
 		if (cmd->locked) {
-			_add_other(cmd, handle, tag, PSL_RESPONSE_NLOCK, 0);
-			DPRINTF("Dumping lock intervening command,");
-			DPRINTF(" tag=0x%02x\n", tag);
+			_add_other(cmd, handle, tag, command,
+				   PSL_RESPONSE_NLOCK, 0);
 			break;
 		}
 	case PSL_COMMAND_TOUCH_I:
@@ -330,7 +329,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_INVALIDATE:	/*fall through*/
 	case PSL_COMMAND_CLAIM_M:	/*fall through*/
 	case PSL_COMMAND_CLAIM_U:	/*fall through*/
-		_add_touch(cmd, handle, tag, addr, unlock);
+		_add_touch(cmd, handle, tag, command, addr, unlock);
 		break;
 	default:
 		error_msg("Command currently unsupported 0x%04x", cmd);
@@ -349,6 +348,7 @@ static void _cmd_parity_error(const char *msg, uint64_t value, uint8_t parity)
 // See if a command was sent by AFU and process if so
 void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 {
+	struct cmd_event *event;
 	uint64_t address, address_parity;
 	uint32_t command, command_parity, tag, tag_parity, size, abort, handle;
 	uint8_t parity, fail;
@@ -360,13 +360,6 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 			     &abort, &handle);
 	pthread_mutex_unlock(cmd->psl_lock);
 	if (rc == PSL_SUCCESS) {
-		DPRINTF("Command from AFU:\n");
-		DPRINTF(" code=0x%04x", command);
-		DPRINTF(" tag=0x%02x", tag);
-		DPRINTF(" addr=0x%016"PRIx64, address);
-		DPRINTF(" size=0x%02x", size);
-		DPRINTF(" abort=0x%x", abort);
-		DPRINTF(" context=0x%x\n", handle);
 		fail = 0;
 		// Is AFU running?
 		if (*(cmd->psl_state) != PSLSE_RUNNING) {
@@ -395,24 +388,34 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 			}
 		}
 		if (fail) {
-			_add_other(cmd, handle, tag, PSL_RESPONSE_FAILED, 0);
+			_add_other(cmd, handle, tag, command,
+				   PSL_RESPONSE_FAILED, 0);
 		}
 		// Check credits and parse
 		if (!cmd->credits) {
 			error_msg("AFU issued command without any credits");
-			_add_other(cmd, handle, tag, PSL_RESPONSE_FAILED, 0);
+			_add_other(cmd, handle, tag, command,
+				   PSL_RESPONSE_FAILED, 0);
 		}
 		else {
 			cmd->credits--;
 			if (!cmd->client[handle].valid) {
-				_add_other(cmd, handle, tag,
+				_add_other(cmd, handle, tag, command,
 					   PSL_RESPONSE_AERROR, 0);
 				return;
 			}
 			if (cmd->flushing && (command!=PSL_COMMAND_RESTART)) {
-				_add_other(cmd, handle, tag,
+				_add_other(cmd, handle, tag, command,
 					   PSL_RESPONSE_FLUSHED, 0);
 				return;
+			}
+			event = cmd->list;
+			while (event!=NULL) {
+				if (event->tag == tag) {
+					error_msg("Duplicate tag 0x%02x", tag);
+					return;
+				}
+				event = event->_next;
 			}
 			_parse_cmd(cmd, command, tag, address, size, abort,
 				   handle, latency);
@@ -429,9 +432,6 @@ void handle_buffer_write(struct cmd *cmd)
 	struct client *client;
 	uint8_t buffer[10];
 	uint64_t *addr;
-#if DEBUG
-	int i;
-#endif /* DEBUG */
 
 	// Randomly select a pending read (or none)
 	pthread_mutex_lock(&(cmd->lock));
@@ -451,11 +451,13 @@ void handle_buffer_write(struct cmd *cmd)
 	if ((!client->valid) && (event->state != MEM_RECEIVED)) {
 		event->resp = PSL_RESPONSE_AERROR;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
 	if ((event->state == MEM_IDLE) && allow_buffer(cmd->parms)) {
 		// Buffer write with bogus data
-		DPRINTF("Bogus buffer write tag=0x%02x\n", event->tag);
+		debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		pthread_mutex_lock(cmd->psl_lock);
 		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				 CACHELINE_BYTES, event->data, event->parity);
@@ -466,6 +468,8 @@ void handle_buffer_write(struct cmd *cmd)
 			// Randomly cause paged response
 			event->resp = PSL_RESPONSE_PAGED;
 			event->state = MEM_DONE;
+			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+					 event->context, event->resp);
 		}
 		else {
 			// Send read request to client, set client->mem_access
@@ -479,9 +483,9 @@ void handle_buffer_write(struct cmd *cmd)
 			pthread_mutex_lock(cmd->psl_lock);
 			put_bytes(client->fd, 10, buffer, 1);
 			pthread_mutex_unlock(cmd->psl_lock);
-			DPRINTF("Memory 0x%016"PRIx64, event->addr);
-			DPRINTF(" read request tag=0x%02x\n", event->tag);
 			event->state = MEM_REQUEST;
+			debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
+					 event->context);
 			client->mem_access = (void *) event;
 		}
 	}
@@ -493,19 +497,13 @@ void handle_buffer_write(struct cmd *cmd)
 		if (psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				     CACHELINE_BYTES, event->data,
 				     event->parity) == PSL_SUCCESS) {
-#if DEBUG
-			DPRINTF("Buffer write tag=0x%02x", event->tag);
-			for (i=0; i<CACHELINE_BYTES; i++) {
-				if ((i % 32)==0) {
-					DPRINTF("\n 0x");
-				}
-				DPRINTF("%02x", event->data[i]);
-			}
-			DPRINTF("\n");
-#endif /* DEBUG */
 			event->resp = PSL_RESPONSE_DONE;
 			event->state = MEM_DONE;
 			client->mem_access = NULL;
+			debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id,
+					       event->tag);
+			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+					 event->context, event->resp);
 		}
 		pthread_mutex_unlock(cmd->psl_lock);
 	}
@@ -539,6 +537,8 @@ void handle_buffer_read(struct cmd *cmd)
 		if (allow_paged(cmd->parms)) {
 			event->resp = PSL_RESPONSE_PAGED;
 			event->state = MEM_DONE;
+			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+					 event->context, event->resp);
 			return;
 		}
 		// Send buffer read request to AFU.  Setting cmd->buffer_read
@@ -549,8 +549,9 @@ void handle_buffer_read(struct cmd *cmd)
 					event->addr, CACHELINE_BYTES)
 			 == PSL_SUCCESS) {
 			cmd->buffer_read = event;
+			debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id,
+					      event->tag);
 			event->state = MEM_BUFFER;
-			DPRINTF("Buffer read request tag=0x%02x\n", event->tag);
 		}
 		pthread_mutex_unlock(cmd->psl_lock);
 	}
@@ -578,20 +579,24 @@ void handle_touch(struct cmd *cmd)
 	if (event == NULL)
 		return;
 
-	// Abort if another memory access to client already in progress
 	client = &(cmd->client[event->context]);
+
+	// Abort if client disconnected
 	if (!client->valid) {
-		event->resp = PSL_RESPONSE_AERROR;
 		event->state = MEM_DONE;
 		return;
 	}
+
+	// Abort if another memory access to client already in progress
 	if(client->mem_access != NULL)
 		return;
 
+	// Randomly cause paged response
 	if (allow_paged(cmd->parms)) {
-		// Randomly cause paged response
 		event->resp = PSL_RESPONSE_PAGED;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
 	// Send memory touch request to client
@@ -599,11 +604,10 @@ void handle_touch(struct cmd *cmd)
 	buffer[1] = (uint8_t) event->size;
 	addr = (uint64_t*) &(buffer[2]);
 	*addr = htole64(event->addr & CACHELINE_MASK);
-	DPRINTF("Memory 0x%016"PRIx64, event->addr);
-	DPRINTF(" touch request tag=0x%02x\n", event->tag);
 	pthread_mutex_lock(cmd->psl_lock);
 	put_bytes(client->fd, 10, buffer, 1);
 	pthread_mutex_unlock(cmd->psl_lock);
+	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_REQUEST;
 	client->mem_access = (void *) event;
 }
@@ -635,6 +639,8 @@ void handle_interrupt(struct cmd *cmd)
 	if (!client->valid) {
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
 	buffer[0] = PSLSE_INTERRUPT;
@@ -643,7 +649,7 @@ void handle_interrupt(struct cmd *cmd)
 	pthread_mutex_lock(cmd->psl_lock);
 	put_bytes(client->fd, 3, buffer, 1);
 	pthread_mutex_unlock(cmd->psl_lock);
-	DPRINTF("Interrupt=0x%03x tag=0x%02x\n", (int) event->addr, event->tag);
+	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_DONE;
 }
 
@@ -680,7 +686,6 @@ void handle_buffer_data(struct cmd *cmd)
 	rc = psl_get_buffer_read_data(cmd->afu_event, data, parity);
 	if ((rc == PSL_SUCCESS) && (cmd->buffer_read != NULL) &&
 	    (client->mem_access == NULL)) {
-		DPRINTF("Buffer read tag=0x%02x\n", cmd->buffer_read->tag);
 		parity_check = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
 		generate_cl_parity(data, parity_check);
 		if (strncmp((char *) parity, (char *) parity_check,
@@ -701,8 +706,6 @@ void handle_buffer_data(struct cmd *cmd)
 		// successful before generating a response.  The client
 		// response will cause a call to either handle_aerror() or
 		// handle_mem_return().
-		DPRINTF("Memory 0x%016"PRIx64, cmd->buffer_read->addr);
-		DPRINTF(" write request tag=0x%02x\n", cmd->buffer_read->tag);
 		buffer = (uint8_t*)malloc(cmd->buffer_read->size+10);
 		offset = cmd->buffer_read->addr & ~CACHELINE_MASK;
 		buffer[0] = (uint8_t) PSLSE_MEMORY_WRITE;
@@ -711,6 +714,9 @@ void handle_buffer_data(struct cmd *cmd)
 		*addr = htole64(cmd->buffer_read->addr);
 		memcpy(&(buffer[10]), &(data[offset]), cmd->buffer_read->size);
 		put_bytes(client->fd, cmd->buffer_read->size+10, buffer, 1);
+		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id,
+				 cmd->buffer_read->tag,
+				 cmd->buffer_read->context);
 		cmd->buffer_read->state = MEM_REQUEST;
 		client->mem_access = (void *) cmd->buffer_read;
 		cmd->buffer_read = NULL;
@@ -726,14 +732,11 @@ buffer_data_fail:
 }
 
 // Handle data returning from client for memory read
-static void _handle_mem_read(struct cmd_event *event, int fd,
+static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
 			    pthread_mutex_t *lock)
 {
 	uint8_t *data;
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
-#if DEBUG
-	int i;
-#endif /* DEBUG */
 
 	// Client is returning data from memory read
 	pthread_mutex_lock(lock);
@@ -742,40 +745,36 @@ static void _handle_mem_read(struct cmd_event *event, int fd,
 	if (data == NULL) {
 		event->resp = PSL_RESPONSE_DERROR;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
 	memcpy((void *) &(event->data[offset]), (void *) data, event->size);
 	free(data);
 	generate_cl_parity(event->data, event->parity);
 	event->state = MEM_RECEIVED;
-#if DEBUG
-	DPRINTF("Read data returned from memory @ 0x%016"PRIx64, event->addr);
-	for (i=0; i<CACHELINE_BYTES; i++) {
-		if ((i % 32)==0) {
-			DPRINTF("\n 0x");
-		}
-		DPRINTF("%02x", event->data[i]);
-	}
-	DPRINTF("\n");
-#endif /* DEBUG */
 }
 
 // Decide what to do with a client memory acknowledgement
-void handle_mem_return(struct cmd_event *event, int fd, pthread_mutex_t *lock)
+void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
+		       pthread_mutex_t *lock)
 {
 	assert(event != NULL);
 	if (event->type==CMD_READ)
-		_handle_mem_read(event, fd, lock);
+		_handle_mem_read(cmd, event, fd, lock);
 	else
 		event->state = MEM_DONE;
+	debug_cmd_return(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 }
 
 // Mark memory event as address error in preparation for response
-void handle_aerror(struct cmd_event *event)
+void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 {
 	assert(event != NULL);
 	event->resp = PSL_RESPONSE_AERROR;
 	event->state = MEM_DONE;
+	debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+			 event->context, event->resp);
 }
 
 // Send a randomly selected pending response back to AFU
@@ -803,7 +802,8 @@ void handle_response(struct cmd *cmd)
 		head = &((*head)->_next);
 	}
 	event = *head;
-	if ((*head == NULL) || !allow_resp(cmd->parms)) {
+	if ((*head == NULL) ||
+	    ((event->type==CMD_WRITE) && !allow_resp(cmd->parms))) {
 		pthread_mutex_unlock(&(cmd->lock));
 		return;
 	}
@@ -823,10 +823,9 @@ drive_resp:
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	pthread_mutex_unlock(cmd->psl_lock);
 	if (rc == PSL_SUCCESS) {
+		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if (event->restart)
 			cmd->flushing = 0;
-		DPRINTF("Response=0x%02x tag=0x%02x\n", event->resp,
-			event->tag);
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);

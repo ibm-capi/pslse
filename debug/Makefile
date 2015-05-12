@@ -3,14 +3,14 @@ COMMON_DIR=../common
 include Makefile.vars
 include Makefile.rules
 
-OBJS = pslse.o cmd.o debug.o job.o mmio.o parms.o psl.o shim_host.o psl_interface.o utils.o
+OBJS = debug.o utils.o
 
-all: pslse
+all: debug
 
-pslse: $(OBJS)
+debug: $(OBJS) main.c
 	$(call Q,CC, $(CC) $(CFLAGS) -o $@ $^ -lpthread -lrt, $@)
 
 clean:
-	rm -f *.[od] pslse
+	rm -f *.[od] debug
 
 .PHONY: clean all

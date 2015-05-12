@@ -52,11 +52,13 @@
 #include "parms.h"
 #include "psl.h"
 #include "shim_host.h"
+#include "../common/debug.h"
 #include "../common/utils.h"
 
 #define PSLSE_VERSION 1
 
 struct psl* psl_list;
+FILE *fp;
 
 static int get_key()
 {
@@ -107,8 +109,10 @@ static void disconnect_afu()
 	printf("\n");
 
 	key = get_key();
-	if ((key == 0) || (key >= i))
+	if ((key == 0) || (key >= i)) {
+		warn_msg("Invalid selection, resuming");
 		return;
+	}
 
 	i = 1;
 	psl = psl_list;
@@ -180,9 +184,7 @@ static int _client_connect(int fd, char *ip)
 
 	// Associate with PSL
 	psl = psl_list;
-	DPRINTF("Looking for AFU: %s\n", buffer);
 	while (psl) {
-		DPRINTF("\tAFU: %s\n", psl->name);
 		if (!strcmp((char *) buffer, psl->name))
 			break;
 		psl = psl->_next;
@@ -198,25 +200,21 @@ static int _client_connect(int fd, char *ip)
 	// See if this is first client connecting to PSL
 	mmio_size = 0;
 	if (!psl->client) {
-		DPRINTF("Sending reset to AFU\n");
 		mmio_size = MMIO_FULL_RANGE;
 		add_job(psl->job, PSL_JOB_RESET, 0L);
 		psl->state = PSLSE_RESET;
 		while (psl->state != PSLSE_IDLE) ns_delay(4);
 		psl->state = PSLSE_DESC;
-		DPRINTF("Reading AFU descriptor\n");
 		read_descriptor(psl->mmio);
 		psl->state = PSLSE_IDLE;
 		if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
 		    PROG_MODEL_DEDICATED) {
 			// Dedicated AFU
-			DPRINTF("AFU supports dedicated mode\n");
 			psl->max_clients = 1;
 		}
 		if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
 		    PROG_MODEL_DIRECTED) {
 			// Dedicated AFU
-			DPRINTF("AFU supports directed mode\n");
 			psl->max_clients = psl->mmio->desc.num_of_processes;
 		}
 		if (psl->max_clients == 0) {
@@ -266,7 +264,8 @@ static int _client_connect(int fd, char *ip)
 	// Look for open client slot
 	assert (psl->max_clients > 0);
 	for(i = 0; i < psl->max_clients; i++) {
-		if (psl->client[i].valid == 0) {
+		if ((psl->client[i].valid == 0) &&
+		    (psl->client[i].mem_access == NULL)) {
 			client = &(psl->client[i]);
 			client->context = i;
 			break;
@@ -306,6 +305,10 @@ static int _client_connect(int fd, char *ip)
 	client->valid = 1;
 	info_msg("%s connected to %s with context %d", client->ip,
 		psl->name, i);
+
+	// DEBUG
+	debug_context_add(fp, psl->dbg_id, client->context);
+
 	return 0;
 }
 
@@ -362,6 +365,8 @@ int main(int argc, char **argv)
 	struct parms *parms;
 	char *ip;
 
+	// Open debug.log file
+	fp = fopen("debug.log", "w");
 
 	// Mask SIGPIPE signal for all threads
 	sigemptyset(&set);
@@ -378,14 +383,14 @@ int main(int argc, char **argv)
 	sigaction(SIGINT, &action, NULL);
 
 	// Parse parameters file
-	parms = parse_parms("pslse.parms");
+	parms = parse_parms("pslse.parms", fp);
 	if (parms == NULL) {
 		error_msg("Unable to parse pslse.parms file");
 		return -1;
 	}
 
 	// Connect to simulator(s) and start psl thread(s)
-	parse_host_data(&psl_list, parms, "shim_host.dat");
+	parse_host_data(&psl_list, parms, "shim_host.dat", fp);
 	if (psl_list == NULL) {
 		free(parms);
 		error_msg("Unable to connect to any simulators");
@@ -413,6 +418,7 @@ int main(int argc, char **argv)
 	info_msg("No AFUs connected, Shutting down PSLSE\n");
 
 	free(parms);
+	fclose(fp);
 
 	return 0;
 }

@@ -19,6 +19,7 @@
 
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "psl_interface.h"
 #include "../common/utils.h"
@@ -36,10 +37,13 @@ struct job {
 	pthread_mutex_t lock;
 	volatile enum pslse_state *psl_state;
 	uint32_t read_latency;
+	FILE *dbg_fp;
+	uint8_t dbg_id;
 };
 
 struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		     volatile enum pslse_state *psl_state);
+		     volatile enum pslse_state *psl_state, FILE *dbg_fp,
+		     uint8_t dbg_id);
 
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr);
 

@@ -19,7 +19,10 @@
 
 #include <pthread.h>
 #include <stdint.h>
+#include <stdint.h>
+#include <stdio.h>
 
+#include "client.h"
 #include "psl_interface.h"
 #include "../common/utils.h"
 
@@ -69,10 +72,13 @@ struct mmio {
 	struct mmio_event *list;
 	pthread_mutex_t *psl_lock;
 	pthread_mutex_t lock;
+	FILE *dbg_fp;
+	uint8_t dbg_id;
 	uint32_t flags;
 };
 
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock);
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
+		       FILE *dbg_fp, uint8_t dbg_id);
 
 int read_descriptor(struct mmio *mmio);
 
@@ -83,10 +89,11 @@ void send_mmio(struct mmio *mmio);
 
 void handle_mmio_ack(struct mmio *mmio);
 
-void handle_mmio_map(struct mmio *mmio, int fd);
+void handle_mmio_map(struct mmio *mmio, struct client *client);
 
-struct mmio_event *handle_mmio(struct mmio *mmio, int fd, int rnw, int dw);
+struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
+			       int rnw, int dw);
 
-struct mmio_event *handle_mmio_done(struct mmio* mmio, int fd);
+struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client);
 
 #endif /* _MMIO_H_ */

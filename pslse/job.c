@@ -28,10 +28,12 @@
 #include <string.h>
 
 #include "job.h"
+#include "../common/debug.h"
 
 // Initialize job tracking structure
 struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		     volatile enum pslse_state *psl_state)
+		     volatile enum pslse_state *psl_state, FILE *dbg_fp,
+		     uint8_t dbg_id)
 {
 	struct job *job;
 
@@ -43,6 +45,8 @@ struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 	job->psl_lock = psl_lock;
 	pthread_mutex_init(&(job->lock), NULL);
 	job->psl_state = psl_state;
+	job->dbg_fp = dbg_fp;
+	job->dbg_id = dbg_id;
 	return job;
 }
 
@@ -58,7 +62,9 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	event->addr = addr;
 	event->state = PSLSE_IDLE;
 	job->job = event;
-	DPRINTF("Putting JOB event in queue\n");
+
+	// DEBUG
+	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
 
 	return event;
 }
@@ -91,11 +97,13 @@ void send_job(struct job *job)
 	// Attempt to send job to AFU
 	if(psl_job_control(job->afu_event, event->code, event->addr) ==
 	   PSL_SUCCESS) {
-		DPRINTF("JOB event to AFU\n");
 		// Change state for reset only
 		event->state = PSLSE_PENDING;
 		if (event->code == PSL_JOB_RESET)
 			*(job->psl_state) = PSLSE_RESET;
+
+		// DEBUG
+		debug_job_send(job->dbg_fp, job->dbg_id, event->code);
 	}
 send_done:
 	pthread_mutex_unlock(job->psl_lock);
@@ -112,25 +120,20 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	uint32_t tb_request;
 	uint32_t par_enable;
 	uint32_t read_latency;
+	uint8_t dbg_aux2;
 
 	if (job == NULL)
 		return;
 
 	pthread_mutex_lock(job->psl_lock);
+	dbg_aux2 = 0;
 
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
 				&tb_request, &par_enable, &read_latency) ==
 	    PSL_SUCCESS) {
-		DPRINTF("AUX2 event from AFU\n");
-		DPRINTF(" ah_jrunning=%d", job_running);
-		DPRINTF(" ah_jdone=%d", job_done);
-		DPRINTF(" ah_jerror=0x%016"PRIx64"\n", job_error);
-		DPRINTF(" ah_jcack=%d", job_cack_llcmd);
-		DPRINTF(" ah_tbreq=%d", tb_request);
-		DPRINTF(" ah_paren=%d", par_enable);
-		DPRINTF(" ah_brlat=%d\n", read_latency);
 		if (job_done) {
+			dbg_aux2 |= DBG_AUX2_DONE;
 			if (job->job != NULL) {
 				free(job->job);
 				job->job = NULL;
@@ -139,7 +142,6 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 				error_msg("Unexpected jdone=1 from AFU");
 			}
 			if (*(job->psl_state) != PSLSE_RESET) {
-				DPRINTF("Sending reset to AFU\n");
 				add_job(job, PSL_JOB_RESET, 0L);
 				*(job->psl_state) = PSLSE_RESET;
 			}
@@ -147,14 +149,29 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 				*(job->psl_state) = PSLSE_IDLE;
 			}
 		}
-		if (job_running)
+		if (job_running) {
 			*(job->psl_state) = PSLSE_RUNNING;
+			dbg_aux2 |= DBG_AUX2_RUNNING;
+		}
+		if (job_cack_llcmd) {
+			dbg_aux2 |= DBG_AUX2_LLCACK;
+		}
+		if (tb_request) {
+			dbg_aux2 |= DBG_AUX2_TBREQ;
+		}
+		if (par_enable) {
+			dbg_aux2 |= DBG_AUX2_PAREN;
+		}
+		dbg_aux2 |= read_latency & DBG_AUX2_LAT_MASK;
 		if (job_done && job_running)
 			error_msg("ah_jdone & ah_jrunning asserted together");
 		if ((read_latency != 1) && (read_latency != 3))
 			warn_msg("ah_brlat must be either 1 or 3");
 		*parity = par_enable;
 		*latency = read_latency;
+
+		// DEBUG
+		debug_job_aux2(job->dbg_fp, job->dbg_id, dbg_aux2);
 	}
 	pthread_mutex_unlock(job->psl_lock);
 }

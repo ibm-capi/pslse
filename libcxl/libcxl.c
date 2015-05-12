@@ -378,7 +378,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	*port_str = '\0';
 	port_str++;
 	if (!host || !port_str) {
-		printf("Invalid format in pslse_server.dat\n");
+		fprintf(stderr,"cxl_afu_open_dev:Invalid format in pslse_server.dat\n");
 		goto open_fail;
 	}
 	port = atoi(port_str);
@@ -412,21 +412,24 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	strcat((char*) buffer, afu_id);
 	size = strlen((char*) buffer);
 	if (put_bytes(afu->fd, size, buffer, 0) != size) {
-		fprintf(stdout,"Failed to write to socket!\n");
+		fprintf(stderr,"cxl_afu_open_dev:Failed to write to socket!\n");
 		goto open_fail;
 	}
 	free(buffer);
 	if ((buffer = get_bytes(afu->fd, 1, -1)) == NULL) {
+		fprintf(stderr,"cxl_afu_open_dev:Socket failed open acknowledge\n");
 		close(afu->fd);
 		goto open_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_ATTACH) {
+		fprintf(stderr,"cxl_afu_open_dev:PSLSE bad acknowledge\n");
 		free(buffer);
 		close(afu->fd);
 		goto open_fail;
 	}
 	free(buffer);
 	if ((buffer = get_bytes(afu->fd, 1, -1)) == NULL) {
+		fprintf(stderr,"cxl_afu_open_dev:Socket failed context retrieve\n");
 		close(afu->fd);
 		goto open_fail;
 	}
@@ -485,13 +488,13 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 
 	DPRINTF("AFU ATTACH\n");
 	if (!afu->opened) {
-		printf("cxl_afu_attach: Must open AFU first!\n");
+		fprintf(stderr,"cxl_afu_attach: Must open AFU first!\n");
 		errno = ENODEV;
 		return -1;
 	}
 
 	if (afu->attached) {
-		printf("cxl_afu_attach: AFU already attached!\n");
+		fprintf(stderr,"cxl_afu_attach: AFU already attached!\n");
 		errno = ENODEV;
 		return -1;
 	}
@@ -504,6 +507,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	buffer[9] = '\0';
 	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes(afu->fd, 9, buffer, 10000) != 9) {
+		fprintf(stderr,"cxl_afu_attach: Socket fail on attach!\n");
 		afu->opened = 0;
 		pthread_mutex_unlock(&(afu->lock));
 		errno = ENODEV;
@@ -516,12 +520,14 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		buffer = get_bytes(afu->fd, 1, 10000);
 	}
 	if (buffer == NULL) {
+		fprintf(stderr,"cxl_afu_attach: Socket fail on attach acknowledge!\n");
 		afu->opened = 0;
 		pthread_mutex_unlock(&(afu->lock));
 		errno = ENODEV;
 		return -1;
 	}
 	if (buffer[0]!=(uint8_t) PSLSE_ATTACH) {
+		fprintf(stderr,"cxl_afu_attach: Bad attach acknowledge!\n");
 		afu->opened = 0;
 		pthread_mutex_unlock(&(afu->lock));
 		free(buffer);

@@ -19,6 +19,7 @@
 
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "client.h"
 #include "cmd.h"
@@ -33,6 +34,7 @@ struct psl {
 	struct AFU_EVENT *afu_event;
 	pthread_t thread;
 	pthread_mutex_t lock;
+	FILE *dbg_fp;
 	struct client *client;
 	struct cmd *cmd;
 	struct job *job;
@@ -45,12 +47,13 @@ struct psl {
 	uint32_t latency;
 	char *name;
 	char *host;
+	uint8_t dbg_id;
 	int port;
 	int idle_cycles;
 	int max_clients;
 };
 
 int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
-	     int port);
+	     int port, FILE *dbg_fp);
 
 #endif /* _PSL_H_ */

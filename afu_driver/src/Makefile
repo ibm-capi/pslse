@@ -15,11 +15,8 @@ endif
 
 all: veriuser.sl libvpi.so
 
-veriuser.sl : afu_driver.o psl_interface.o
-	$(call Q,LD, $(LD) $(LINK_FLAGS) -o $@ $^, veriuser.sl)
-
-libvpi.so : afu_driver.o psl_interface.o
-	$(call Q,LD, $(LD) $(LINK_FLAGS) -o $@ $^, libvpi.so)
+veriuser.sl libvpi.so : afu_driver.o psl_interface.o
+	$(call Q,LD, $(LD) $(LINK_FLAGS) -o $@ $^, $@)
 
 afu_driver.o: CFLAGS += -I$(VPI_USER_H_DIR) -I$(COMMON_DIR)
 

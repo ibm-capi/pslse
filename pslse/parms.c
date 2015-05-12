@@ -20,6 +20,7 @@
 
 #include "parms.h"
 #include "../common/utils.h"
+#include "../common/debug.h"
 
 static inline int percent_chance(unsigned int chance)
 {
@@ -66,7 +67,7 @@ static void percent_parm(char *value, unsigned int *parm)
 	}
 }
 
-struct parms* parse_parms(char *filename)
+struct parms* parse_parms(char *filename, FILE *dbg_fp)
 {
 	struct parms* parms;
 	char parm[MAX_LINE_CHARS];
@@ -127,33 +128,44 @@ struct parms* parse_parms(char *filename)
 		// Set valid parms
 		if (!(strcmp(parm, "TIMEOUT"))) {
 			parms->timeout = atoi(value);
+			debug_parm(dbg_fp, DBG_PARM_TIMEOUT,
+				   parms->timeout);
 		} else if (!(strcmp(parm, "RESPONSE_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data > 100) || (data <= 0))
 				warn_msg("RESPONSE_PERCENT must be 1-100");
 			else
 				parms->resp_percent = data;
+			debug_parm(dbg_fp, DBG_PARM_RESP_PERCENT,
+				   parms->resp_percent);
 		} else if (!(strcmp(parm, "PAGED_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data >= 100) || (data < 0))
 				warn_msg("PAGED_PERCENT must be 0-99");
 			else
 				parms->paged_percent = data;
+			debug_parm(dbg_fp, DBG_PARM_PAGED_PERCENT,
+				   parms->paged_percent);
 		} else if (!(strcmp(parm, "REORDER_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data >= 100) || (data < 0))
 				warn_msg("REORDER_PERCENT must be 0-99");
 			else
 				parms->reorder_percent = data;
+			debug_parm(dbg_fp, DBG_PARM_REORDER_PERCENT,
+				   parms->reorder_percent);
 		} else if (!(strcmp(parm, "BUFFER_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data >= 100) || (data < 0))
 				warn_msg("BUFFER_PERCENT must be 0-99");
 			else
 				parms->buffer_percent = data;
+			debug_parm(dbg_fp, DBG_PARM_BUFFER_PERCENT,
+				   parms->buffer_percent);
 		} else {
 			error_msg("Ignoring invalid parm in %s: %s\n",
 				  filename, parm);
+			continue;
 		}
 	}
 	fclose(fp);

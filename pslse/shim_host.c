@@ -22,14 +22,14 @@
  */
 
 #include <malloc.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "shim_host.h"
 #include "../common/utils.h"
 
 // Parse file to find hostname and ports for AFU simulator(s)
-int parse_host_data(struct psl **head, struct parms *parms, char *filename) {
+int parse_host_data(struct psl **head, struct parms *parms, char *filename,
+		    FILE *dbg_fp) {
 	FILE *fp;
 	struct psl *psl;
 	char *hostdata, *comment, *afu_id, *host, *port_str;
@@ -83,7 +83,7 @@ int parse_host_data(struct psl **head, struct parms *parms, char *filename) {
 		port = atoi(port_str);
 
 		// Initialize PSL
-		if (psl_init(head, parms, afu_id, host, port) < 0)
+		if (psl_init(head, parms, afu_id, host, port, dbg_fp) < 0)
 			continue;
 
 		// Update all psl entries to point to new list head

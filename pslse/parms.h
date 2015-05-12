@@ -17,6 +17,8 @@
 #ifndef _PARMS_H_
 #define _PARMS_H_
 
+#include <stdio.h>
+
 struct parms {
 	unsigned int timeout;
 	unsigned int resp_percent;
@@ -33,6 +35,6 @@ int allow_reorder(struct parms* parms);
 
 int allow_buffer(struct parms* parms);
 
-struct parms *parse_parms(char *filename);
+struct parms *parse_parms(char *filename, FILE *dbg_fp);
 
 #endif /* _PARMS_H_ */

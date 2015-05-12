@@ -30,13 +30,13 @@
 #include <endian.h>
 #include <malloc.h>
 #include <poll.h>
-#include <stdio.h>
 
 #include <inttypes.h>
 
 #include "mmio.h"
 #include "psl_interface.h"
 #include "psl.h"
+#include "../common/debug.h"
 
 // Attach to AFU
 static void _attach(struct psl *psl, struct client* client)
@@ -48,7 +48,7 @@ static void _attach(struct psl *psl, struct client* client)
 	// Get wed value from application
 	ack = PSLSE_DETACH;
 	if ((buffer = get_bytes(client->fd, 8, 10000)) == NULL) {
-		DPRINTF("Failed to get WED value from client");
+		warn_msg("Failed to get WED value from client");
 		goto attach_done;
 	}
 	wed = le64toh(*((uint64_t *)buffer));
@@ -69,6 +69,9 @@ attach_done:
 static void _free(struct psl *psl, struct client* client)
 {
 	struct cmd_event *mem_access;
+
+	// DEBUG
+        debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
 
 	info_msg("%s client disconnect from %s context %d", client->ip,
 		 psl->name, client->context);
@@ -118,11 +121,10 @@ static void _handle_client(struct psl *psl, struct client *client)
 	uint8_t *buffer;
 
 	// Handle MMIO done
-	if (psl->mmio->list == client->mmio_access)
-		client->mmio_access = handle_mmio_done(psl->mmio, client->fd); 
-
-	if (client->mmio_access != NULL)
+	if (client->mmio_access != NULL) {
 		client->idle_cycles = PSL_IDLE_CYCLES;
+		client->mmio_access = handle_mmio_done(psl->mmio, client); 
+	}
 
 	// Check for event from application
 	cmd = (struct cmd_event*) client->mem_access;
@@ -142,26 +144,28 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (buffer[0]==PSLSE_ATTACH)
 			_attach(psl, client);
 		if (buffer[0]==PSLSE_MEM_FAILURE) {
-			handle_aerror(cmd);
+			handle_aerror(psl->cmd, cmd);
 			client->mem_access = NULL;
 		}
 		if (buffer[0]==PSLSE_MEM_SUCCESS) {
-			handle_mem_return(cmd, client->fd, &(psl->lock));
+			handle_mem_return(psl->cmd, cmd, client->fd,
+					  &(psl->lock));
 			client->mem_access = NULL;
 		}
 		if (buffer[0]==PSLSE_MMIO_MAP)
-			handle_mmio_map(psl->mmio, client->fd);
+			handle_mmio_map(psl->mmio, client);
 		if (buffer[0]==PSLSE_MMIO_WRITE64)
-			mmio = handle_mmio(psl->mmio, client->fd, 0, 1);
+			mmio = handle_mmio(psl->mmio, client, 0, 1);
 		if (buffer[0]==PSLSE_MMIO_READ64)
-			mmio = handle_mmio(psl->mmio, client->fd, 1, 1);
+			mmio = handle_mmio(psl->mmio, client, 1, 1);
 		if (buffer[0]==PSLSE_MMIO_WRITE32)
-			mmio = handle_mmio(psl->mmio, client->fd, 0, 0);
+			mmio = handle_mmio(psl->mmio, client, 0, 0);
 		if (buffer[0]==PSLSE_MMIO_READ32)
-			mmio = handle_mmio(psl->mmio, client->fd, 1, 0);
+			mmio = handle_mmio(psl->mmio, client, 1, 0);
 		free(buffer);
-		if (mmio)
+		if (mmio) {
 			client->mmio_access = (void*) mmio;
+		}
 		client->idle_cycles = PSL_IDLE_CYCLES;
 	}
 }
@@ -182,7 +186,7 @@ static void *_psl_loop(void *ptr)
 		if (psl->state != PSLSE_IDLE) {
 			psl->idle_cycles = PSL_IDLE_CYCLES;
 			if (stopped)
-				printf("Clocking AFU model\n");
+				info_msg("Clocking %s", psl->name);
 			fflush(stdout);
 			stopped = 0;
 		}
@@ -212,7 +216,7 @@ static void *_psl_loop(void *ptr)
 		}
 		else {
 			if (!stopped)
-				printf("Stopping clocks to AFU model\n");
+				info_msg("Stopping clocks to %s", psl->name);
 			fflush(stdout);
 			stopped = 1;
 			ns_delay(1000000);
@@ -246,8 +250,11 @@ static void *_psl_loop(void *ptr)
 		}
 	}
 
+	// DEBUG
+	debug_afu_drop(psl->dbg_fp, psl->dbg_id);
+
 	// Disconnect from simulator, free memory and shut down thread
-	DPRINTF("Disconnected %s @ %s:%d\n", psl->name, psl->host, psl->port);
+	info_msg("Disconnected %s @ %s:%d\n", psl->name, psl->host, psl->port);
 	pthread_mutex_destroy(&(psl->lock));
 	if (psl->client)
 		free((void *) psl->client);
@@ -280,7 +287,7 @@ static void *_psl_loop(void *ptr)
 
 // Initialize and start PSL thread
 int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
-	     int port)
+	     int port, FILE *dbg_fp)
 {
 	struct psl *psl;
 
@@ -290,6 +297,22 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		goto init_fail;
 	}
 	memset(psl, 0, sizeof(struct psl));
+	if ((strlen(id) != 6) || strncmp(id, "afu", 3) || (id[4] != '.')) {
+		warn_msg("Invalid afu name: %s", id);
+		goto init_fail;
+	}
+	if ((id[3] < '0') || (id[3] > '3')) {
+		warn_msg("Invalid afu major: %s", id[3]);
+		goto init_fail;
+	}
+	if ((id[5] < '0') || (id[5] > '3')) {
+		warn_msg("Invalid afu minor: %s", id[3]);
+		goto init_fail;
+	}
+        psl->dbg_fp = dbg_fp;
+	psl->dbg_id = id[3] - '0';
+	psl->dbg_id <<= 4;
+	psl->dbg_id |= id[5] - '0';
 	if ((psl->name = (char *) malloc(strlen(id)+1)) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl->name");
@@ -323,22 +346,27 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		goto init_fail_lock;
 	}
 
+	// DEBUG
+	debug_afu_connect(psl->dbg_fp, psl->dbg_id);
+
 	// Initialize job handler
-	if ((psl->job = job_init(psl->afu_event, &(psl->lock), &(psl->state)))
-				 == NULL) {
+	if ((psl->job = job_init(psl->afu_event, &(psl->lock), &(psl->state),
+				 psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("job_init");
 		goto init_fail_lock;
 	}
 
 	// Initialize mmio handler
-	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock))) == NULL) {
+	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock), psl->dbg_fp,
+				   psl->dbg_id)) == NULL) {
 		perror("mmio_init");
 		goto init_fail_lock;
 	}
 
 	// Initialize cmd handler
-	if ((psl->cmd = cmd_init(psl->afu_event, parms, psl->mmio, &(psl->state),
-				 &(psl->lock))) == NULL) {
+	if ((psl->cmd = cmd_init(psl->afu_event, parms, psl->mmio,
+				 &(psl->state), &(psl->lock), psl->dbg_fp,
+				psl->dbg_id)) == NULL) {
 		perror("cmd_init");
 		goto init_fail_lock;
 	}
@@ -360,8 +388,6 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	if (*head != NULL)
 		(*head)->_prev = psl;
 	*head = psl;
-
-	DPRINTF("Connected %s @ %s:%d\n", psl->name, psl->host, psl->port);
 
 	return 0;
 

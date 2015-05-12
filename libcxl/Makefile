@@ -15,10 +15,10 @@ ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),n)
 endif
 
 libcxl.so: $(OBJS)
-	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o libcxl.so, libcxl.so) -Wl,--version-script symver.map
+	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o $@, $@) -Wl,--version-script symver.map
 
 libcxl.a: $(OBJS)
-	$(call Q,AR, $(AR) rcs libcxl.a $^, libcxl.a)
+	$(call Q,AR, $(AR) rcs $@ $^, $@)
 
 clean:
 	rm -f *.[od] $(COMMON_DIR)/*.[od] libcxl.so libcxl.a include/misc/cxl.h

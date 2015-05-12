@@ -39,13 +39,14 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <malloc.h>
-#include <stdio.h>
 #include <stdlib.h>
 
+#include "../common/debug.h"
 #include "mmio.h"
 
 // Initialize MMIO tracking structure
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock)
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
+		       FILE *dbg_fp, uint8_t dbg_id)
 {
 	struct mmio *mmio = (struct mmio*) malloc(sizeof(struct mmio));
 	if (!mmio)
@@ -53,18 +54,21 @@ struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock)
 	memset(mmio, 0, sizeof(struct mmio));
 	mmio->afu_event = afu_event;
 	mmio->list = NULL;
+	mmio->dbg_fp = dbg_fp;
+	mmio->dbg_id = dbg_id;
 	mmio->psl_lock = psl_lock;
 	pthread_mutex_init(&(mmio->lock), NULL);
 	return mmio;
 }
 
 // Add new MMIO event
-static struct mmio_event *_add_event(struct mmio *mmio, uint32_t rnw,
-				     uint32_t dw, uint32_t addr, uint32_t desc,
-				    uint64_t data)
+static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
+				     uint32_t rnw, uint32_t dw, uint32_t addr,
+				     uint32_t desc, uint64_t data)
 {
 	struct mmio_event *event;
 	struct mmio_event **list;
+	uint16_t context;
 
 	// Add new event in IDLE state
 	event = (struct mmio_event *) malloc(sizeof(struct mmio_event));
@@ -84,7 +88,11 @@ static struct mmio_event *_add_event(struct mmio *mmio, uint32_t rnw,
 	while (*list != NULL)
 		list = &((*list)->_next);
 	*list = event;
-	DPRINTF("Putting MMIO event in queue\n");
+	if (desc)
+		context = -1;
+	else
+		context = client->context;
+	debug_mmio_add(mmio->dbg_fp, mmio->dbg_id, context, rnw, dw, addr);
 	pthread_mutex_unlock(&(mmio->lock));
 
 	return event;
@@ -94,14 +102,15 @@ static struct mmio_event *_add_event(struct mmio *mmio, uint32_t rnw,
 static struct mmio_event *_add_desc(struct mmio *mmio, uint32_t rnw,
 				    uint32_t dw, uint32_t addr, uint64_t data)
 {
-	return _add_event(mmio, rnw, dw, addr, 1, data);
+	return _add_event(mmio, NULL, rnw, dw, addr, 1, data);
 }
 
 // Add AFU MMIO (non-descriptor) access event
-static struct mmio_event *_add_mmio(struct mmio *mmio, uint32_t rnw,
-				    uint32_t dw, uint32_t addr, uint64_t data)
+static struct mmio_event *_add_mmio(struct mmio *mmio, struct client *client,
+				    uint32_t rnw, uint32_t dw, uint32_t addr,
+				    uint64_t data)
 {
-	return _add_event(mmio, rnw, dw, addr, 0, data);
+	return _add_event(mmio, client, rnw, dw, addr, 0, data);
 }
 
 // Read the entire AFU descriptor and keep a copy
@@ -181,15 +190,15 @@ void send_mmio(struct mmio *mmio)
 	pthread_mutex_lock(mmio->psl_lock);
 	if(event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
 				       event->desc) == PSL_SUCCESS) {
-		DPRINTF("MMIO read event to AFU\n");
+		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
+				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
 	}
 	if(!event->rnw && psl_mmio_write(mmio->afu_event, event->dw,
 					 event->addr, event->data, event->desc)
 			  == PSL_SUCCESS) {
-		DPRINTF("MMIO write event to AFU\n");
-		DPRINTF("\tAddr:0x%06x Data:0x%016"PRIx64"\n", event->addr,
-			event->data);
+		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
+				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
 	}
 	pthread_mutex_unlock(mmio->psl_lock);
@@ -208,7 +217,7 @@ void handle_mmio_ack(struct mmio *mmio)
 				      &read_data_parity);
 	pthread_mutex_unlock(mmio->psl_lock);
 	if (rc == PSL_SUCCESS) {
-		DPRINTF("MMIO ack event from AFU\n");
+		debug_mmio_ack(mmio->dbg_fp, mmio->dbg_id);
 		if(!mmio->list || (mmio->list->state != PSLSE_PENDING)) {
 			error_msg("Unexpected MMIO ack from AFU");
 			return;
@@ -219,11 +228,8 @@ void handle_mmio_ack(struct mmio *mmio)
 			if(read_data_parity != parity)
 				error_msg("Parity error on MMIO read data");
 			mmio->list->data = read_data;
-			DPRINTF("\tAddr:0x%06x Data:0x%016"PRIx64"\n",
-				mmio->list->addr, mmio->list->data);
 		}
 		mmio->list->state = PSLSE_DONE;
-		// Remove from list
 		pthread_mutex_lock(&(mmio->lock));
 		mmio->list = mmio->list->_next;
 		pthread_mutex_unlock(&(mmio->lock));
@@ -232,10 +238,11 @@ void handle_mmio_ack(struct mmio *mmio)
 }
 
 // Handle MMIO map request from client
-void handle_mmio_map(struct mmio *mmio, int fd)
+void handle_mmio_map(struct mmio *mmio, struct client *client)
 {
 	uint32_t *flags;
 	uint8_t ack = PSLSE_MMIO_ACK;
+	int fd = client->fd;
 
 	// Check for errors
 	if (!(mmio->desc.PerProcessPSA & PSA_REQUIRED)) {
@@ -244,6 +251,8 @@ void handle_mmio_map(struct mmio *mmio, int fd)
 		goto map_done;
 	}
 	if ((flags = (uint32_t *) get_bytes(fd, 4, 1)) == NULL) {
+		warn_msg("Socket failure with client context %d",
+			 client->context);
 		ack = PSLSE_MMIO_FAIL;
 		goto map_done;
 	}
@@ -258,7 +267,7 @@ void handle_mmio_map(struct mmio *mmio, int fd)
 	}
 
 	if (ack == PSLSE_MMIO_ACK) {
-		DPRINTF("Mapped MMIO\n");
+		debug_mmio_map(mmio->dbg_fp, mmio->dbg_id, client->context);
 	}
 
 	free(flags);
@@ -270,13 +279,15 @@ map_done:
 }
 
 // Add mmio write event of register at offset to list
-static struct mmio_event *_handle_mmio_write(struct mmio *mmio, int fd, int dw)
+static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
+					     struct client *client, int dw)
 {
 	uint32_t *offset;
 	uint64_t *data64;
 	uint32_t *data32;
 	uint64_t data;
 	uint8_t ack;
+	int fd = client->fd;
 
 	if ((offset = (uint32_t *) get_bytes(fd, 4, 1)) == NULL)
 		goto write_fail;
@@ -295,7 +306,7 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio, int fd, int dw)
 		data <<= 32;
 		data |= (uint64_t) *data32;
 	}
-	return _add_mmio(mmio, 0, dw, le32toh(*offset)/4, data);
+	return _add_mmio(mmio, client, 0, dw, le32toh(*offset)/4, data);
 	
 write_fail:
 	// Send fail acknowledge to client
@@ -307,15 +318,17 @@ write_fail:
 }
 
 // Add mmio read event of register at offset to list
-static struct mmio_event *_handle_mmio_read(struct mmio *mmio, int fd, int dw)
+static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
+					    struct client *client, int dw)
 {
 
 	uint32_t *offset;
 	uint8_t ack;
+	int fd = client->fd;
 
 	if ((offset = (uint32_t *) get_bytes(fd, 4, 1)) == NULL)
 		goto read_fail;
-	return _add_mmio(mmio, 1, dw, le32toh(*offset)/4, 0);
+	return _add_mmio(mmio, client, 1, dw, le32toh(*offset)/4, 0);
 	
 read_fail:
 	// Send fail acknowledge to client
@@ -327,33 +340,34 @@ read_fail:
 }
 
 // Handle MMIO request from client
-struct mmio_event *handle_mmio(struct mmio *mmio, int fd, int rnw, int dw)
+struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
+			       int rnw, int dw)
 {
 	if (rnw)
-		return _handle_mmio_read(mmio, fd, dw);
+		return _handle_mmio_read(mmio, client, dw);
 	else
-		return _handle_mmio_write(mmio, fd, dw);
+		return _handle_mmio_write(mmio, client, dw);
 }
 
 // Handle MMIO done
-struct mmio_event *handle_mmio_done(struct mmio* mmio, int fd)
+struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 {
-	uint8_t *buffer;
 	struct mmio_event *event;
+	uint8_t *buffer;
+	int fd = client->fd;
 
 	// Is there an MMIO event pending?
-	if (mmio->list == NULL)
+	event = (struct mmio_event*) client->mmio_access;
+	if (event == NULL)
 		return NULL;
 
 	// MMIO event not done yet
-	event = mmio->list;
 	if (event->state != PSLSE_DONE)
 		return event;
 
 	pthread_mutex_lock(mmio->psl_lock);
 	if (event->rnw) {
 		// Return acknowledge with read data
-		DPRINTF("Returning MMIO read data\n");
 		if (event->dw) {
 			buffer = (uint8_t*)malloc(9);
 			buffer[0] = PSLSE_MMIO_ACK;
@@ -373,6 +387,7 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, int fd)
 		buffer[0] = PSLSE_MMIO_ACK;
 		put_bytes(fd, 1, buffer, 1);
 	}
+	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);
 	free(event);
 	pthread_mutex_unlock(mmio->psl_lock);
 
