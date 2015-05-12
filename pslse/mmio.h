@@ -87,7 +87,7 @@ struct mmio_event *add_mmio(struct mmio *mmio, uint32_t rnw, uint32_t dw,
 
 void send_mmio(struct mmio *mmio);
 
-void handle_mmio_ack(struct mmio *mmio);
+void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled);
 
 void handle_mmio_map(struct mmio *mmio, struct client *client);
 
