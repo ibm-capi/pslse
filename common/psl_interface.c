@@ -242,9 +242,10 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 		perror("socket");
 		return PSL_BAD_SOCKET;
 	}
-	if (bind(event->sockfd, (struct sockaddr *)&ssadr, sizeof(ssadr)) == -1) {
+	if (bind(event->sockfd, (struct sockaddr *)&ssadr, sizeof(ssadr))==-1) {
 		perror("bind");
 		close(event->sockfd);
+		event->sockfd = -1;
 		return PSL_BAD_SOCKET;
 	}
 	char hostname[1024];
@@ -256,6 +257,7 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 	if (listen(event->sockfd, 10) == -1) {
 		perror("listen");
 		close(event->sockfd);
+		event->sockfd = -1;
 		return PSL_BAD_SOCKET;
 	}
 	while (cs < 0) {
@@ -263,6 +265,7 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 		if ((cs < 0) && (errno != EINTR)) {
 			perror("accept");
 			close(event->sockfd);
+			event->sockfd = -1;
 			return PSL_BAD_SOCKET;
 		}
 	}

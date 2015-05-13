@@ -661,11 +661,14 @@ void handle_buffer_data(struct cmd *cmd)
 	uint64_t offset;
 	int rc;
 
+	// Has struct been initialized?
+	if (cmd == NULL)
+		return;
+
 	pthread_mutex_lock(cmd->psl_lock);
 	pthread_mutex_lock(&(cmd->lock));
 	// Check if there is pending buffer read request
-	if ((cmd == NULL) || (cmd->client == NULL) ||
-	    (cmd->buffer_read == NULL)) {
+	if ((cmd->client == NULL) || (cmd->buffer_read == NULL)) {
 		goto buffer_data_fail;
 	}
 	client = &(cmd->client[cmd->buffer_read->context]);
