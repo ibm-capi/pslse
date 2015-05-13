@@ -28,15 +28,33 @@
 
 #include <assert.h>
 #include <endian.h>
+#include <inttypes.h>
 #include <malloc.h>
 #include <poll.h>
-
-#include <inttypes.h>
 
 #include "mmio.h"
 #include "psl_interface.h"
 #include "psl.h"
 #include "../common/debug.h"
+
+// Query AFU descriptor data
+static void _query(struct psl *psl, struct client* client)
+{
+	uint8_t *buffer;
+	int size, offset;
+
+	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process);
+	buffer = (uint8_t*)malloc(size);
+	buffer[0] = PSLSE_QUERY;
+	offset = 1;
+	memcpy(&(buffer[offset]),
+	       (char*) &(psl->mmio->desc.num_ints_per_process),
+	       sizeof(psl->mmio->desc.num_ints_per_process));
+	pthread_mutex_lock(&(psl->lock));
+	put_bytes(client->fd, size, buffer, 1);
+	pthread_mutex_unlock(&(psl->lock));
+	free(buffer);
+}
 
 // Attach to AFU
 static void _attach(struct psl *psl, struct client* client)
@@ -62,7 +80,9 @@ static void _attach(struct psl *psl, struct client* client)
 	}
 
 attach_done:
+	pthread_mutex_lock(&(psl->lock));
 	put_bytes(client->fd, 1, &ack, 1);
+	pthread_mutex_unlock(&(psl->lock));
 }
 
 // Client release from AFU
@@ -137,12 +157,16 @@ static void _handle_client(struct psl *psl, struct client *client)
 			_free(psl, client);
 			return;
 		}
+		if (buffer[0]==PSLSE_QUERY) {
+			_query(psl, client);
+		}
 		if (buffer[0]==PSLSE_DETACH) {
 			client->idle_cycles = PSL_IDLE_CYCLES;
 			client->valid = -1;
 		}
-		if (buffer[0]==PSLSE_ATTACH)
+		if (buffer[0]==PSLSE_ATTACH) {
 			_attach(psl, client);
+		}
 		if (buffer[0]==PSLSE_MEM_FAILURE) {
 			if (client->mem_access != NULL)
 				handle_aerror(psl->cmd, cmd);
@@ -154,16 +178,21 @@ static void _handle_client(struct psl *psl, struct client *client)
 						  &(psl->lock));
 			client->mem_access = NULL;
 		}
-		if (buffer[0]==PSLSE_MMIO_MAP)
+		if (buffer[0]==PSLSE_MMIO_MAP) {
 			handle_mmio_map(psl->mmio, client);
-		if (buffer[0]==PSLSE_MMIO_WRITE64)
+		}
+		if (buffer[0]==PSLSE_MMIO_WRITE64) {
 			mmio = handle_mmio(psl->mmio, client, 0, 1);
-		if (buffer[0]==PSLSE_MMIO_READ64)
+		}
+		if (buffer[0]==PSLSE_MMIO_READ64) {
 			mmio = handle_mmio(psl->mmio, client, 1, 1);
-		if (buffer[0]==PSLSE_MMIO_WRITE32)
+		}
+		if (buffer[0]==PSLSE_MMIO_WRITE32) {
 			mmio = handle_mmio(psl->mmio, client, 0, 0);
-		if (buffer[0]==PSLSE_MMIO_READ32)
+		}
+		if (buffer[0]==PSLSE_MMIO_READ32) {
 			mmio = handle_mmio(psl->mmio, client, 1, 0);
+		}
 		free(buffer);
 		if (mmio) {
 			client->mmio_access = (void*) mmio;

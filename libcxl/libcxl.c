@@ -50,21 +50,6 @@
 #define DSISR 0x4000000040000000L
 
 #define PSLSE_VERSION 1
-#define PSLSE_ATTACH       0x01
-#define PSLSE_DETACH       0x02
-#define PSLSE_MEMORY_READ  0x03
-#define PSLSE_MEMORY_WRITE 0x04
-#define PSLSE_MEMORY_TOUCH 0x05
-#define PSLSE_MEM_SUCCESS  0x06
-#define PSLSE_MEM_FAILURE  0x07
-#define PSLSE_MMIO_MAP     0x08
-#define PSLSE_MMIO_READ64  0x09
-#define PSLSE_MMIO_WRITE64 0x0A
-#define PSLSE_MMIO_READ32  0x0B
-#define PSLSE_MMIO_WRITE32 0x0C
-#define PSLSE_MMIO_ACK     0x0D
-#define PSLSE_MMIO_FAIL    0x0E
-#define PSLSE_INTERRUPT    0x0F
 
 static void _delay_1ms() {
 	struct timespec ts;
@@ -345,9 +330,11 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	struct hostent *he;
 	FILE *fp;
 	char *afu_id, *host, *port_str;
+	uint16_t query16;
 	uint8_t *buffer;
+	uint8_t query;
 	int port;
-	size_t size;
+	size_t size, query_size;
 
 	// Allocate AFU struct
 	afu = (struct cxl_afu_h *) malloc(sizeof(struct cxl_afu_h));
@@ -435,7 +422,29 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	}
 	afu->context = buffer[0];
 	free(buffer);
+	query = PSLSE_QUERY;
+	if (put_bytes(afu->fd, 1, &query, 0) != 1) {
+		fprintf(stderr,"cxl_afu_open_dev:Failed to write to socket!\n");
+		goto open_fail;
+	}
+	query_size = sizeof(uint8_t)+sizeof(uint16_t);
+	if ((buffer = get_bytes(afu->fd, query_size, -1)) == NULL) {
+		fprintf(stderr,"cxl_afu_open_dev:Socket failed context retrieve\n");
+		close(afu->fd);
+		goto open_fail;
+	}
+	if (buffer[0] != (uint8_t) PSLSE_QUERY) {
+		fprintf(stderr,"cxl_afu_open_dev:Bad QUERY acknowledge\n");
+		free(buffer);
+		close(afu->fd);
+		goto open_fail;
+	}
+	memcpy((char*) &query16, (char*) &(buffer[1]), 2);
+	free(buffer);
+	afu->irqs_min = (long) le16toh(query16);
 	afu->opened = 1;
+	afu->api_version = 1;
+	afu->api_version_compatible = 1;
 	if (pthread_create(&(afu->thread), NULL, _psl_loop, afu)) {
 		perror("pthread_create");
 		close(afu->fd);
@@ -537,6 +546,30 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	free(buffer);
 	afu->attached = 1;
 	pthread_mutex_unlock(&(afu->lock));
+	return 0;
+}
+
+int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu==NULL)
+		return -1;
+	*valp = afu->api_version;
+	return 0;
+}
+
+int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu==NULL)
+		return -1;
+	*valp = afu->api_version_compatible;
+	return 0;
+}
+
+int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu==NULL)
+		return -1;
+	*valp = afu->irqs_min;
 	return 0;
 }
 

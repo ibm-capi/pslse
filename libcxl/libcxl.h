@@ -143,11 +143,11 @@ enum cxl_image {
  * Get/set attribute values.
  * Return 0 on success, -1 on error.
  */
-//int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
+int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
+int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
-//int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
+int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_mode(struct cxl_afu_h *afu, long value);

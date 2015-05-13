@@ -27,6 +27,9 @@ struct cxl_adapter_h {
 	DIR *enum_dir;
 	struct dirent *enum_ent;
 	char *sysfs_path;
+	long caia_major;
+	long caia_minor;
+	long pslse_version;
 };
 
 struct cxl_afu_h {
@@ -43,6 +46,16 @@ struct cxl_afu_h {
 	int mapped;
 	volatile int mmio_pending;
 	uint64_t mmio_data;
+	long api_version;
+	long api_version_compatible;
+	long irqs_max;
+	long irqs_min;
+	long mmio_size;
+	long mode;
+	long modes_supported;
+	long mmio_len;
+	long mmio_off;
+	long prefault_mode;
 };
 
 #endif
