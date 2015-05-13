@@ -312,9 +312,10 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		goto init_fail;
 	}
         psl->dbg_fp = dbg_fp;
-	psl->dbg_id = id[3] - '0';
-	psl->dbg_id <<= 4;
-	psl->dbg_id |= id[5] - '0';
+	psl->major = id[3] - '0';
+	psl->minor = id[5] - '0';
+	psl->dbg_id = psl->major << 4;
+	psl->dbg_id |= psl->minor;
 	if ((psl->name = (char *) malloc(strlen(id)+1)) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl->name");
@@ -386,6 +387,11 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	}
 
 	// Add psl to list
+	while ((*head!=NULL) && ((*head)->major<psl->major))
+		head = &((*head)->_next);
+	while ((*head!=NULL) && ((*head)->major==psl->major) &&
+               ((*head)->minor<psl->minor))
+		head = &((*head)->_next);
 	psl->_next = *head;
 	if (*head != NULL)
 		(*head)->_prev = psl;

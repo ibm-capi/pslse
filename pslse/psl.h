@@ -47,6 +47,8 @@ struct psl {
 	uint32_t latency;
 	char *name;
 	char *host;
+	uint8_t major;
+	uint8_t minor;
 	uint8_t dbg_id;
 	int port;
 	int idle_cycles;
