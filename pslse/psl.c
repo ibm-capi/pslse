@@ -144,12 +144,14 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (buffer[0]==PSLSE_ATTACH)
 			_attach(psl, client);
 		if (buffer[0]==PSLSE_MEM_FAILURE) {
-			handle_aerror(psl->cmd, cmd);
+			if (client->mem_access != NULL)
+				handle_aerror(psl->cmd, cmd);
 			client->mem_access = NULL;
 		}
 		if (buffer[0]==PSLSE_MEM_SUCCESS) {
-			handle_mem_return(psl->cmd, cmd, client->fd,
-					  &(psl->lock));
+			if (client->mem_access != NULL)
+				handle_mem_return(psl->cmd, cmd, client->fd,
+						  &(psl->lock));
 			client->mem_access = NULL;
 		}
 		if (buffer[0]==PSLSE_MMIO_MAP)

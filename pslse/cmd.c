@@ -762,7 +762,6 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
 void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
 		       pthread_mutex_t *lock)
 {
-	assert(event != NULL);
 	if (event->type==CMD_READ)
 		_handle_mem_read(cmd, event, fd, lock);
 	else
@@ -773,7 +772,6 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
 // Mark memory event as address error in preparation for response
 void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 {
-	assert(event != NULL);
 	event->resp = PSL_RESPONSE_AERROR;
 	event->state = MEM_DONE;
 	debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
