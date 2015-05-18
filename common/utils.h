@@ -78,11 +78,19 @@ void info_msg(char *format, ...);
 // Delay for up to ns nanoseconds
 void ns_delay(long ns);
 
+// Allocate memory for data and get size bytes from fd, no debug
+uint8_t * get_bytes_silent(int fd, unsigned size, int timeout);
+
 // Allocate memory for data and get size bytes from fd
-uint8_t * get_bytes(int fd, unsigned size, int timeout);
+uint8_t * get_bytes(int fd, unsigned size, int timeout, FILE *dbg_fp,
+		    uint8_t dbg_id, uint16_t context);
+
+// Put bytes on socket and return number of bytes successfully written, no debug
+int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout);
 
 // Put bytes on socket and return number of bytes successfully written
-int put_bytes(int fd, unsigned size, uint8_t *data, int timeout);
+int put_bytes(int fd, unsigned size, uint8_t *data, int timeout, FILE *dbg_fp,
+	      uint8_t dbg_id, uint16_t context);
 
 // Generate parity for outbound data and checking inbound data
 // 1 bit of parity for up to 64 bits of data

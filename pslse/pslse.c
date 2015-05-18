@@ -146,36 +146,36 @@ static int _client_connect(int fd, char *ip)
 
 	// Parse client handshake data
 	rc[0] = PSLSE_DETACH;
-	buffer = get_bytes(fd, 5, 1);
+	buffer = get_bytes(fd, 5, 1, fp, -1, -1);
 	if ((buffer == NULL) || (strcmp((char *) buffer, "PSLSE"))) {
 		info_msg("Connecting application is not PSLSE client\n");
 		info_msg("Expected: \"PSLSE\" Got: \"%s\"", buffer);
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
 	free(buffer);
-	buffer = get_bytes(fd, 1, 1);
+	buffer = get_bytes_silent(fd, 1, 1);
 	if ((buffer == NULL) || ((uint8_t) buffer[0] != PSLSE_VERSION)) {
 		info_msg("Client is wrong version\n");
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
 	free(buffer);
-	buffer = get_bytes(fd, 1, 1);
+	buffer = get_bytes_silent(fd, 1, 1);
 	if (buffer == NULL) {
 		info_msg("Client didn't specify length of AFU name\n");
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
 	n = (uint8_t) buffer[0];
 	free(buffer);
-	buffer = get_bytes(fd, n, 1);
+	buffer = get_bytes_silent(fd, n, 1);
 	if (buffer == NULL) {
 		info_msg("Client didn't specify AFU name\n");
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
@@ -192,7 +192,7 @@ static int _client_connect(int fd, char *ip)
 	if (!psl) {
 		info_msg("Did not find valid PSL for AFU %s\n", buffer);
 		free(buffer);
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
@@ -220,7 +220,7 @@ static int _client_connect(int fd, char *ip)
 		if (psl->max_clients == 0) {
 			error_msg("AFU programming model is invalid");
 			free(buffer);
-			put_bytes(fd, 1, &(rc[0]), 1);
+			put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
 			close (fd);
 			return -1;
 		}
@@ -238,7 +238,7 @@ static int _client_connect(int fd, char *ip)
 			warn_msg("AFU %s is does not support dedicated mode\n",
 				 buffer);
 			free(buffer);
-			put_bytes(fd, 1, &(rc[0]), 1);
+			put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
 			close (fd);
 			return -1;
 		}
@@ -249,7 +249,7 @@ static int _client_connect(int fd, char *ip)
 			warn_msg("AFU %s is does not support directed mode\n",
 				 buffer);
 			free(buffer);
-			put_bytes(fd, 1, &(rc[0]), 1);
+			put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
 			close (fd);
 			return -1;
 		}
@@ -257,7 +257,7 @@ static int _client_connect(int fd, char *ip)
 	default:
 		warn_msg("AFU device type '%c' is not valid\n", afu_type);
 		free(buffer);
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
 		return -1;
 	}
 
@@ -274,7 +274,7 @@ static int _client_connect(int fd, char *ip)
 	if (i == psl->max_clients) {
 		info_msg("No room for new client on AFU %s\n", buffer);
 		free(buffer);
-		put_bytes(fd, 1, &(rc[0]), 1);
+		put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
 		close (fd);
 		return -1;
 	}
@@ -298,7 +298,7 @@ static int _client_connect(int fd, char *ip)
 	client->mmio_size = mmio_size;
 	client->mmio_offset = mmio_offset;
 	client->type = afu_type;
-	put_bytes(fd, 2, &(rc[0]), 1);
+	put_bytes(fd, 2, &(rc[0]), 1, fp, psl->dbg_id, client->context);
 	free(buffer);
 	client->fd = fd;
 	client->ip = ip;

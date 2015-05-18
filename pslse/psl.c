@@ -51,7 +51,8 @@ static void _query(struct psl *psl, struct client* client)
 	       (char*) &(psl->mmio->desc.num_ints_per_process),
 	       sizeof(psl->mmio->desc.num_ints_per_process));
 	pthread_mutex_lock(&(psl->lock));
-	put_bytes(client->fd, size, buffer, 1);
+	put_bytes(client->fd, size, buffer, 1, psl->dbg_fp, psl->dbg_id,
+		  client->context);
 	pthread_mutex_unlock(&(psl->lock));
 	free(buffer);
 }
@@ -65,7 +66,7 @@ static void _attach(struct psl *psl, struct client* client)
 
 	// Get wed value from application
 	ack = PSLSE_DETACH;
-	if ((buffer = get_bytes(client->fd, 8, 10000)) == NULL) {
+	if ((buffer = get_bytes_silent(client->fd, 8, 10000)) == NULL) {
 		warn_msg("Failed to get WED value from client");
 		goto attach_done;
 	}
@@ -81,7 +82,8 @@ static void _attach(struct psl *psl, struct client* client)
 
 attach_done:
 	pthread_mutex_lock(&(psl->lock));
-	put_bytes(client->fd, 1, &ack, 1);
+	put_bytes(client->fd, 1, &ack, 1, psl->dbg_fp, psl->dbg_id,
+		  client->context);
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -153,7 +155,8 @@ static void _handle_client(struct psl *psl, struct client *client)
 	pfd.revents = 0;
 	mmio = NULL;
 	if (poll(&pfd, 1, 1) > 0) {
-		if ((buffer=get_bytes(client->fd, 1, 1)) == NULL) {
+		if ((buffer=get_bytes(client->fd, 1, 1, psl->dbg_fp,
+				      psl->dbg_id, client->context)) == NULL) {
 			_free(psl, client);
 			return;
 		}
@@ -261,7 +264,9 @@ static void *_psl_loop(void *ptr)
 			if ((psl->client[i].valid < 0) &&
 			    (psl->client[i].idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
-				put_bytes(psl->client[i].fd, 1, &ack, 1);
+				put_bytes(psl->client[i].fd, 1, &ack, 1,
+					  psl->dbg_fp, psl->dbg_id,
+					  psl->client[i].context);
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, &(psl->client[i]));
 				continue;

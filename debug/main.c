@@ -5,6 +5,7 @@
 
 #include "../common/debug.h"
 #include "../common/psl_interface_t.h"
+#include "../common/utils.h"
 
 #define MAX_LINE_CHARS	1024
 
@@ -429,10 +430,103 @@ static int _parse_aux(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
+static int _parse_socket(FILE *fp, DBG_HEADER header, int silent)
+{
+	uint8_t id, type;
+	uint16_t context;
+	char *name;
+
+	if (debug_get_8(fp, &id)<1)
+		return -1;
+	if (debug_get_8(fp, &type)<1)
+		return -1;
+	if (debug_get_16(fp, &context)<1)
+		return -1;
+
+	if (silent)
+		return 0;
+
+	if (id != (uint8_t)-1) {
+		name = _afu_name(id);
+		printf("%s", name);
+		if (context != (uint16_t)-1)
+			printf(",%d", context);
+		printf(":");
+		free(name);
+	}
+	printf("SOCKET ");
+	switch (header) {
+	case DBG_HEADER_SOCKET_PUT:
+		printf("OUT: ");
+		break;
+	default:
+		printf("IN: ");
+		break;
+	}
+	switch (type) {
+	case 'P':
+		printf("PSLSE");
+		break;
+	case PSLSE_QUERY:
+		printf("QUERY");
+		break;
+	case PSLSE_ATTACH:
+		printf("ATTACH");
+		break;
+	case PSLSE_DETACH:
+		printf("DETACH");
+		break;
+	case PSLSE_MEMORY_READ:
+		printf("READ");
+		break;
+	case PSLSE_MEMORY_WRITE:
+		printf("WRITE");
+		break;
+	case PSLSE_MEMORY_TOUCH:
+		printf("TOUCH");
+		break;
+	case PSLSE_MEM_SUCCESS:
+		printf("MEM ACK");
+		break;
+	case PSLSE_MEM_FAILURE:
+		printf("MEM FAIL");
+		break;
+	case PSLSE_MMIO_MAP:
+		printf("MAP");
+		break;
+	case PSLSE_MMIO_READ64:
+		printf("READ64");
+		break;
+	case PSLSE_MMIO_WRITE64:
+		printf("WRITE64");
+		break;
+	case PSLSE_MMIO_READ32:
+		printf("READ32");
+		break;
+	case PSLSE_MMIO_WRITE32:
+		printf("WRITE32");
+		break;
+	case PSLSE_MMIO_ACK:
+		printf("MMIO ACK");
+		break;
+	case PSLSE_MMIO_FAIL:
+		printf("MMIO FAIL");
+		break;
+	case PSLSE_INTERRUPT:
+		printf("INTERRRUPT");
+		break;
+	default :
+		printf("Unknown:0x%02x", type);
+	}
+	printf("\n");
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	FILE *fp;
 	DBG_HEADER header;
+	int silent;
 
 	if((fp = fopen("debug.log", "r"))==NULL) {
 		perror("fopen:debug.log");
@@ -441,6 +535,7 @@ int main(int argc, char **argv)
 
 	while ((header = debug_get_header(fp))!=(DBG_HEADER)-1)
 	{
+		silent = 0;
 		switch (header) {
 		case DBG_HEADER_PARM:
 			if (_parse_parm(fp) < 0)
@@ -490,8 +585,8 @@ int main(int argc, char **argv)
 			if (_parse_cmd_update(fp, header) < 0)
 				return -1;
 			break;
-		case DBG_HEADER_CMD_CLIENT_REQ:
 		case DBG_HEADER_CMD_CLIENT_ACK:
+		case DBG_HEADER_CMD_CLIENT_REQ:
 			if (_parse_cmd_client(fp, header) < 0)
 				return -1;
 			break;
@@ -502,6 +597,11 @@ int main(int argc, char **argv)
 			break;
 		case DBG_HEADER_CMD_RESPONSE:
 			if (_parse_cmd_response(fp, header) < 0)
+				return -1;
+			break;
+		case DBG_HEADER_SOCKET_GET:
+		case DBG_HEADER_SOCKET_PUT:
+			if (_parse_socket(fp, header, silent) < 0)
 				return -1;
 			break;
 		default:

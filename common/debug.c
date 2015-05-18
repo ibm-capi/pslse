@@ -374,3 +374,13 @@ void debug_cmd_response(FILE* fp, uint8_t id, uint8_t tag)
 {
 	_debug_send_id_8(fp, DBG_HEADER_CMD_RESPONSE, id, tag);
 }
+
+void debug_socket_put(FILE* fp, uint8_t id, uint16_t context, uint8_t type)
+{
+	_debug_send_id_8_16(fp, DBG_HEADER_SOCKET_PUT, id, type, context);
+}
+
+void debug_socket_get(FILE* fp, uint8_t id, uint16_t context, uint8_t type)
+{
+	_debug_send_id_8_16(fp, DBG_HEADER_SOCKET_GET, id, type, context);
+}

@@ -23,25 +23,27 @@
 typedef uint8_t DBG_HEADER;
 
 #define DBG_HEADER_PARM			0x00
-#define DBG_HEADER_AFU_CONNECT		0x01
-#define DBG_HEADER_AFU_DROP   		0x02
-#define DBG_HEADER_CONTEXT_ADD    	0x03
-#define DBG_HEADER_CONTEXT_REMOVE 	0x04
-#define DBG_HEADER_JOB_ADD       	0x05
-#define DBG_HEADER_JOB_SEND       	0x06
-#define DBG_HEADER_JOB_AUX2       	0x07
-#define DBG_HEADER_MMIO_MAP       	0x08
-#define DBG_HEADER_MMIO_ADD       	0x09
-#define DBG_HEADER_MMIO_SEND       	0x0A
-#define DBG_HEADER_MMIO_ACK       	0x0B
-#define DBG_HEADER_MMIO_RETURN       	0x0C
-#define DBG_HEADER_CMD_ADD       	0x0D
-#define DBG_HEADER_CMD_UPDATE       	0x0E
-#define DBG_HEADER_CMD_CLIENT_REQ   	0x0F
-#define DBG_HEADER_CMD_CLIENT_ACK   	0x10
-#define DBG_HEADER_CMD_BUFFER_WRITE 	0x11
-#define DBG_HEADER_CMD_BUFFER_READ 	0x12
-#define DBG_HEADER_CMD_RESPONSE    	0x13
+#define DBG_HEADER_SOCKET_PUT           0x01
+#define DBG_HEADER_SOCKET_GET           0x02
+#define DBG_HEADER_AFU_CONNECT		0x03
+#define DBG_HEADER_AFU_DROP   		0x04
+#define DBG_HEADER_CONTEXT_ADD    	0x05
+#define DBG_HEADER_CONTEXT_REMOVE 	0x06
+#define DBG_HEADER_JOB_ADD       	0x07
+#define DBG_HEADER_JOB_SEND       	0x08
+#define DBG_HEADER_JOB_AUX2       	0x09
+#define DBG_HEADER_MMIO_MAP       	0x0A
+#define DBG_HEADER_MMIO_ADD       	0x0B
+#define DBG_HEADER_MMIO_SEND       	0x0C
+#define DBG_HEADER_MMIO_ACK       	0x0D
+#define DBG_HEADER_MMIO_RETURN       	0x0E
+#define DBG_HEADER_CMD_ADD       	0x0F
+#define DBG_HEADER_CMD_UPDATE       	0x10
+#define DBG_HEADER_CMD_CLIENT_REQ   	0x11
+#define DBG_HEADER_CMD_CLIENT_ACK   	0x12
+#define DBG_HEADER_CMD_BUFFER_WRITE 	0x13
+#define DBG_HEADER_CMD_BUFFER_READ 	0x14
+#define DBG_HEADER_CMD_RESPONSE    	0x15
 
 #define DBG_AUX2_DONE			0x80
 #define DBG_AUX2_RUNNING		0x40
@@ -64,6 +66,17 @@ DBG_HEADER debug_get_header(FILE* fp);
 
 void debug_afu_connect(FILE* fp, uint8_t id);
 void debug_afu_drop(FILE* fp, uint8_t id);
+void debug_cmd_add(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,
+		   uint16_t command);
+void debug_cmd_update(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t resp);
+void debug_cmd_client(FILE* fp, uint8_t id, uint8_t tag, uint16_t context);
+void debug_cmd_return(FILE* fp, uint8_t id, uint8_t tag, uint16_t context);
+void debug_cmd_buffer_write(FILE* fp, uint8_t id, uint8_t tag);
+void debug_cmd_buffer_read(FILE* fp, uint8_t id, uint8_t tag);
+void debug_cmd_response(FILE* fp, uint8_t id, uint8_t tag);
+void debug_context_add(FILE* fp, uint8_t id, uint16_t context);
+void debug_context_remove(FILE* fp, uint8_t id, uint16_t context);
 void debug_job_add(FILE* fp, uint8_t id, uint32_t code);
 void debug_job_send(FILE* fp, uint8_t id, uint32_t code);
 void debug_job_aux2(FILE* fp, uint8_t id, uint8_t aux2);
@@ -75,16 +88,7 @@ void debug_mmio_send(FILE* fp, uint8_t id, uint16_t context, uint8_t rnw,
 		     uint8_t dw, uint32_t addr);
 void debug_mmio_ack(FILE* fp, uint8_t id);
 void debug_mmio_return(FILE* fp, uint8_t id, uint16_t context);
-void debug_context_add(FILE* fp, uint8_t id, uint16_t context);
-void debug_context_remove(FILE* fp, uint8_t id, uint16_t context);
-void debug_cmd_add(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,
-		   uint16_t command);
-void debug_cmd_update(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,
-		      uint16_t resp);
-void debug_cmd_client(FILE* fp, uint8_t id, uint8_t tag, uint16_t context);
-void debug_cmd_return(FILE* fp, uint8_t id, uint8_t tag, uint16_t context);
-void debug_cmd_buffer_write(FILE* fp, uint8_t id, uint8_t tag);
-void debug_cmd_buffer_read(FILE* fp, uint8_t id, uint8_t tag);
-void debug_cmd_response(FILE* fp, uint8_t id, uint8_t tag);
+void debug_socket_put(FILE* fp, uint8_t id, uint16_t context, uint8_t type);
+void debug_socket_get(FILE* fp, uint8_t id, uint16_t context, uint8_t type);
 
 #endif /* _DEBUG_H_ */

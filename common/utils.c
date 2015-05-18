@@ -24,6 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "debug.h"
 #include "utils.h"
 
 // Usage message
@@ -101,7 +102,7 @@ void ns_delay(long ns)
 }
 
 // Get bytes from socket
-uint8_t * get_bytes(int fd, unsigned size, int timeout)
+uint8_t * get_bytes_silent(int fd, unsigned size, int timeout)
 {
 	struct pollfd pfd;
 	uint8_t *data;
@@ -121,7 +122,7 @@ uint8_t * get_bytes(int fd, unsigned size, int timeout)
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
 			free(data);
 			data = NULL;
-			DPRINTF("Socket disconnect\n");
+			warn_msg("Socket disconnect");
 			break;
 		}
 	}
@@ -134,19 +135,24 @@ uint8_t * get_bytes(int fd, unsigned size, int timeout)
 				break;
 			bytes += count;
 		}
-#if DEBUG
-		DPRINTF("Socket in:0x");
-		for (count = 0; count < bytes; count++)
-			DPRINTF("%02x", data[count]);
-		DPRINTF("\n");
-#endif /* DEBUG */
 	}
 
 	return data;
 }
 
+// Get bytes from socket with debug output
+uint8_t * get_bytes(int fd, unsigned size, int timeout, FILE *dbg_fp,
+		    uint8_t dbg_id, uint16_t context)
+{
+	uint8_t *data;
+
+	data = get_bytes_silent(fd, size, timeout);
+	debug_socket_get(dbg_fp, dbg_id, context, data[0]);
+	return data;
+}
+
 // Put bytes on socket
-int put_bytes(int fd, unsigned size, uint8_t *data, int timeout)
+int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout)
 {
 	struct timespec start, now;
 	int count, bytes;
@@ -156,20 +162,12 @@ int put_bytes(int fd, unsigned size, uint8_t *data, int timeout)
 		perror("clock_gettime");
 		return 0;
 	}
-#if DEBUG
-	int i;
-	DPRINTF("Socket out:0x");
-#endif /* DEBUG */
 	now = start;
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = write(fd, &(data[bytes]), size);
 		if (count < 0)
 			break;
-#if DEBUG
-		for (i = bytes; i < count + bytes; i++)
-			DPRINTF("%02x", data[i]);
-#endif /* DEBUG */
 		bytes += count;
 		if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
 			perror("clock_gettime");
@@ -180,12 +178,24 @@ int put_bytes(int fd, unsigned size, uint8_t *data, int timeout)
 			       (double) (now.tv_nsec - start.tv_nsec) /
 			       (double) (1000000L);
 		if ((timeout > 0) && (((int) milliseconds) > timeout)) {
-			DPRINTF("Timeout waiting to put data on socket!\n");
+			warn_msg("Timeout waiting to put data on socket");
 			break;
 		}
 	}
-	DPRINTF("\n");
 
+	return bytes;
+}
+
+// Put bytes on socket with debug output;
+int put_bytes(int fd, unsigned size, uint8_t *data, int timeout, FILE *dbg_fp,
+	      uint8_t dbg_id, uint16_t context)
+{
+	int bytes;
+
+	bytes = put_bytes_silent(fd, size, data, timeout);
+	if (bytes == size) {
+		debug_socket_put(dbg_fp, dbg_id, context, data[0]);
+	}
 	return bytes;
 }
 
