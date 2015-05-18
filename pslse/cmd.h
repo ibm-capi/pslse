@@ -24,7 +24,7 @@
 #include "client.h"
 #include "mmio.h"
 #include "parms.h"
-#include "psl_interface.h"
+#include "../common/psl_interface.h"
 
 enum cmd_type {
 	CMD_READ,

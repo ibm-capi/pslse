@@ -46,7 +46,7 @@
 
 // Initialize MMIO tracking structure
 struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		       FILE *dbg_fp, uint8_t dbg_id)
+		       int timeout, FILE *dbg_fp, uint8_t dbg_id)
 {
 	struct mmio *mmio = (struct mmio*) malloc(sizeof(struct mmio));
 	if (!mmio)
@@ -58,6 +58,7 @@ struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 	mmio->dbg_id = dbg_id;
 	mmio->psl_lock = psl_lock;
 	pthread_mutex_init(&(mmio->lock), NULL);
+	mmio->timeout = timeout;
 	return mmio;
 }
 
@@ -252,7 +253,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		ack = PSLSE_MMIO_FAIL;
 		goto map_done;
 	}
-	if ((flags = (uint32_t *) get_bytes_silent(fd, 4, 1))
+	if ((flags = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
 	     == NULL) {
 		warn_msg("Socket failure with client context %d",
 			 client->context);
@@ -277,7 +278,8 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 map_done:
 	// Send acknowledge to client
 	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, 1, mmio->dbg_fp, mmio->dbg_id, client->context);
+	put_bytes(fd, 1, &ack, mmio->timeout, mmio->dbg_fp, mmio->dbg_id,
+		  client->context);
 	pthread_mutex_unlock(mmio->psl_lock);
 }
 
@@ -285,6 +287,7 @@ map_done:
 static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 					     struct client *client, int dw)
 {
+	struct mmio_event *event;
 	uint32_t *offset;
 	uint64_t *data64;
 	uint32_t *data32;
@@ -292,30 +295,40 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	uint8_t ack;
 	int fd = client->fd;
 
-	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, 1)) == NULL)
+	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
+	    == NULL)
 		goto write_fail;
 	if (dw) {
-		if ((data64 = (uint64_t *) get_bytes_silent(fd, 8, 1)) == NULL)
+		if ((data64 = (uint64_t *) get_bytes_silent(fd, 8,
+							    mmio->timeout))
+		     == NULL)
 			goto write_fail;
 		// Convert data from client from little endian to host
 		data = le64toh(*data64);
+		free(data64);
 	}
 	else {
-		if ((data32 = (uint32_t *) get_bytes_silent(fd, 4, 1)) == NULL)
+		if ((data32 = (uint32_t *) get_bytes_silent(fd, 4,
+							    mmio->timeout))
+		    == NULL)
 			goto write_fail;
 		// Convert data from client from little endian to host
 		*data32 = le32toh(*data32);
 		data = (uint64_t) *data32;
 		data <<= 32;
 		data |= (uint64_t) *data32;
+		free(data32);
 	}
-	return _add_mmio(mmio, client, 0, dw, le32toh(*offset)/4, data);
+	event = _add_mmio(mmio, client, 0, dw, le32toh(*offset)/4, data);
+	free(offset);
+	return event;
 	
 write_fail:
 	// Send fail acknowledge to client
 	ack = PSLSE_MMIO_FAIL;
 	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, 1, mmio->dbg_fp, mmio->dbg_id, client->context);
+	put_bytes(fd, 1, &ack, mmio->timeout, mmio->dbg_fp, mmio->dbg_id,
+		  client->context);
 	pthread_mutex_unlock(mmio->psl_lock);
 	return NULL;
 }
@@ -324,20 +337,24 @@ write_fail:
 static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 					    struct client *client, int dw)
 {
-
+	struct mmio_event *event;
 	uint32_t *offset;
 	uint8_t ack;
 	int fd = client->fd;
 
-	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, 1)) == NULL)
+	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
+	    == NULL)
 		goto read_fail;
-	return _add_mmio(mmio, client, 1, dw, le32toh(*offset)/4, 0);
+	event = _add_mmio(mmio, client, 1, dw, le32toh(*offset)/4, 0);
+	free(offset);
+	return event;
 	
 read_fail:
 	// Send fail acknowledge to client
 	ack = PSLSE_MMIO_FAIL;
 	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, 1, mmio->dbg_fp, mmio->dbg_id, client->context);
+	put_bytes(fd, 1, &ack, mmio->timeout, mmio->dbg_fp, mmio->dbg_id,
+		  client->context);
 	pthread_mutex_unlock(mmio->psl_lock);
 	return NULL;
 }
@@ -375,23 +392,23 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			buffer = (uint8_t*)malloc(9);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 8);
-			put_bytes(fd, 9, buffer, 1, mmio->dbg_fp, mmio->dbg_id,
-				  client->context);
+			put_bytes(fd, 9, buffer, mmio->timeout, mmio->dbg_fp,
+				  mmio->dbg_id, client->context);
 		}
 		else {
 			buffer = (uint8_t*)malloc(5);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 4);
-			put_bytes(fd, 5, buffer, 1, mmio->dbg_fp, mmio->dbg_id,
-				  client->context);
+			put_bytes(fd, 5, buffer, mmio->timeout, mmio->dbg_fp,
+				  mmio->dbg_id, client->context);
 		}
 	}
 	else {
 		// Return acknowledge for write
 		buffer = (uint8_t*)malloc(1);
 		buffer[0] = PSLSE_MMIO_ACK;
-		put_bytes(fd, 1, buffer, 1, mmio->dbg_fp, mmio->dbg_id,
-			  client->context);
+		put_bytes(fd, 1, buffer, mmio->timeout, mmio->dbg_fp,
+			  mmio->dbg_id, client->context);
 	}
 	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);
 	free(event);

@@ -133,7 +133,7 @@ static void _INThandler(int sig)
 }
 
 // Handshake with client and attach to PSL
-static int _client_connect(int fd, char *ip)
+static int _client_connect(int fd, char *ip, int timeout)
 {
 	struct psl* psl;
 	struct client *client;
@@ -146,36 +146,36 @@ static int _client_connect(int fd, char *ip)
 
 	// Parse client handshake data
 	rc[0] = PSLSE_DETACH;
-	buffer = get_bytes(fd, 5, 1, fp, -1, -1);
+	buffer = get_bytes(fd, 5, timeout, fp, -1, -1);
 	if ((buffer == NULL) || (strcmp((char *) buffer, "PSLSE"))) {
 		info_msg("Connecting application is not PSLSE client\n");
 		info_msg("Expected: \"PSLSE\" Got: \"%s\"", buffer);
-		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
+		put_bytes(fd, 1, &(rc[0]), 10000, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
 	free(buffer);
-	buffer = get_bytes_silent(fd, 1, 1);
+	buffer = get_bytes_silent(fd, 1, timeout);
 	if ((buffer == NULL) || ((uint8_t) buffer[0] != PSLSE_VERSION)) {
 		info_msg("Client is wrong version\n");
-		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
+		put_bytes(fd, 1, &(rc[0]), timeout, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
 	free(buffer);
-	buffer = get_bytes_silent(fd, 1, 1);
+	buffer = get_bytes_silent(fd, 1, timeout);
 	if (buffer == NULL) {
 		info_msg("Client didn't specify length of AFU name\n");
-		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
+		put_bytes(fd, 1, &(rc[0]), timeout, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
 	n = (uint8_t) buffer[0];
 	free(buffer);
-	buffer = get_bytes_silent(fd, n, 1);
+	buffer = get_bytes_silent(fd, n, timeout);
 	if (buffer == NULL) {
 		info_msg("Client didn't specify AFU name\n");
-		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
+		put_bytes(fd, 1, &(rc[0]), timeout, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
@@ -192,7 +192,7 @@ static int _client_connect(int fd, char *ip)
 	if (!psl) {
 		info_msg("Did not find valid PSL for AFU %s\n", buffer);
 		free(buffer);
-		put_bytes(fd, 1, &(rc[0]), 1, fp, -1, -1);
+		put_bytes(fd, 1, &(rc[0]), timeout, fp, -1, -1);
 		close (fd);
 		return -1;
 	}
@@ -220,7 +220,8 @@ static int _client_connect(int fd, char *ip)
 		if (psl->max_clients == 0) {
 			error_msg("AFU programming model is invalid");
 			free(buffer);
-			put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
+			put_bytes(fd, 1, &(rc[0]), timeout, fp, psl->dbg_id,
+				  -1);
 			close (fd);
 			return -1;
 		}
@@ -238,7 +239,8 @@ static int _client_connect(int fd, char *ip)
 			warn_msg("AFU %s is does not support dedicated mode\n",
 				 buffer);
 			free(buffer);
-			put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
+			put_bytes(fd, 1, &(rc[0]), timeout, fp, psl->dbg_id,
+				  -1);
 			close (fd);
 			return -1;
 		}
@@ -249,7 +251,8 @@ static int _client_connect(int fd, char *ip)
 			warn_msg("AFU %s is does not support directed mode\n",
 				 buffer);
 			free(buffer);
-			put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
+			put_bytes(fd, 1, &(rc[0]), timeout, fp, psl->dbg_id,
+				 -1);
 			close (fd);
 			return -1;
 		}
@@ -257,7 +260,7 @@ static int _client_connect(int fd, char *ip)
 	default:
 		warn_msg("AFU device type '%c' is not valid\n", afu_type);
 		free(buffer);
-		put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
+		put_bytes(fd, 1, &(rc[0]), timeout, fp, psl->dbg_id, -1);
 		return -1;
 	}
 
@@ -274,7 +277,7 @@ static int _client_connect(int fd, char *ip)
 	if (i == psl->max_clients) {
 		info_msg("No room for new client on AFU %s\n", buffer);
 		free(buffer);
-		put_bytes(fd, 1, &(rc[0]), 1, fp, psl->dbg_id, -1);
+		put_bytes(fd, 1, &(rc[0]), timeout, fp, psl->dbg_id, -1);
 		close (fd);
 		return -1;
 	}
@@ -298,7 +301,7 @@ static int _client_connect(int fd, char *ip)
 	client->mmio_size = mmio_size;
 	client->mmio_offset = mmio_offset;
 	client->type = afu_type;
-	put_bytes(fd, 2, &(rc[0]), 1, fp, psl->dbg_id, client->context);
+	put_bytes(fd, 2, &(rc[0]), timeout, fp, psl->dbg_id, client->context);
 	free(buffer);
 	client->fd = fd;
 	client->ip = ip;
@@ -393,13 +396,17 @@ int main(int argc, char **argv)
 	parse_host_data(&psl_list, parms, "shim_host.dat", fp);
 	if (psl_list == NULL) {
 		free(parms);
+		fclose(fp);
 		error_msg("Unable to connect to any simulators");
 		return -1;
 	}
 
 	// Start server
-	if ((listen_fd = _start_server()) < 0)
+	if ((listen_fd = _start_server()) < 0) {
+		free(parms);
+		fclose(fp);
 		return -1;
+	}
 
 	// Watch for client connections
 	while (psl_list != NULL) {
@@ -413,7 +420,7 @@ int main(int argc, char **argv)
 		inet_ntop(AF_INET, &(client_addr.sin_addr.s_addr), ip,
 			  INET_ADDRSTRLEN);
 		info_msg("Connection from %s", ip);
-		_client_connect(connect_fd, ip);
+		_client_connect(connect_fd, ip, parms->timeout);
 	}
 	info_msg("No AFUs connected, Shutting down PSLSE\n");
 

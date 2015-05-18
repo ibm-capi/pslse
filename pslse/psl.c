@@ -33,9 +33,9 @@
 #include <poll.h>
 
 #include "mmio.h"
-#include "psl_interface.h"
 #include "psl.h"
 #include "../common/debug.h"
+#include "../common/psl_interface.h"
 
 // Query AFU descriptor data
 static void _query(struct psl *psl, struct client* client)
@@ -51,8 +51,8 @@ static void _query(struct psl *psl, struct client* client)
 	       (char*) &(psl->mmio->desc.num_ints_per_process),
 	       sizeof(psl->mmio->desc.num_ints_per_process));
 	pthread_mutex_lock(&(psl->lock));
-	put_bytes(client->fd, size, buffer, 1, psl->dbg_fp, psl->dbg_id,
-		  client->context);
+	put_bytes(client->fd, size, buffer, psl->timeout, psl->dbg_fp,
+		  psl->dbg_id, client->context);
 	pthread_mutex_unlock(&(psl->lock));
 	free(buffer);
 }
@@ -66,7 +66,7 @@ static void _attach(struct psl *psl, struct client* client)
 
 	// Get wed value from application
 	ack = PSLSE_DETACH;
-	if ((buffer = get_bytes_silent(client->fd, 8, 10000)) == NULL) {
+	if ((buffer = get_bytes_silent(client->fd, 8, psl->timeout)) == NULL) {
 		warn_msg("Failed to get WED value from client");
 		goto attach_done;
 	}
@@ -82,7 +82,7 @@ static void _attach(struct psl *psl, struct client* client)
 
 attach_done:
 	pthread_mutex_lock(&(psl->lock));
-	put_bytes(client->fd, 1, &ack, 1, psl->dbg_fp, psl->dbg_id,
+	put_bytes(client->fd, 1, &ack, psl->timeout, psl->dbg_fp, psl->dbg_id,
 		  client->context);
 	pthread_mutex_unlock(&(psl->lock));
 }
@@ -155,7 +155,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	pfd.revents = 0;
 	mmio = NULL;
 	if (poll(&pfd, 1, 1) > 0) {
-		if ((buffer=get_bytes(client->fd, 1, 1, psl->dbg_fp,
+		if ((buffer=get_bytes(client->fd, 1, psl->timeout, psl->dbg_fp,
 				      psl->dbg_id, client->context)) == NULL) {
 			_free(psl, client);
 			return;
@@ -264,9 +264,9 @@ static void *_psl_loop(void *ptr)
 			if ((psl->client[i].valid < 0) &&
 			    (psl->client[i].idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
-				put_bytes(psl->client[i].fd, 1, &ack, 1,
-					  psl->dbg_fp, psl->dbg_id,
-					  psl->client[i].context);
+				put_bytes(psl->client[i].fd, 1, &ack,
+					  psl->timeout, psl->dbg_fp,
+					  psl->dbg_id, psl->client[i].context);
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, &(psl->client[i]));
 				continue;
@@ -318,6 +318,7 @@ static void *_psl_loop(void *ptr)
 		free(psl->name);
 	if (*(psl->head) == psl)
 		*(psl->head) = psl->_next;
+	free(psl);
 	pthread_exit(NULL);
 }
 
@@ -333,6 +334,7 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		goto init_fail;
 	}
 	memset(psl, 0, sizeof(struct psl));
+	psl->timeout = parms->timeout;
 	if ((strlen(id) != 6) || strncmp(id, "afu", 3) || (id[4] != '.')) {
 		warn_msg("Invalid afu name: %s", id);
 		goto init_fail;
@@ -394,8 +396,8 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	}
 
 	// Initialize mmio handler
-	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock), psl->dbg_fp,
-				   psl->dbg_id)) == NULL) {
+	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock), psl->timeout,
+				   psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("mmio_init");
 		goto init_fail_lock;
 	}

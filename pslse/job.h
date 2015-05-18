@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "psl_interface.h"
+#include "../common/psl_interface.h"
 #include "../common/utils.h"
 
 struct job_event {

@@ -23,7 +23,7 @@
 #include <stdio.h>
 
 #include "client.h"
-#include "psl_interface.h"
+#include "../common/psl_interface.h"
 #include "../common/utils.h"
 
 #define PROG_MODEL_DEDICATED 0x0010
@@ -75,10 +75,11 @@ struct mmio {
 	FILE *dbg_fp;
 	uint8_t dbg_id;
 	uint32_t flags;
+	int timeout;
 };
 
 struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		       FILE *dbg_fp, uint8_t dbg_id);
+		       int timeout, FILE *dbg_fp, uint8_t dbg_id);
 
 int read_descriptor(struct mmio *mmio);
 

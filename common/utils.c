@@ -147,7 +147,8 @@ uint8_t * get_bytes(int fd, unsigned size, int timeout, FILE *dbg_fp,
 	uint8_t *data;
 
 	data = get_bytes_silent(fd, size, timeout);
-	debug_socket_get(dbg_fp, dbg_id, context, data[0]);
+	if (data != NULL)
+		debug_socket_get(dbg_fp, dbg_id, context, data[0]);
 	return data;
 }
 

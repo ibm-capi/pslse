@@ -128,6 +128,7 @@ static int _parse_job(FILE *fp, DBG_HEADER header)
 		printf("Sent ");
 		break;
 	default:
+		free(name);
 		return -1;
 	}
 	switch (code) {

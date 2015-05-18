@@ -53,6 +53,7 @@ struct psl {
 	int port;
 	int idle_cycles;
 	int max_clients;
+	int timeout;
 };
 
 int psl_init(struct psl **head, struct parms *parms, char* id, char* host,

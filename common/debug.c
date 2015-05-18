@@ -9,13 +9,13 @@
 static DBG_HEADER adjust_header(DBG_HEADER header)
 {
 	switch(sizeof(header)) {
-	case sizeof(uint64_t):
+	case sizeof(uint64_t):	/*constant condition*/
 		header = htole64(header);
 		break;
-	case sizeof(uint32_t):
+	case sizeof(uint32_t):	/*constant condition*/
 		header = htole32(header);
 		break;
-	case sizeof(uint16_t):
+	case sizeof(uint16_t):	/*constant condition*/
 		header = htole16(header);
 		break;
 	default:
@@ -247,15 +247,15 @@ DBG_HEADER debug_get_header(FILE* fp)
 	DBG_HEADER header;
 
 	switch (sizeof(DBG_HEADER)) {
-	case sizeof(uint64_t) :
+	case sizeof(uint64_t) :	/*constant condition*/
 		if (debug_get_64(fp, (uint64_t *) &header)!=1)
 			return -1;
 		break;
-	case sizeof(uint32_t) :
+	case sizeof(uint32_t) :	/*constant condition*/
 		if (debug_get_32(fp, (uint32_t *) &header)!=1)
 			return -1;
 		break;
-	case sizeof(uint16_t) :
+	case sizeof(uint16_t) :	/*constant condition*/
 		if (debug_get_16(fp, (uint16_t *) &header)!=1)
 			return -1;
 		break;

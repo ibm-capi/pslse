@@ -180,5 +180,7 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 	printf("\tReorder  = %d%%\n", parms->reorder_percent);
 	printf("\tBuffer   = %d%%\n", parms->buffer_percent);
 
+	parms->timeout *= 1000; // Store is milliseconds;
+
 	return parms;
 }
