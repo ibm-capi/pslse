@@ -63,7 +63,7 @@ struct cmd {
 	struct cmd_event *buffer_read;
 	struct mmio *mmio;
 	struct parms *parms;
-	struct client *client;
+	struct client **client;
 	volatile enum pslse_state *psl_state;
 	pthread_mutex_t *psl_lock;
 	pthread_mutex_t lock;

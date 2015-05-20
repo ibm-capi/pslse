@@ -138,7 +138,7 @@ static void _debug_send_id_8_16(FILE* fp, DBG_HEADER header, uint8_t id,
 
 	offset = 0;
 	header = adjust_header(header);
-	size = sizeof(DBG_HEADER)+2*sizeof(value0)+sizeof(value1);
+	size = sizeof(DBG_HEADER)+sizeof(id)+sizeof(value0)+sizeof(value1);
 	if ((buffer = (char*) malloc(size)) != NULL) {
 		memcpy(buffer, (char*)&header, sizeof(DBG_HEADER));
 		offset += sizeof(header);

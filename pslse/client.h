@@ -16,10 +16,12 @@
 #ifndef _CLIENT_H_
 #define _CLIENT_H_
 
+#include <pthread.h>
 #include <stdint.h>
 
 struct client {
 	struct job_event *job;
+	int pending;
 	int valid;
 	int idle_cycles;
 	int fd;
@@ -30,6 +32,9 @@ struct client {
 	void *mem_access;
 	void *mmio_access;
 	char *ip;
+	pthread_t thread;
+	struct client *_prev;
+	struct client *_next;
 };
 
 #endif /* _CLIENT_H_ */

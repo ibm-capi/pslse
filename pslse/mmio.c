@@ -48,10 +48,9 @@
 struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 		       int timeout, FILE *dbg_fp, uint8_t dbg_id)
 {
-	struct mmio *mmio = (struct mmio*) malloc(sizeof(struct mmio));
+	struct mmio *mmio = (struct mmio*) calloc(1, sizeof(struct mmio));
 	if (!mmio)
 		return mmio;
-	memset(mmio, 0, sizeof(struct mmio));
 	mmio->afu_event = afu_event;
 	mmio->list = NULL;
 	mmio->dbg_fp = dbg_fp;

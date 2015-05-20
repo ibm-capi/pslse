@@ -83,8 +83,7 @@ static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 
 	size = sizeof(struct cxl_event_header) +
 	       sizeof(struct cxl_event_data_storage);
-	afu->dsi = (struct cxl_event*) malloc(size);
-	memset(afu->dsi, 0, size);
+	afu->dsi = (struct cxl_event*) calloc(1, size);
 	afu->dsi->header.type = CXL_EVENT_DATA_STORAGE;
 	afu->dsi->header.size = size;
 	afu->dsi->header.process_element = afu->context;
@@ -179,7 +178,6 @@ static void _handle_ack(struct cxl_afu_h *afu)
 			free(data);
 		}
 	}
-	DPRINTF("MMIO ACK0\n");
 	if (afu->mmio_pending == PSLSE_MMIO_READ32) {
 		if ((data = get_bytes_silent(afu->fd, 4, -1)) == NULL) {
 			afu->opened = 0;
@@ -191,7 +189,6 @@ static void _handle_ack(struct cxl_afu_h *afu)
 			free(data);
 		}
 	}
-	DPRINTF("MMIO ACK1\n");
 	afu->mmio_pending = 0;
 }
 
@@ -214,8 +211,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 
 	size = sizeof(struct cxl_event_header) +
 	       sizeof(struct cxl_event_afu_interrupt);
-	afu->irq = (struct cxl_event*) malloc(size);
-	memset(afu->irq, 0, size);
+	afu->irq = (struct cxl_event*) calloc(1, size);
 	afu->irq->header.type = CXL_EVENT_AFU_INTERRUPT;
 	afu->irq->header.size = size;
 	afu->irq->header.process_element = afu->context;
@@ -340,20 +336,20 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	struct hostent *he;
 	FILE *fp;
 	char *afu_id, *host, *port_str;
-	uint16_t query16;
+	uint16_t afu_map, map_match, query16;
 	uint8_t *buffer;
-	uint8_t query;
 	int port;
-	size_t size, query_size;
+	size_t query_size;
+	uint8_t major, minor, dbg_id, query;
+	char afu_type;
 
 	// Allocate AFU struct
-	afu = (struct cxl_afu_h *) malloc(sizeof(struct cxl_afu_h));
+	afu = (struct cxl_afu_h *) calloc(1, sizeof(struct cxl_afu_h));
 	if (!afu) {
 		perror("malloc");
 		errno = ENOMEM;
 		return NULL;
 	}
-	memset(afu, 0, sizeof(struct cxl_afu_h));
 
 	// Get hostname and port of PSLSE server
 	DPRINTF("AFU OPEN\n");
@@ -362,8 +358,7 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 		perror("fopen:pslse_server.dat");
 		goto open_fail;
 	}
-	buffer = (uint8_t*) malloc(MAX_LINE_CHARS);
-	memset((char*) buffer, 0, sizeof(buffer));
+	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	if(fgets((char*) buffer, MAX_LINE_CHARS-1, fp) == NULL) {
 		perror("fgets:pslse_server.dat");
 		fclose(fp);
@@ -376,13 +371,30 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	*port_str = '\0';
 	port_str++;
 	if (!host || !port_str) {
-		fprintf(stderr,"cxl_afu_open_dev:Invalid format in pslse_server.dat\n");
+		warn_msg("cxl_afu_open_dev:Invalid format in pslse_server.dat");
 		free(buffer);
 		goto open_fail;
 	}
 	port = atoi(port_str);
 	afu_id = strrchr(path, '/');
 	afu_id++;
+	if ((afu_id[3] < '0') || (afu_id[3] > '3')) {
+		warn_msg("Invalid afu major: %c", afu_id[3]);
+		free(buffer);
+		goto open_fail;
+	}
+	if ((afu_id[5] < '0') || (afu_id[5] > '3')) {
+		warn_msg("Invalid afu minor: %c", afu_id[5]);
+		free(buffer);
+		goto open_fail;
+	}
+	major = afu_id[3] - '0';
+	minor = afu_id[5] - '0';
+	afu_type = afu_id[6];
+	map_match = 0x8000;
+	map_match >>= 4*major;
+	map_match >>= minor;
+	dbg_id = (major << 4) | minor;
 	printf("Attempting connection to %s on %s:%d\n", afu_id, host, port);
 
 	// Connect to PSLSE server
@@ -410,47 +422,65 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	memset((char*) buffer, 0, sizeof(buffer));
 	strcpy((char*) buffer, "PSLSE");
 	buffer[5] = (uint8_t) PSLSE_VERSION;
-	buffer[6] = (uint8_t) strlen(afu_id);
-	strcat((char*) buffer, afu_id);
-	size = strlen((char*) buffer);
-	if (put_bytes_silent(afu->fd, size, buffer, -1) != size) {
-		fprintf(stderr,"cxl_afu_open_dev:Failed to write to socket!\n");
+	if (put_bytes_silent(afu->fd, 6, buffer, -1) != 6) {
+		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		free(buffer);
 		goto open_fail;
 	}
 	free(buffer);
-	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
-		fprintf(stderr,"cxl_afu_open_dev:Socket failed open acknowledge\n");
+	if ((buffer = get_bytes_silent(afu->fd, 3, -1)) == NULL) {
+		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close(afu->fd);
 		goto open_fail;
 	}
-	if (buffer[0] != (uint8_t) PSLSE_ATTACH) {
-		fprintf(stderr,"cxl_afu_open_dev:PSLSE bad acknowledge\n");
+	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
+		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
 		free(buffer);
 		close(afu->fd);
 		goto open_fail;
 	}
-	free(buffer);
-	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
-		fprintf(stderr,"cxl_afu_open_dev:Socket failed context retrieve\n");
+	memcpy((char*) &afu_map, (char*) &(buffer[1]), 2);
+	afu_map = (long) le16toh(afu_map);
+	if ((afu_map & map_match) != map_match) {
+		warn_msg("cxl_afu_open_dev:AFU not in system");
 		close(afu->fd);
 		goto open_fail;
 	}
-	afu->context = buffer[0];
+	buffer[0] = (uint8_t) PSLSE_OPEN;
+	buffer[1] = dbg_id;
+	buffer[2] = afu_type;
+	if (put_bytes_silent(afu->fd, 3, buffer, -1) != 3) {
+		warn_msg("cxl_afu_open_dev:Failed to write to socket");
+		free(buffer);
+		goto open_fail;
+	}
+	free(buffer);
+	if ((buffer = get_bytes_silent(afu->fd, 2, -1)) == NULL) {
+		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
+		close(afu->fd);
+		goto open_fail;
+	}
+	if (buffer[0] != (uint8_t) PSLSE_OPEN) {
+		warn_msg("cxl_afu_open_dev:bad OPEN acknowledge");
+		free(buffer);
+		close(afu->fd);
+		goto open_fail;
+	}
+	afu->context = buffer[1];
 	free(buffer);
 	query = PSLSE_QUERY;
 	if (put_bytes_silent(afu->fd, 1, &query, -1) != 1) {
-		fprintf(stderr,"cxl_afu_open_dev:Failed to write to socket!\n");
+		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		goto open_fail;
 	}
 	query_size = sizeof(uint8_t)+sizeof(uint16_t);
 	if ((buffer = get_bytes_silent(afu->fd, query_size, -1)) == NULL) {
-		fprintf(stderr,"cxl_afu_open_dev:Socket failed context retrieve\n");
+		warn_msg("cxl_afu_open_dev:Socket failed context retrieve");
 		close(afu->fd);
 		goto open_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_QUERY) {
-		fprintf(stderr,"cxl_afu_open_dev:Bad QUERY acknowledge\n");
+		warn_msg("cxl_afu_open_dev:Bad QUERY acknowledge");
 		free(buffer);
 		close(afu->fd);
 		goto open_fail;
@@ -515,26 +545,25 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 
 	DPRINTF("AFU ATTACH\n");
 	if (!afu->opened) {
-		fprintf(stderr,"cxl_afu_attach: Must open AFU first!\n");
+		warn_msg("cxl_afu_attach: Must open AFU first");
 		errno = ENODEV;
 		return -1;
 	}
 
 	if (afu->attached) {
-		fprintf(stderr,"cxl_afu_attach: AFU already attached!\n");
+		warn_msg("cxl_afu_attach: AFU already attached");
 		errno = ENODEV;
 		return -1;
 	}
 
-	buffer = (uint8_t*) malloc(MAX_LINE_CHARS);
-	memset((char*) buffer, 0, sizeof(buffer));
+	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	buffer[0] = PSLSE_ATTACH;
 	wed_ptr = (uint64_t *) &(buffer[1]);
 	*wed_ptr = htole64(wed);
 	buffer[9] = '\0';
 	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 9, buffer, -1) != 9) {
-		fprintf(stderr,"cxl_afu_attach: Socket fail on attach!\n");
+		warn_msg("cxl_afu_attach: Socket fail on attach");
 		afu->opened = 0;
 		errno = ENODEV;
 		pthread_mutex_unlock(&(afu->lock));
@@ -547,14 +576,14 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		buffer = get_bytes_silent(afu->fd, 1, -1);
 	}
 	if (buffer == NULL) {
-		fprintf(stderr,"cxl_afu_attach: Socket fail on attach acknowledge!\n");
+		warn_msg("cxl_afu_attach: Socket fail on attach acknowledge");
 		afu->opened = 0;
 		errno = ENODEV;
 		pthread_mutex_unlock(&(afu->lock));
 		return -1;
 	}
 	if (buffer[0]!=(uint8_t) PSLSE_ATTACH) {
-		fprintf(stderr,"cxl_afu_attach: Bad attach acknowledge!\n");
+		warn_msg("cxl_afu_attach: Bad attach acknowledge");
 		afu->opened = 0;
 		free(buffer);
 		errno = ENODEV;
@@ -630,13 +659,11 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 	if (!afu->opened) {
 		goto map_fail;
 	}
-	DPRINTF("MMIO MAP0\n");
 
 	if (!afu->attached) {
 		printf("cxl_mmio_map: Must attach first!\n");
 		goto map_fail;
 	}
-	DPRINTF("MMIO MAP1\n");
 
 	if (flags & ~(CXL_MMIO_FLAGS)) {
 		printf("cxl_mmio_map: Invalid flags!\n");
@@ -646,18 +673,15 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 	buffer[0] = PSLSE_MMIO_MAP;
 	flags_ptr = (uint32_t *) &(buffer[1]);
 	*flags_ptr = htole32(flags);
-	DPRINTF("MMIO MAP2\n");
 	if (put_bytes_silent(afu->fd, 5, buffer, -1) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
 	}
-	DPRINTF("MMIO MAP3\n");
 	afu->mmio_pending = PSLSE_MMIO_MAP;
 	pthread_mutex_unlock(&(afu->lock));
 	while (afu->mmio_pending == PSLSE_MMIO_MAP)
 		_delay_1ms();
-	DPRINTF("MMIO MAP4\n");
 
 	afu->mapped = 1;
 	return 0;

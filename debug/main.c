@@ -468,8 +468,14 @@ static int _parse_socket(FILE *fp, DBG_HEADER header, int silent)
 	case 'P':
 		printf("PSLSE");
 		break;
+	case PSLSE_CONNECT:
+		printf("CONNECT");
+		break;
 	case PSLSE_QUERY:
 		printf("QUERY");
+		break;
+	case PSLSE_OPEN:
+		printf("OPEN");
 		break;
 	case PSLSE_ATTACH:
 		printf("ATTACH");

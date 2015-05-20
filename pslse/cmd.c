@@ -56,14 +56,13 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
 		     pthread_mutex_t *lock, FILE *dbg_fp, uint8_t dbg_id)
 {
-	struct cmd *cmd = (struct cmd*) malloc(sizeof(struct cmd));
+	struct cmd *cmd = (struct cmd*) calloc(1, sizeof(struct cmd));
 
 	if (!cmd) {
 		perror("malloc");
 		exit(-1);
 	}
 
-	memset(cmd, 0, sizeof(struct cmd));
 	cmd->afu_event = afu_event;
 	cmd->mmio = mmio;
 	cmd->parms = parms;
@@ -145,8 +144,7 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	struct cmd_event **head;
 	struct cmd_event *event;
 
-	event = (struct cmd_event*) malloc(sizeof(struct cmd_event));
-	memset(event, 0, sizeof(struct cmd_event));
+	event = (struct cmd_event*) calloc(1, sizeof(struct cmd_event));
 	event->context = context;
 	event->tag = tag;
 	event->type = type;
@@ -399,7 +397,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 		}
 		else {
 			cmd->credits--;
-			if (!cmd->client[handle].valid) {
+			if (!cmd->client[handle]->valid) {
 				_add_other(cmd, handle, tag, command,
 					   PSL_RESPONSE_AERROR, 0);
 				return;
@@ -447,7 +445,7 @@ void handle_buffer_write(struct cmd *cmd)
 	if (event == NULL)
 		return;
 
-	client = &(cmd->client[event->context]);
+	client = cmd->client[event->context];
 	if ((!client->valid) && (event->state != MEM_RECEIVED)) {
 		event->resp = PSL_RESPONSE_AERROR;
 		event->state = MEM_DONE;
@@ -580,7 +578,7 @@ void handle_touch(struct cmd *cmd)
 	if (event == NULL)
 		return;
 
-	client = &(cmd->client[event->context]);
+	client = cmd->client[event->context];
 
 	// Abort if client disconnected
 	if (!client->valid) {
@@ -637,7 +635,7 @@ void handle_interrupt(struct cmd *cmd)
 		return;
 
 	// Send interrupt to client
-	client = &(cmd->client[event->context]);
+	client = cmd->client[event->context];
 	if (!client->valid) {
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
@@ -674,7 +672,7 @@ void handle_buffer_data(struct cmd *cmd)
 	if ((cmd->client == NULL) || (cmd->buffer_read == NULL)) {
 		goto buffer_data_fail;
 	}
-	client = &(cmd->client[cmd->buffer_read->context]);
+	client = cmd->client[cmd->buffer_read->context];
 	if (!client->valid) {
 		cmd->buffer_read->resp = PSL_RESPONSE_AERROR;
 		cmd->buffer_read->state = MEM_DONE;

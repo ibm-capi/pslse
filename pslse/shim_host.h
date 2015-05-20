@@ -17,12 +17,13 @@
 #ifndef _SHIM_HOST_H_
 #define _SHIM_HOST_H_
 
+#include <stdint.h>
 #include <stdio.h>
 
 #include "parms.h"
 #include "psl.h"
 
-int parse_host_data(struct psl **head, struct parms *parms, char *filename,
+uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
 		    FILE *dbg_fp);
 
 #endif /* _SHIM_HOST_H_ */

@@ -28,13 +28,15 @@
 #include "../common/utils.h"
 
 // Parse file to find hostname and ports for AFU simulator(s)
-int parse_host_data(struct psl **head, struct parms *parms, char *filename,
-		    FILE *dbg_fp) {
+uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
+			 FILE *dbg_fp) {
 	FILE *fp;
 	struct psl *psl;
 	char *hostdata, *comment, *afu_id, *host, *port_str;
+	uint16_t location, afu_map;
 	int port;
 
+	afu_map = 0;
 	*head = NULL;
 	fp = fopen(filename, "r");
 	if (!fp) {
@@ -43,7 +45,7 @@ int parse_host_data(struct psl **head, struct parms *parms, char *filename,
 		strcat(hostdata, filename);
 		perror(hostdata);
 		free(hostdata);
-		return -1;
+		return 0;
 	}
 	host = NULL;
 	port_str = NULL;
@@ -83,8 +85,11 @@ int parse_host_data(struct psl **head, struct parms *parms, char *filename,
 		port = atoi(port_str);
 
 		// Initialize PSL
-		if (psl_init(head, parms, afu_id, host, port, dbg_fp) < 0)
+		if ((location = psl_init(head, parms, afu_id, host, port,
+					 dbg_fp)) == 0) {
 			continue;
+		}
+		afu_map |= location;
 
 		// Update all psl entries to point to new list head
 		psl = *head;
@@ -96,5 +101,5 @@ int parse_host_data(struct psl **head, struct parms *parms, char *filename,
 	free(hostdata);
 	fclose(fp);
 
-	return 0;
+	return afu_map;
 }

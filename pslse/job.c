@@ -37,10 +37,9 @@ struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 {
 	struct job *job;
 
-	job = (struct job*) malloc(sizeof(struct job));
+	job = (struct job*) calloc(1, sizeof(struct job));
 	if (!job)
 		return job;
-	memset(job, 0, sizeof(struct job));
 	job->afu_event = afu_event;
 	job->psl_lock = psl_lock;
 	pthread_mutex_init(&(job->lock), NULL);

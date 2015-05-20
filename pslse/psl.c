@@ -258,31 +258,33 @@ static void *_psl_loop(void *ptr)
 
 		// Check for event from application
 		for (i = 0; i<psl->max_clients; i++) {
-			if (psl->client[i].valid == 0)
+			if (psl->client[i]->valid == 0)
 				continue;
-			_handle_client(psl, &(psl->client[i]));
-			if ((psl->client[i].valid < 0) &&
-			    (psl->client[i].idle_cycles == 0)) {
+			_handle_client(psl, psl->client[i]);
+			if ((psl->client[i]->valid < 0) &&
+			    (psl->client[i]->idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
-				put_bytes(psl->client[i].fd, 1, &ack,
+				put_bytes(psl->client[i]->fd, 1, &ack,
 					  psl->timeout, psl->dbg_fp,
-					  psl->dbg_id, psl->client[i].context);
+					  psl->dbg_id, psl->client[i]->context);
 				pthread_mutex_unlock(&(psl->lock));
-				_free(psl, &(psl->client[i]));
+				_free(psl, psl->client[i]);
 				continue;
 			}
-			if (psl->client[i].idle_cycles)
-				psl->client[i].idle_cycles--;
+			if (psl->client[i]->idle_cycles)
+				psl->client[i]->idle_cycles--;
 			if (client_cmd(psl->cmd, i))
-				psl->client[i].idle_cycles = PSL_IDLE_CYCLES;
+				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
 		}
 	}
 
 	// Disconnect clients
 	for (i = 0; i< psl->max_clients; i++) {
-		if (psl->client[i].valid) {
+		if (psl->client[i] != NULL) {
 			// FIXME: Send warning to clients first?
-			close (psl->client[i].fd);
+			info_msg("Disconnected %s context %d\n", psl->name,
+				 psl->client[i]->context);
+			close(psl->client[i]->fd);
 		}
 	}
 
@@ -293,7 +295,7 @@ static void *_psl_loop(void *ptr)
 	info_msg("Disconnected %s @ %s:%d\n", psl->name, psl->host, psl->port);
 	pthread_mutex_destroy(&(psl->lock));
 	if (psl->client)
-		free((void *) psl->client);
+		free(psl->client);
 	if (psl->_prev)
 		psl->_prev->_next = psl->_next;
 	if (psl->_next)
@@ -323,28 +325,33 @@ static void *_psl_loop(void *ptr)
 }
 
 // Initialize and start PSL thread
-int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
-	     int port, FILE *dbg_fp)
+//
+// The return value is encode int a 16-bit value divided into 4 for each
+// possible adapter.  Then the 4 bits in each adapter represent the 4 possible
+// AFUs on an adapter.  For example: afu0.0 is 0x8000 and afu3.0 is 0x0008.
+uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
+		  int port, FILE *dbg_fp)
 {
 	struct psl *psl;
+	uint16_t location;
 
-	if ((psl = (struct psl*) malloc(sizeof(struct psl))) == NULL) {
+	location = 0x8000;
+	if ((psl = (struct psl*) calloc(1, sizeof(struct psl))) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl");
 		goto init_fail;
 	}
-	memset(psl, 0, sizeof(struct psl));
 	psl->timeout = parms->timeout;
 	if ((strlen(id) != 6) || strncmp(id, "afu", 3) || (id[4] != '.')) {
 		warn_msg("Invalid afu name: %s", id);
 		goto init_fail;
 	}
 	if ((id[3] < '0') || (id[3] > '3')) {
-		warn_msg("Invalid afu major: %s", id[3]);
+		warn_msg("Invalid afu major: %c", id[3]);
 		goto init_fail;
 	}
 	if ((id[5] < '0') || (id[5] > '3')) {
-		warn_msg("Invalid afu minor: %s", id[3]);
+		warn_msg("Invalid afu minor: %c", id[5]);
 		goto init_fail;
 	}
         psl->dbg_fp = dbg_fp;
@@ -352,6 +359,8 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	psl->minor = id[5] - '0';
 	psl->dbg_id = psl->major << 4;
 	psl->dbg_id |= psl->minor;
+	location >>= (4 * psl->major);
+	location >>= psl->minor;
 	if ((psl->name = (char *) malloc(strlen(id)+1)) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl->name");
@@ -433,7 +442,7 @@ int psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		(*head)->_prev = psl;
 	*head = psl;
 
-	return 0;
+	return location;
 
 init_fail_lock:
 	pthread_mutex_destroy(&(psl->lock));
@@ -447,6 +456,6 @@ init_fail:
 			free(psl->name);
 		free(psl);
 	}
-	return -1;
+	return 0;
 }
 

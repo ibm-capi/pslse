@@ -106,7 +106,7 @@ uint8_t * get_bytes_silent(int fd, unsigned size, int timeout)
 {
 	struct pollfd pfd;
 	uint8_t *data;
-	int count, bytes;
+	int count, bytes, rc;
 
 	data = (uint8_t *) malloc(size+1);
 	memset(data, 0, size+1);
@@ -116,7 +116,13 @@ uint8_t * get_bytes_silent(int fd, unsigned size, int timeout)
 	pfd.events = POLLIN | POLLHUP;
 	pfd.revents = 0;
 	while (data && (bytes < size)) {
-		if (poll(&pfd, 1, timeout) <= 0) {
+		rc = poll(&pfd, 1, timeout);
+		if (rc == 0)
+			break;
+		if (rc < 0) {
+			free(data);
+			data = NULL;
+			warn_msg("Socket disconnect");
 			break;
 		}
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
@@ -135,6 +141,12 @@ uint8_t * get_bytes_silent(int fd, unsigned size, int timeout)
 				break;
 			bytes += count;
 		}
+#if DEBUG
+		DPRINTF("Socket in:0x");
+		for (count = 0; count < bytes; count++)
+			DPRINTF("%02x", data[count]);
+		DPRINTF("\n");
+#endif /* DEBUG */
 	}
 
 	return data;
@@ -163,12 +175,20 @@ int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout)
 		perror("clock_gettime");
 		return 0;
 	}
+#if DEBUG
+	int i;
+	DPRINTF("Socket out:0x");
+#endif /* DEBUG */
 	now = start;
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = write(fd, &(data[bytes]), size);
 		if (count < 0)
 			break;
+#if DEBUG
+		for (i = 0; i < count + bytes; i++)
+			DPRINTF("%02x", data[i]);
+#endif /* DEBUG */
 		bytes += count;
 		if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
 			perror("clock_gettime");
@@ -183,6 +203,7 @@ int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout)
 			break;
 		}
 	}
+	DPRINTF("\n");
 
 	return bytes;
 }
