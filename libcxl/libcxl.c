@@ -329,41 +329,28 @@ static void *_psl_loop(void *ptr)
 	pthread_exit(NULL);
 }
 
-struct cxl_afu_h * cxl_afu_open_dev(char *path)
+static int _pslse_connect(uint16_t *afu_map, int *fd)
 {
-	struct cxl_afu_h *afu;
+	FILE *fp;
+	uint8_t *buffer;
 	struct sockaddr_in ssadr;
 	struct hostent *he;
-	FILE *fp;
-	char *afu_id, *host, *port_str;
-	uint16_t afu_map, map_match, query16;
-	uint8_t *buffer;
+	char *host, *port_str;
 	int port;
-	size_t query_size;
-	uint8_t major, minor, dbg_id, query;
-	char afu_type;
-
-	// Allocate AFU struct
-	afu = (struct cxl_afu_h *) calloc(1, sizeof(struct cxl_afu_h));
-	if (!afu) {
-		perror("malloc");
-		errno = ENOMEM;
-		return NULL;
-	}
 
 	// Get hostname and port of PSLSE server
-	DPRINTF("AFU OPEN\n");
+	DPRINTF("AFU CONNECT\n");
 	fp = fopen("pslse_server.dat", "r");
 	if (!fp) {
 		perror("fopen:pslse_server.dat");
-		goto open_fail;
+		goto connect_fail;
 	}
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	if(fgets((char*) buffer, MAX_LINE_CHARS-1, fp) == NULL) {
 		perror("fgets:pslse_server.dat");
 		fclose(fp);
 		free(buffer);
-		goto open_fail;
+		goto connect_fail;
 	}
 	fclose(fp);
 	host = (char*) buffer;
@@ -373,19 +360,91 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	if (!host || !port_str) {
 		warn_msg("cxl_afu_open_dev:Invalid format in pslse_server.dat");
 		free(buffer);
-		goto open_fail;
+		goto connect_fail;
 	}
 	port = atoi(port_str);
+
+	// Connect to PSLSE server
+	if ((he = gethostbyname(host)) == NULL) {
+		herror("gethostbyname");
+		free(buffer);
+		goto connect_fail;
+	}
+	memset(&ssadr, 0, sizeof(ssadr));
+	memcpy(&ssadr.sin_addr, he->h_addr_list[0], he->h_length);
+	ssadr.sin_family = AF_INET;
+	ssadr.sin_port = htons(port);
+	if ((*fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+		perror("socket");
+		free(buffer);
+		goto connect_fail;
+	}
+	ssadr.sin_family = AF_INET;
+	ssadr.sin_port = htons(port);
+	if (connect(*fd, (struct sockaddr *)&ssadr, sizeof(ssadr)) < 0) {
+		perror("connect");
+		free(buffer);
+		goto connect_fail;
+	}
+	memset((char*) buffer, 0, sizeof(buffer));
+	strcpy((char*) buffer, "PSLSE");
+	buffer[5] = (uint8_t) PSLSE_VERSION;
+	if (put_bytes_silent(*fd, 6, buffer, -1) != 6) {
+		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
+		free(buffer);
+		goto connect_fail;
+	}
+	free(buffer);
+	if ((buffer = get_bytes_silent(*fd, 3, -1)) == NULL) {
+		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
+		close(*fd);
+		goto connect_fail;
+	}
+	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
+		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
+		free(buffer);
+		close(*fd);
+		goto connect_fail;
+	}
+	memcpy((char*) afu_map, (char*) &(buffer[1]), 2);
+	*afu_map = (long) le16toh(*afu_map);
+	free(buffer);
+	printf("Connection to %s:%d\n", host, port);
+	return 0;
+
+connect_fail:
+	errno = ENODEV;
+	return -1;
+}
+
+static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
+{
+	struct cxl_afu_h *afu;
+	uint8_t *buffer;
+	char *afu_id;
+	uint16_t map_match, query16;
+	size_t query_size;
+	uint8_t major, minor, dbg_id, query;
+	char afu_type;
+
+	DPRINTF("AFU OPEN\n");
+	// Allocate AFU struct
+	afu = (struct cxl_afu_h *) calloc(1, sizeof(struct cxl_afu_h));
+	if (!afu) {
+		perror("malloc");
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	afu->fd = fd;
 	afu_id = strrchr(path, '/');
 	afu_id++;
 	if ((afu_id[3] < '0') || (afu_id[3] > '3')) {
 		warn_msg("Invalid afu major: %c", afu_id[3]);
-		free(buffer);
 		goto open_fail;
 	}
 	if ((afu_id[5] < '0') || (afu_id[5] > '3')) {
 		warn_msg("Invalid afu minor: %c", afu_id[5]);
-		free(buffer);
 		goto open_fail;
 	}
 	major = afu_id[3] - '0';
@@ -395,57 +454,14 @@ struct cxl_afu_h * cxl_afu_open_dev(char *path)
 	map_match >>= 4*major;
 	map_match >>= minor;
 	dbg_id = (major << 4) | minor;
-	printf("Attempting connection to %s on %s:%d\n", afu_id, host, port);
+	printf("Attempting connection to %s\n", afu_id);
 
-	// Connect to PSLSE server
-	if ((he = gethostbyname(host)) == NULL) {
-		herror("gethostbyname");
-		free(buffer);
-		goto open_fail;
-	}
-	memset(&ssadr, 0, sizeof(ssadr));
-	memcpy(&ssadr.sin_addr, he->h_addr_list[0], he->h_length);
-	ssadr.sin_family = AF_INET;
-	ssadr.sin_port = htons(port);
-	if ((afu->fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		perror("socket");
-		free(buffer);
-		goto open_fail;
-	}
-	ssadr.sin_family = AF_INET;
-	ssadr.sin_port = htons(port);
-	if (connect(afu->fd, (struct sockaddr *)&ssadr, sizeof(ssadr)) < 0) {
-		perror("connect");
-		free(buffer);
-		goto open_fail;
-	}
-	memset((char*) buffer, 0, sizeof(buffer));
-	strcpy((char*) buffer, "PSLSE");
-	buffer[5] = (uint8_t) PSLSE_VERSION;
-	if (put_bytes_silent(afu->fd, 6, buffer, -1) != 6) {
-		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
-		free(buffer);
-		goto open_fail;
-	}
-	free(buffer);
-	if ((buffer = get_bytes_silent(afu->fd, 3, -1)) == NULL) {
-		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
-		close(afu->fd);
-		goto open_fail;
-	}
-	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
-		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
-		free(buffer);
-		close(afu->fd);
-		goto open_fail;
-	}
-	memcpy((char*) &afu_map, (char*) &(buffer[1]), 2);
-	afu_map = (long) le16toh(afu_map);
 	if ((afu_map & map_match) != map_match) {
 		warn_msg("cxl_afu_open_dev:AFU not in system");
 		close(afu->fd);
 		goto open_fail;
 	}
+	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	buffer[0] = (uint8_t) PSLSE_OPEN;
 	buffer[1] = dbg_id;
 	buffer[2] = afu_type;
@@ -506,6 +522,17 @@ open_fail:
 	free(afu);
 	errno = ENODEV;
 	return NULL;
+}
+
+struct cxl_afu_h * cxl_afu_open_dev(char *path)
+{
+	int fd;
+	uint16_t afu_map;
+
+	if (_pslse_connect(&afu_map, &fd) < 0)
+		return NULL;
+
+	return _pslse_open(path, fd, afu_map);
 }
 
 void cxl_afu_free(struct cxl_afu_h *afu) {
