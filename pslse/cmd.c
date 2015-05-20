@@ -498,7 +498,6 @@ void handle_buffer_write(struct cmd *cmd)
 				     event->parity) == PSL_SUCCESS) {
 			event->resp = PSL_RESPONSE_DONE;
 			event->state = MEM_DONE;
-			client->mem_access = NULL;
 			debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id,
 					       event->tag);
 			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
