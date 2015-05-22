@@ -125,7 +125,7 @@ static void disconnect_afu()
 		++i;
 	}
 	info_msg("Shutting down connection to %s\n", psl->name);
-	psl_list->state = PSLSE_DONE;
+	psl->state = PSLSE_DONE;
 	pthread_join(psl->thread, NULL);
 	disconnect_afu();
 }

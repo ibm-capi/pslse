@@ -432,14 +432,16 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	}
 
 	// Add psl to list
-	while ((*head!=NULL) && ((*head)->major<psl->major))
+	while ((*head != NULL) && ((*head)->major<psl->major)) {
 		head = &((*head)->_next);
-	while ((*head!=NULL) && ((*head)->major==psl->major) &&
-               ((*head)->minor<psl->minor))
+	}
+	while ((*head != NULL) && ((*head)->major==psl->major) &&
+               ((*head)->minor<psl->minor)) {
 		head = &((*head)->_next);
+	}
 	psl->_next = *head;
-	if (*head != NULL)
-		(*head)->_prev = psl;
+	if (psl->_next != NULL)
+		psl->_next->_prev = psl;
 	*head = psl;
 
 	return location;

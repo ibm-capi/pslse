@@ -15,6 +15,7 @@
  */
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <endian.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -386,7 +387,7 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 		free(buffer);
 		goto connect_fail;
 	}
-	memset((char*) buffer, 0, sizeof(buffer));
+	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	strcpy((char*) buffer, "PSLSE");
 	buffer[5] = (uint8_t) PSLSE_VERSION;
 	if (put_bytes_silent(*fd, 6, buffer, -1) != 6) {
@@ -410,6 +411,7 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	*afu_map = (long) le16toh(*afu_map);
 	free(buffer);
 	printf("Connection to %s:%d\n", host, port);
+	free(host);
 	return 0;
 
 connect_fail:
@@ -417,26 +419,116 @@ connect_fail:
 	return -1;
 }
 
+static struct cxl_adapter_h * _new_adapter(uint16_t afu_map, uint16_t position)
+{
+	struct cxl_adapter_h *adapter;
+	uint16_t mask = 0xf000;
+	int id_num = 0;
+
+	if (position == 0)
+		return NULL;
+
+	adapter = (struct cxl_adapter_h*)
+		calloc(1, sizeof(struct cxl_adapter_h));
+	while ((position & mask) == 0) {
+		mask >>= 4;
+		++id_num;
+	}
+	adapter->map = afu_map;
+	adapter->position = position;
+	adapter->mask = mask;
+	adapter->id = calloc(6, sizeof(char));
+	sprintf(adapter->id, "card%d", id_num);
+	return adapter;
+}
+
+static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position)
+{
+	struct cxl_afu_h *afu;
+	uint16_t adapter_mask = 0xf000;
+	uint16_t afu_mask = 0x8000;
+	int major = 0;
+	int minor = 0;
+
+	if (position == 0) {
+		errno = ENODEV;
+		return NULL;
+	}
+	while ((position & adapter_mask) == 0) {
+		adapter_mask >>= 4;
+		afu_mask >>= 4;
+		++major;
+	}
+	while ((position & afu_mask) == 0) {
+		afu_mask >>= 1;
+		++minor;
+	}
+	afu = (struct cxl_afu_h*)
+		calloc(1, sizeof(struct cxl_afu_h));
+	if (afu == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	afu->adapter = major;
+	afu->map = afu_map;
+	afu->position = position;
+	afu->id = calloc(7, sizeof(char));
+	sprintf(afu->id, "afu%d.%d", major, minor);
+	return afu;
+}
+
+static void _release_afus(struct cxl_afu_h *afu)
+{
+	struct cxl_afu_h *last, *current;
+	int adapter;
+
+	if (afu==NULL)
+		return;
+
+	if (afu->_head->adapter == afu->adapter) {
+		current = afu->_head;
+	}
+	current = afu->_head;
+	while (current->adapter < afu->adapter) {
+		last = current;
+	}
+	adapter = afu->adapter;
+	current = afu;
+	while ((current != NULL) && (current->adapter == adapter)) {
+		afu = current;
+		current = current->_next;
+		free(afu->id);
+		free(afu);
+	}
+}
+
+static void _release_adapters(struct cxl_adapter_h *adapter)
+{
+	struct cxl_adapter_h *current;
+
+	_release_afus(adapter->afu_list);
+	current = adapter;
+	while (current != NULL) {
+		adapter = current;
+		current = current->_next;
+		free(adapter->id);
+		free(adapter);
+	}
+}
+
 static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
 {
 	struct cxl_afu_h *afu;
 	uint8_t *buffer;
 	char *afu_id;
-	uint16_t map_match, query16;
+	uint16_t position, query16;
 	size_t query_size;
 	uint8_t major, minor, dbg_id, query;
 	char afu_type;
 
 	DPRINTF("AFU OPEN\n");
-	// Allocate AFU struct
-	afu = (struct cxl_afu_h *) calloc(1, sizeof(struct cxl_afu_h));
-	if (!afu) {
-		perror("malloc");
-		errno = ENOMEM;
-		return NULL;
-	}
 
-	afu->fd = fd;
+	// Discover AFU position
 	afu_id = strrchr(path, '/');
 	afu_id++;
 	if ((afu_id[3] < '0') || (afu_id[3] > '3')) {
@@ -450,21 +542,26 @@ static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
 	major = afu_id[3] - '0';
 	minor = afu_id[5] - '0';
 	afu_type = afu_id[6];
-	map_match = 0x8000;
-	map_match >>= 4*major;
-	map_match >>= minor;
+	position = 0x8000;
+	position >>= 4*major;
+	position >>= minor;
 	dbg_id = (major << 4) | minor;
-	printf("Attempting connection to %s\n", afu_id);
-
-	if ((afu_map & map_match) != map_match) {
+	if ((afu_map & position) != position) {
 		warn_msg("cxl_afu_open_dev:AFU not in system");
 		close(afu->fd);
 		goto open_fail;
 	}
+
+	// Create struct for AFU
+	afu = _new_afu(afu_map, position);
+	if (afu == NULL)
+		return NULL;
+
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	buffer[0] = (uint8_t) PSLSE_OPEN;
 	buffer[1] = dbg_id;
 	buffer[2] = afu_type;
+	afu->fd = fd;
 	if (put_bytes_silent(afu->fd, 3, buffer, -1) != 3) {
 		warn_msg("cxl_afu_open_dev:Failed to write to socket");
 		free(buffer);
@@ -503,6 +600,7 @@ static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
 	}
 	memcpy((char*) &query16, (char*) &(buffer[1]), 2);
 	free(buffer);
+	afu->_head = afu;
 	afu->irqs_min = (long) le16toh(query16);
 	afu->opened = 1;
 	afu->api_version = 1;
@@ -513,6 +611,7 @@ static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
 		close(afu->fd);
 		goto open_fail;
 	}
+	afu->adapter = major;
 	afu->id = (char *) malloc(strlen(afu_id)+1);
 	strcpy(afu->id, afu_id);
 
@@ -524,10 +623,199 @@ open_fail:
 	return NULL;
 }
 
+struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter)
+{
+	struct cxl_adapter_h *head;
+	uint16_t afu_map, afu_mask;
+	int fd;
+	uint8_t rc = PSLSE_DETACH;
+
+	// First adapter
+	if (adapter == NULL) {
+		// Query PSLSE
+		if (_pslse_connect(&afu_map, &fd) < 0)
+			return NULL;
+		// Disconnect from PSLSE
+		if (put_bytes_silent(fd, 1, &rc, -1) != 1)
+			return NULL;
+		// No devices?
+		assert (afu_map != 0);
+		afu_mask = 0x8000;
+		// Find first AFU and return struct for it
+		while ((afu_map & afu_mask) != afu_mask)
+			afu_mask >>= 1;
+		head = _new_adapter(afu_map, afu_mask);
+		head->_head = head;
+		return head;
+	}
+
+	// Return next adapter if already set
+	if (adapter->_next != NULL)
+		return adapter->_next;
+
+	// Find next adapter
+	afu_mask = adapter->position;
+	afu_map = adapter->map;
+	while (((afu_mask & ~adapter->mask) == 0) && (afu_mask != 0))
+		afu_mask >>= 1;
+
+	// Find first AFU on another adapter
+	while (((afu_map & afu_mask) != afu_mask) && (afu_mask != 0))
+		afu_mask >>= 1;
+
+	// No more AFUs
+	if (afu_mask == 0) {
+		_release_adapters(adapter->_head);
+		return NULL;
+	}
+
+	// Update pointers and return next adapter
+	adapter->_next = _new_adapter(afu_map, afu_mask);
+	adapter->_next->_head = adapter->_head;
+	return adapter->_next;
+}
+
+char * cxl_adapter_dev_name(struct cxl_adapter_h *adapter)
+{
+	if (adapter==NULL)
+		return NULL;
+
+	return adapter->id;
+}
+
+void cxl_adapter_free(struct cxl_adapter_h *adapter)
+{
+	struct cxl_adapter_h *head, *current;
+
+	if (adapter==NULL)
+		return;
+
+	// If removing head then update all head pointers to next
+	current = head = adapter->_head;
+	while ((head == adapter) && (current != NULL)) {
+		current->_head = head->_next;
+		current = current->_next;
+	}
+
+	// Update list to skip adapter being removed
+	current = adapter->_head;
+	while (current != NULL) {
+		if (current->_next == adapter)
+			current->_next = adapter->_next;
+		current = current->_next;
+	}
+
+	// Free memory for adapter
+	free(adapter->id);
+	free(adapter);
+}
+
+struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu)
+{
+	struct cxl_afu_h *head;
+	uint16_t afu_map, afu_mask;
+
+	if (adapter==NULL)
+		return NULL;
+
+	afu_mask = adapter->position;
+	afu_map = adapter->map;
+
+	// First afu
+	if (afu == NULL) {
+		// No devices?
+		assert (afu_map != 0);
+		// Find first AFU and return struct for it
+		afu_mask = adapter->mask & 0x8888;
+		while ((afu_map & afu_mask) != afu_mask)
+			afu_mask >>= 1;
+		head = _new_afu(afu_map, afu_mask);
+		head->_head = head;
+		if (head != NULL)
+			head->_head = head;
+		return head;
+	}
+
+	// Return next afu if already set
+	if (afu->_next != NULL)
+		return afu->_next;
+
+	// Find next afu on this adapter
+	afu_mask = afu->position >> 1;
+	afu_map = afu->map;
+	while (((afu_mask & adapter->mask)!=0) && ((afu_mask & afu->map)==0))
+		afu_mask >>= 1;
+
+	// No more AFUs on this adapter
+	if ((afu_mask & adapter->mask)==0) {
+		_release_afus(adapter->afu_list);
+		return NULL;
+	}
+
+	// Update pointers and return next afu
+	afu->_next = _new_afu(afu_map, afu_mask);
+	afu->_next->_head = afu->_head;
+	return afu->_next;
+}
+
+struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu)
+{
+	struct cxl_afu_h *head;
+	uint16_t afu_map, afu_mask;
+	int fd;
+	uint8_t rc = PSLSE_DETACH;
+
+	// First afu
+	if (afu == NULL) {
+		// Query PSLSE
+		if (_pslse_connect(&afu_map, &fd) < 0)
+			return NULL;
+		// Disconnect from PSLSE
+		if (put_bytes_silent(fd, 1, &rc, -1) != 1)
+			return NULL;
+		// No devices?
+		assert (afu_map != 0);
+		afu_mask = 0x8000;
+		// Find first AFU and return struct for it
+		while ((afu_map & afu_mask) != afu_mask)
+			afu_mask >>= 1;
+		head = _new_afu(afu_map, afu_mask);
+		head->_head = head;
+		return head;
+	}
+
+	// Return next afu if already set
+	if (afu->_next != NULL)
+		return afu->_next;
+
+	// Find next afu
+	afu_mask = afu->position;
+	afu_map = afu->map;
+	afu_mask >>= 1;
+	while ((afu_mask != 0) && ((afu_mask & afu_map) == 0))
+		afu_mask >>= 1;
+
+	// No more AFUs
+	if (afu_mask == 0) {
+		_release_afus(afu->_head);
+		return NULL;
+	}
+
+	// Update pointers and return next afu
+	afu->_next = _new_afu(afu_map, afu_mask);
+	afu->_next->_head = afu->_head;
+	return afu->_next;
+}
+
+char * cxl_afu_dev_name(struct cxl_afu_h *afu)
+{
+	return afu->id;
+}
+
 struct cxl_afu_h * cxl_afu_open_dev(char *path)
 {
-	int fd;
 	uint16_t afu_map;
+	int fd;
 
 	if (_pslse_connect(&afu_map, &fd) < 0)
 		return NULL;

@@ -23,23 +23,17 @@
 #include <poll.h>
 #include <pthread.h>
 
-struct cxl_adapter_h {
-	DIR *enum_dir;
-	struct dirent *enum_ent;
-	char *sysfs_path;
-	long caia_major;
-	long caia_minor;
-	long pslse_version;
-};
-
 struct cxl_afu_h {
 	pthread_t thread;
 	pthread_mutex_t lock;
 	struct cxl_event *irq;
 	struct cxl_event *dsi;
 	struct cxl_event *first_event;
+	int adapter;
 	char *id;
 	uint8_t context;
+	uint16_t map;
+	uint16_t position;
 	int fd;
 	int opened;
 	int attached;
@@ -56,6 +50,25 @@ struct cxl_afu_h {
 	long mmio_len;
 	long mmio_off;
 	long prefault_mode;
+	struct cxl_afu_h *_head;
+	struct cxl_afu_h *_next;
+	struct cxl_afu_h *_next_adapter;
+};
+
+struct cxl_adapter_h {
+	DIR *enum_dir;
+	struct dirent *enum_ent;
+	char *sysfs_path;
+	long caia_major;
+	long caia_minor;
+	long pslse_version;
+	char *id;
+	uint16_t map;
+	uint16_t mask;
+	uint16_t position;
+	struct cxl_adapter_h *_head;
+	struct cxl_adapter_h *_next;
+	struct cxl_afu_h *afu_list;
 };
 
 #endif

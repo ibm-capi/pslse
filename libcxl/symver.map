@@ -1,5 +1,12 @@
 LIBCXL_1 {
 	global:
+		cxl_adapter_next;
+		cxl_adapter_dev_name;
+		cxl_adapter_free;
+		cxl_adapter_afu_next;
+		cxl_afu_next;
+		cxl_afu_dev_name;
+
 		cxl_afu_open_dev;
 		cxl_afu_free;
 		cxl_afu_opened;
