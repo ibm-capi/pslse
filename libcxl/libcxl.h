@@ -84,7 +84,7 @@ enum cxl_views {
  * closed by cxl_afu_free() regardless of how it was opened.
  */
 struct cxl_afu_h *cxl_afu_open_dev(char *path);
-//struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
+struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
 //struct cxl_afu_h * cxl_afu_fd_to_h(int fd);
 void cxl_afu_free(struct cxl_afu_h *afu);
 int cxl_afu_opened(struct cxl_afu_h *afu);

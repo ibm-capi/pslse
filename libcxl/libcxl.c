@@ -392,19 +392,24 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	buffer[5] = (uint8_t) PSLSE_VERSION;
 	if (put_bytes_silent(*fd, 6, buffer, -1) != 6) {
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
+		free(host);
 		free(buffer);
 		goto connect_fail;
 	}
 	free(buffer);
 	if ((buffer = get_bytes_silent(*fd, 3, -1)) == NULL) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
+		free(host);
 		close(*fd);
+		*fd = -1;
 		goto connect_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
 		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
+		free(host);
 		free(buffer);
 		close(*fd);
+		*fd = -1;
 		goto connect_fail;
 	}
 	memcpy((char*) afu_map, (char*) &(buffer[1]), 2);
@@ -491,6 +496,7 @@ static void _release_afus(struct cxl_afu_h *afu)
 	current = afu->_head;
 	while (current->adapter < afu->adapter) {
 		last = current;
+		current = current->_next;
 	}
 	adapter = afu->adapter;
 	current = afu;
@@ -516,40 +522,24 @@ static void _release_adapters(struct cxl_adapter_h *adapter)
 	}
 }
 
-static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
+static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
+				      uint8_t minor, char afu_type)
 {
 	struct cxl_afu_h *afu;
 	uint8_t *buffer;
-	char *afu_id;
 	uint16_t position, query16;
+	uint8_t dbg_id, query;
 	size_t query_size;
-	uint8_t major, minor, dbg_id, query;
-	char afu_type;
 
-	DPRINTF("AFU OPEN\n");
-
-	// Discover AFU position
-	afu_id = strrchr(path, '/');
-	afu_id++;
-	if ((afu_id[3] < '0') || (afu_id[3] > '3')) {
-		warn_msg("Invalid afu major: %c", afu_id[3]);
-		goto open_fail;
-	}
-	if ((afu_id[5] < '0') || (afu_id[5] > '3')) {
-		warn_msg("Invalid afu minor: %c", afu_id[5]);
-		goto open_fail;
-	}
-	major = afu_id[3] - '0';
-	minor = afu_id[5] - '0';
-	afu_type = afu_id[6];
+	dbg_id = (major << 4) | minor;
 	position = 0x8000;
 	position >>= 4*major;
 	position >>= minor;
-	dbg_id = (major << 4) | minor;
 	if ((afu_map & position) != position) {
 		warn_msg("cxl_afu_open_dev:AFU not in system");
-		close(afu->fd);
-		goto open_fail;
+		close(fd);
+		errno = ENODEV;
+		return NULL;
 	}
 
 	// Create struct for AFU
@@ -612,8 +602,8 @@ static struct cxl_afu_h * _pslse_open(char *path, int fd, uint16_t afu_map)
 		goto open_fail;
 	}
 	afu->adapter = major;
-	afu->id = (char *) malloc(strlen(afu_id)+1);
-	strcpy(afu->id, afu_id);
+	afu->id = (char *) malloc(7);
+	sprintf(afu->id, "afu%d.%d", major, minor);
 
 	return afu;
 
@@ -815,12 +805,66 @@ char * cxl_afu_dev_name(struct cxl_afu_h *afu)
 struct cxl_afu_h * cxl_afu_open_dev(char *path)
 {
 	uint16_t afu_map;
+	uint8_t major, minor;
+	char *afu_id;
+	char afu_type;
 	int fd;
 
 	if (_pslse_connect(&afu_map, &fd) < 0)
 		return NULL;
 
-	return _pslse_open(path, fd, afu_map);
+	// Discover AFU position
+	afu_id = strrchr(path, '/');
+	afu_id++;
+	if ((afu_id[3] < '0') || (afu_id[3] > '3')) {
+		warn_msg("Invalid afu major: %c", afu_id[3]);
+		errno = ENODEV;
+		return NULL;
+	}
+	if ((afu_id[5] < '0') || (afu_id[5] > '3')) {
+		warn_msg("Invalid afu minor: %c", afu_id[5]);
+		errno = ENODEV;
+		return NULL;
+	}
+	major = afu_id[3] - '0';
+	minor = afu_id[5] - '0';
+	afu_type = afu_id[6];
+
+	return _pslse_open(fd, afu_map, major, minor, afu_type);
+}
+
+struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
+{
+	uint8_t major, minor;
+	uint16_t mask;
+	char afu_type;
+
+	mask = 0xf000;
+	major = minor = 0;
+	while (((mask & afu->position) != afu->position) && (mask != 0)) {
+		mask >>= 4;
+		major++;
+	}
+	mask &= 0x8888;
+	while (((mask & afu->position) != afu->position) && (mask != 0)) {
+		mask >>= 1;
+		minor++;
+	}
+	switch (view) {
+	case CXL_VIEW_DEDICATED:
+		afu_type = 'd';
+		break;
+	case CXL_VIEW_MASTER:
+		afu_type = 'm';
+		break;
+	case CXL_VIEW_SLAVE:
+		afu_type = 's';
+		break;
+	default:
+		errno = ENODEV;
+		return NULL;
+	}
+	return _pslse_open(afu->fd, afu->map, major, minor, afu_type);
 }
 
 void cxl_afu_free(struct cxl_afu_h *afu) {
