@@ -327,6 +327,7 @@ static void *_psl_loop(void *ptr)
 		pthread_mutex_lock(&(afu->lock));
 	}
 
+	afu->attached = 0;
 	pthread_exit(NULL);
 }
 
