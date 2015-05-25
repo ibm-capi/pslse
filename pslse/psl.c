@@ -128,7 +128,7 @@ static void _handle_afu(struct psl *psl)
 		handle_response(psl->cmd);
 		handle_buffer_write(psl->cmd);
 		handle_buffer_read(psl->cmd);
-		handle_buffer_data(psl->cmd);
+		handle_buffer_data(psl->cmd, psl->parity_enabled);
 		handle_touch(psl->cmd);
 		handle_cmd(psl->cmd, psl->parity_enabled, psl->latency);
 		handle_interrupt(psl->cmd);

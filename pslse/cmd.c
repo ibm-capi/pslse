@@ -653,7 +653,7 @@ void handle_interrupt(struct cmd *cmd)
 	event->state = MEM_DONE;
 }
 
-void handle_buffer_data(struct cmd *cmd)
+void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 {
 	struct client *client;
 	uint64_t *addr;
@@ -689,14 +689,16 @@ void handle_buffer_data(struct cmd *cmd)
 	rc = psl_get_buffer_read_data(cmd->afu_event, data, parity);
 	if ((rc == PSL_SUCCESS) && (cmd->buffer_read != NULL) &&
 	    (client->mem_access == NULL)) {
-		parity_check = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
-		generate_cl_parity(data, parity_check);
-		if (strncmp((char *) parity, (char *) parity_check,
-		    DWORDS_PER_CACHELINE/8)) {
-			error_msg("Buffer read parity error tag=0x%02x",
-				  cmd->buffer_read->tag);
+		if (parity_enable) {
+			parity_check = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
+			generate_cl_parity(data, parity_check);
+			if (strncmp((char *) parity, (char *) parity_check,
+				    DWORDS_PER_CACHELINE/8)) {
+				error_msg("Buffer read parity error tag=0x%02x",
+					  cmd->buffer_read->tag);
+			}
+			free(parity_check);
 		}
-		free(parity_check);
 		// Randomly decide to not send data to client yet
 		if (allow_buffer(cmd->parms)) {
 			cmd->buffer_read->state = MEM_IDLE;

@@ -85,7 +85,7 @@ void handle_cmd(struct cmd* cmd, uint32_t parity_enabled, uint32_t latency);
 
 void handle_buffer_read(struct cmd *cmd);
 
-void handle_buffer_data(struct cmd *cmd);
+void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable);
 
 void handle_buffer_write(struct cmd *cmd);
 
