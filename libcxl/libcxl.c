@@ -626,7 +626,7 @@ static void do_buffer_write(uint8_t * addr, uint32_t tag, int prelim)
 			 CACHELINE_BYTES, addr, parity);
 }
 
-static void handle_buffer_req(struct cxl_afu_h *afu)
+static int handle_buffer_req(struct cxl_afu_h *afu)
 {
 	enum {
 		// A prelim_op is n extra buffer read/write which occurs before
@@ -640,24 +640,24 @@ static void handle_buffer_req(struct cxl_afu_h *afu)
 
 	//7 in 8 chance to delay so more commands can come
 	if (op >= DELAY_START && op <= DELAY_END)
-		return;
+		return 0;
 
 	int i = find_buffer_req(0);
 	struct afu_req *req = &status.buffer_req[i];
 
 	if (req->type == REQ_EMPTY)
-		return;
+		return 0;
 
 	if (check_flushing(req))
-		return;
+		return 0;
 	if (check_mem_addr(req))
-		return;
+		return 0;
 	if (check_paged(req))
-		return;
+		return 0;
 
 	if (req->type == REQ_READ) {
 		if (status.buffer_read != NULL)
-			return;
+			return 0;
 
 		DPRINTF("Buffer Read tag=0x%02x\n", req->tag);
 		psl_buffer_read(status.event, req->tag, (uint64_t) req->addr,
@@ -668,6 +668,7 @@ static void handle_buffer_req(struct cxl_afu_h *afu)
 		else
 			req->type = REQ_READ_PRELIM;
 
+		return 1;
 	} else if (req->type == REQ_READ_GOT_BUFFER) {
 		add_resp(req->tag, RESP_LATE, PSL_RESPONSE_DONE);
 		req->type = REQ_EMPTY;
@@ -675,12 +676,14 @@ static void handle_buffer_req(struct cxl_afu_h *afu)
 		uint8_t prelim_data[CACHELINE_BYTES];
 		memset(prelim_data, 0xFF, sizeof(prelim_data));
 		do_buffer_write(prelim_data, req->tag, 1);
+		return 1;
 	} else if (req->type == REQ_WRITE && op == COMPLETE) {
 		do_buffer_write(req->addr, req->tag, 0);
 		add_resp(req->tag, RESP_LATE, PSL_RESPONSE_DONE);
-
 		req->type = REQ_EMPTY;
+		return 1;
 	}
+	return 0;
 }
 
 static void handle_aux2_change(struct cxl_afu_h *afu)
@@ -1025,6 +1028,7 @@ static void handle_psl_events(struct cxl_afu_h *afu)
 
 static void *psl(void *ptr)
 {
+	int resp_delay = 0;
 	struct cxl_afu_h *afu = (struct cxl_afu_h *)ptr;
 
 	while (status.psl_state != PSL_DONE) {
@@ -1059,15 +1063,19 @@ static void *psl(void *ptr)
 			status.mmio.request = AFU_PENDING;
 			continue;
 		}
-		if (percent_chance(status.parms.resp_percent))
+		if ((resp_delay==0) &&
+		     (percent_chance(status.parms.resp_percent))) {
 			push_resp();
+		}
 		psl_signal_afu_model(status.event);
 		if (psl_get_afu_events(status.event) > 0) {
 			handle_psl_events(afu);
 		}
 
 		handle_buffer_read(afu);
-		handle_buffer_req(afu);
+		if (resp_delay > 0)
+			--resp_delay;
+		resp_delay += handle_buffer_req(afu);
 	}
 
 	pthread_exit(NULL);
