@@ -740,7 +740,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 int psl_get_afu_events(struct AFU_EVENT *event)
 {
 	int bc = 0;
-	int rbc = 1;
+	uint32_t rbc = 1;
 	fd_set watchset;	/* fds to read from */
 	/* initialize watchset */
 	FD_ZERO(&watchset);

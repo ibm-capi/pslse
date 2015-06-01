@@ -66,32 +66,32 @@ enum pslse_state {
 void usage(int argc, char **argv);
 
 // Display fatal message (For catching code bugs, not AFU bugs)
-void fatal_msg(char *format, ...);
+void fatal_msg(const char *format, ...);
 
 // Display error message
-void error_msg(char *format, ...);
+void error_msg(const char *format, ...);
 
 // Display error message
-void warn_msg(char *format, ...);
+void warn_msg(const char *format, ...);
 
 // Display error message
-void info_msg(char *format, ...);
+void info_msg(const char *format, ...);
 
 // Delay for up to ns nanoseconds
 void ns_delay(long ns);
 
 // Allocate memory for data and get size bytes from fd, no debug
-uint8_t * get_bytes_silent(int fd, unsigned size, int timeout);
+uint8_t * get_bytes_silent(int fd, int size, int timeout);
 
 // Allocate memory for data and get size bytes from fd
-uint8_t * get_bytes(int fd, unsigned size, int timeout, FILE *dbg_fp,
+uint8_t * get_bytes(int fd, int size, int timeout, FILE *dbg_fp,
 		    uint8_t dbg_id, uint16_t context);
 
 // Put bytes on socket and return number of bytes successfully written, no debug
-int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout);
+int put_bytes_silent(int fd, int size, uint8_t *data, int timeout);
 
 // Put bytes on socket and return number of bytes successfully written
-int put_bytes(int fd, unsigned size, uint8_t *data, int timeout, FILE *dbg_fp,
+int put_bytes(int fd, int size, uint8_t *data, int timeout, FILE *dbg_fp,
 	      uint8_t dbg_id, uint16_t context);
 
 // Generate parity for outbound data and checking inbound data

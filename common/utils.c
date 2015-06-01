@@ -36,7 +36,7 @@ void usage(int argc, char **argv)
 }
 
 // Display fatal message (For catching coding bugs, not AFU bugs)
-void fatal_msg(char *format, ...)
+void fatal_msg(const char *format, ...)
 {
 	va_list args;
 
@@ -50,7 +50,7 @@ void fatal_msg(char *format, ...)
 }
 
 // Display error message
-void error_msg(char *format, ...)
+void error_msg(const char *format, ...)
 {
 	va_list args;
 
@@ -65,7 +65,7 @@ void error_msg(char *format, ...)
 }
 
 // Display error message
-void warn_msg(char *format, ...)
+void warn_msg(const char *format, ...)
 {
 	va_list args;
 
@@ -79,7 +79,7 @@ void warn_msg(char *format, ...)
 }
 
 // Display error message
-void info_msg(char *format, ...)
+void info_msg(const char *format, ...)
 {
 	va_list args;
 
@@ -102,7 +102,7 @@ void ns_delay(long ns)
 }
 
 // Get bytes from socket
-uint8_t * get_bytes_silent(int fd, unsigned size, int timeout)
+uint8_t * get_bytes_silent(int fd, int size, int timeout)
 {
 	struct pollfd pfd;
 	uint8_t *data;
@@ -153,7 +153,7 @@ uint8_t * get_bytes_silent(int fd, unsigned size, int timeout)
 }
 
 // Get bytes from socket with debug output
-uint8_t * get_bytes(int fd, unsigned size, int timeout, FILE *dbg_fp,
+uint8_t * get_bytes(int fd, int size, int timeout, FILE *dbg_fp,
 		    uint8_t dbg_id, uint16_t context)
 {
 	uint8_t *data;
@@ -165,7 +165,7 @@ uint8_t * get_bytes(int fd, unsigned size, int timeout, FILE *dbg_fp,
 }
 
 // Put bytes on socket
-int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout)
+int put_bytes_silent(int fd, int size, uint8_t *data, int timeout)
 {
 	struct timespec start, now;
 	int count, bytes;
@@ -209,7 +209,7 @@ int put_bytes_silent(int fd, unsigned size, uint8_t *data, int timeout)
 }
 
 // Put bytes on socket with debug output;
-int put_bytes(int fd, unsigned size, uint8_t *data, int timeout, FILE *dbg_fp,
+int put_bytes(int fd, int size, uint8_t *data, int timeout, FILE *dbg_fp,
 	      uint8_t dbg_id, uint16_t context)
 {
 	int bytes;
