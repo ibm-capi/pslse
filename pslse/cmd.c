@@ -460,6 +460,7 @@ void handle_buffer_write(struct cmd *cmd)
 		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				 CACHELINE_BYTES, event->data, event->parity);
 		pthread_mutex_unlock(cmd->psl_lock);
+		event->resp_delay += 2;
 	}
 	else if ((event->state == MEM_IDLE) && (client->mem_access == NULL)) {
 		if (allow_paged(cmd->parms)) {
@@ -504,6 +505,7 @@ void handle_buffer_write(struct cmd *cmd)
 					 event->context, event->resp);
 		}
 		pthread_mutex_unlock(cmd->psl_lock);
+		event->resp_delay += 2;
 	}
 }
 
@@ -792,6 +794,10 @@ void handle_response(struct cmd *cmd)
 	// Select a random pending response (or none)
 	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
+		if ((*head)->resp_delay > 0)
+			(*head)->resp_delay--;
+		if ((*head)->resp_delay > 0)
+			continue;
 		// Fast track error responses
 		if (((*head)->resp == PSL_RESPONSE_PAGED) ||
 		    ((*head)->resp == PSL_RESPONSE_NRES) ||
@@ -807,7 +813,7 @@ void handle_response(struct cmd *cmd)
 		head = &((*head)->_next);
 	}
 	event = *head;
-	if ((*head == NULL) ||
+	if ((event == NULL) ||
 	    ((event->type==CMD_WRITE) && !allow_resp(cmd->parms))) {
 		pthread_mutex_unlock(&(cmd->lock));
 		return;
