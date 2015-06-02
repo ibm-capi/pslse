@@ -125,7 +125,7 @@ static void get_signal64(vpiHandle signal, uint64_t *data)
   vpi_get_value(signal, &value);
   *data = (uint64_t) value.value.vector[1].aval;
   *data <<= 32;
-  *data += (uint64_t) value.value.vector[0].aval;
+  *data |= ((uint64_t) value.value.vector[0].aval) & ((uint64_t) 0xffffffffll);
 }
 
 static void get_signal_long(vpiHandle signal, uint8_t *data)
