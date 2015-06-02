@@ -12,6 +12,7 @@ LIBCXL_1 {
 		cxl_afu_opened;
 		cxl_afu_attach;
 
+		cxl_afu_fd;
 		cxl_pending_event;
 		cxl_read_event;
 

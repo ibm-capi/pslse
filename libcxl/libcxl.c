@@ -77,6 +77,7 @@ static int _testmemaddr(uint8_t * memaddr)
 static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 {
 	uint16_t size;
+	uint8_t type;
 
 	// Only track a single DSI at a time
 	if (afu->dsi != NULL)
@@ -92,6 +93,9 @@ static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 	afu->dsi->fault.dsisr = DSISR;
 	if (afu->first_event == NULL)
 		afu->first_event = afu->dsi;
+	type = (uint8_t) CXL_EVENT_DATA_STORAGE;
+	// FIXME: Handle errors on write?
+	write(afu->pipe, &type, 1);
 }
 
 static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
@@ -197,6 +201,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 {
 	uint16_t size, irq;
 	uint8_t *data;
+	uint8_t type;
 
 	DPRINTF("AFU INTERRUPT\n");
 	if ((data = get_bytes_silent(afu->fd, 4, -1)) == NULL) {
@@ -219,6 +224,9 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	afu->irq->irq.irq = irq;
 	if (afu->first_event == NULL)
 		afu->first_event = afu->irq;
+	type = (uint8_t) CXL_EVENT_AFU_INTERRUPT;
+	// FIXME: Handle errors on write?
+	write(afu->pipe, &type, 1);
 }
 
 static void *_psl_loop(void *ptr)
@@ -954,6 +962,15 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	afu->attached = 1;
 	pthread_mutex_unlock(&(afu->lock));
 	return 0;
+}
+
+int cxl_afu_fd(struct cxl_afu_h *afu)
+{
+	int fd[2];
+
+	pipe(fd);
+	afu->pipe = fd[0];
+	return fd[1];
 }
 
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)

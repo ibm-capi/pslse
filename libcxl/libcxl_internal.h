@@ -38,6 +38,7 @@ struct cxl_afu_h {
 	int opened;
 	int attached;
 	int mapped;
+	int pipe;
 	volatile int mmio_pending;
 	uint64_t mmio_data;
 	long api_version;

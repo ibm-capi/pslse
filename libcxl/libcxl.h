@@ -105,7 +105,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
  * Returns the file descriptor for the open AFU to use with event loops.
  * Returns -1 if the AFU is not open.
  */
-//int cxl_afu_fd(struct cxl_afu_h *afu);
+int cxl_afu_fd(struct cxl_afu_h *afu);
 
 /*
  * sysfs helpers
