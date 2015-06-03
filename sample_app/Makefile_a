@@ -9,7 +9,7 @@
 CC=gcc
 APP=app
 LIBCXL_DIR=../libcxl
-LINKFLAGS=-lpthread
+LINKFLAGS=-lpthread -lrt
 CFLAGS=-O2
 
 ifdef DEBUG
