@@ -101,6 +101,6 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event);
 
 void handle_response(struct cmd *cmd);
 
-int client_cmd(struct cmd *cmd, uint32_t context);
+int client_cmd(struct cmd *cmd, struct client *client);
 
 #endif /* _CMD_H_ */

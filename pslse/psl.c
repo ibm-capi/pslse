@@ -260,7 +260,8 @@ static void *_psl_loop(void *ptr)
 		for (i = 0; i<psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			_handle_client(psl, psl->client[i]);
+			if (psl->client[i]->valid > 0)
+				_handle_client(psl, psl->client[i]);
 			if ((psl->client[i]->valid < 0) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
@@ -274,7 +275,7 @@ static void *_psl_loop(void *ptr)
 			}
 			if (psl->client[i]->idle_cycles)
 				psl->client[i]->idle_cycles--;
-			if (client_cmd(psl->cmd, i))
+			if (client_cmd(psl->cmd, psl->client[i]))
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
 		}
 	}

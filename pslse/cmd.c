@@ -846,12 +846,27 @@ drive_resp:
 	pthread_mutex_unlock(&(cmd->lock));
 }
 
-int client_cmd(struct cmd *cmd, uint32_t context)
+int client_cmd(struct cmd *cmd, struct client *client)
 {
 	struct cmd_event *event = cmd->list;
 	while (event != NULL) {
-		if (event->context == context)
+		if (event->context != client->context) {
+			event = event->_next;
+			continue;
+		}
+		if (client->valid > 0) {
 			return 1;
+		}
+		pthread_mutex_lock(&(cmd->lock));
+		if (event->state != MEM_DONE) {
+			if ((event->type == CMD_READ) ||
+			    (event->type == CMD_WRITE) ||
+			    (event->type == CMD_TOUCH)) {
+				event->resp = PSL_RESPONSE_AERROR;
+			}
+			event->state = MEM_DONE;
+		}
+		pthread_mutex_unlock(&(cmd->lock));
 		event = event->_next;
 	}
 	return 0;

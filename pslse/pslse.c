@@ -133,6 +133,9 @@ static void disconnect_afu()
 // Disconnect client connections and stop threads gracefully on Ctrl-C
 static void _INThandler(int sig)
 {
+	// Flush debug output
+	fflush(fp);
+	// Handle AFU disconnect
 	disconnect_afu();
 }
 
@@ -346,17 +349,7 @@ static void * _client_loop(void *ptr)
 		break;
 	}
 
-	// Remove client from list and terminate thread
-/*
-	pthread_mutex_lock(&client_lock);
-	if (client->_prev != NULL)
-		client->_prev->_next = client->_next;
-	if (client->_next != NULL)
-		client->_next->_prev = client->_prev;
-	if (client_list == client)
-		client_list = client->_next;
-	pthread_mutex_unlock(&client_lock);
-*/
+	// Terminate thread
 	pthread_exit(NULL);
 }
 
@@ -468,6 +461,21 @@ int main(int argc, char **argv)
 		ip = (char *)malloc(INET_ADDRSTRLEN+1);
 		inet_ntop(AF_INET, &(client_addr.sin_addr.s_addr), ip,
 			  INET_ADDRSTRLEN);
+		// Clean up disconnected clients
+		client_ptr = &client_list;
+		while (*client_ptr != NULL) {
+			client = *client_ptr;
+			if ((client->pending == 0) && (client->valid== 0)) {
+				printf("Removing detached client\n");
+				*client_ptr = client->_next;
+				if (client->_next != NULL)
+					client->_next->_prev = client->_prev;
+				free(client);
+				continue;
+			}
+			client_ptr = &((*client_ptr)->_next);
+		}
+		// Add new client
 		info_msg("Connection from %s", ip);
 		client = _client_connect(connect_fd, ip);
 		pthread_mutex_lock(&client_lock);
@@ -485,20 +493,7 @@ int main(int argc, char **argv)
 			}
 			client_list = client;
 		}
-		// Clean up disconnected clients
-		client_ptr = &client_list;
-		while (*client_ptr != NULL) {
-			client = *client_ptr;
-			if ((client->pending == 0) && (client->valid== 0)) {
-				printf("Removing detached client\n");
-				*client_ptr = client->_next;
-				if (client->_next != NULL)
-					client->_next->_prev = client->_prev;
-				free(client);
-				continue;
-			}
-			client_ptr = &((*client_ptr)->_next);
-		}
+
 		pthread_mutex_unlock(&client_lock);
 	}
 	info_msg("No AFUs connected, Shutting down PSLSE\n");
