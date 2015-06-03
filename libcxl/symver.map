@@ -11,8 +11,12 @@ LIBCXL_1 {
 		cxl_afu_free;
 		cxl_afu_opened;
 		cxl_afu_attach;
-
 		cxl_afu_fd;
+
+		cxl_get_api_version;
+		cxl_get_api_version_compatible;
+		cxl_get_irqs_max;
+		cxl_get_irqs_min;
 		cxl_pending_event;
 		cxl_read_event;
 

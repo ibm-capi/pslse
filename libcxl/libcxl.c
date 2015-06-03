@@ -590,7 +590,7 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		goto open_fail;
 	}
-	query_size = sizeof(uint8_t)+sizeof(uint16_t);
+	query_size = sizeof(uint8_t)+sizeof(uint16_t)+sizeof(uint16_t);
 	if ((buffer = get_bytes_silent(afu->fd, query_size, -1)) == NULL) {
 		warn_msg("cxl_afu_open_dev:Socket failed context retrieve");
 		close(afu->fd);
@@ -603,12 +603,14 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 		goto open_fail;
 	}
 	memcpy((char*) &query16, (char*) &(buffer[1]), 2);
-	free(buffer);
-	afu->_head = afu;
 	afu->irqs_min = (long) le16toh(query16);
+	memcpy((char*) &query16, (char*) &(buffer[3]), 2);
+	afu->irqs_max = (long) le16toh(query16);
+	free(buffer);
 	afu->opened = 1;
 	afu->api_version = 1;
 	afu->api_version_compatible = 1;
+	afu->_head = afu;
 	pthread_mutex_init(&(afu->lock), NULL);
 	if (pthread_create(&(afu->thread), NULL, _psl_loop, afu)) {
 		perror("pthread_create");
@@ -991,6 +993,14 @@ int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 	if (afu==NULL)
 		return -1;
 	*valp = afu->api_version_compatible;
+	return 0;
+}
+
+int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu==NULL)
+		return -1;
+	*valp = afu->irqs_max;
 	return 0;
 }
 

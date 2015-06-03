@@ -176,7 +176,7 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	uint32_t resp = PSL_RESPONSE_DONE;
 	enum cmd_type type = CMD_INTERRUPT;
 
-	if (!irq || (irq > cmd->mmio->desc.num_ints_per_process)) {
+	if (!irq || (irq > cmd->client[handle]->max_irqs)) {
 		warn_msg("AFU issued interrupt with illegal source id");
 		resp = PSL_RESPONSE_FAILED;
 		type = CMD_OTHER;

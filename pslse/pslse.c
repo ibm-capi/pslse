@@ -57,6 +57,7 @@
 #include "../common/utils.h"
 
 #define PSLSE_VERSION 1
+#define PSL_MAX_IRQS 2037
 
 struct psl* psl_list;
 struct client* client_list;
@@ -309,6 +310,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	}
 	client->mmio_size = mmio_size;
 	client->mmio_offset = mmio_offset;
+	client->max_irqs = PSL_MAX_IRQS/psl->mmio->desc.num_of_processes;
 	client->type = afu_type;
 	put_bytes(client->fd, 2, &(rc[0]), timeout, fp, psl->dbg_id,
 		  client->context);
