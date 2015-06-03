@@ -567,7 +567,7 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 		goto open_fail;
 	}
 	free(buffer);
-	if ((buffer = get_bytes_silent(afu->fd, 2, -1)) == NULL) {
+	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close(afu->fd);
 		goto open_fail;
@@ -578,7 +578,12 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 		close(afu->fd);
 		goto open_fail;
 	}
-	afu->context = buffer[1];
+	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
+		warn_msg("cxl_afu_open_dev:Getting context failed");
+		close(afu->fd);
+		goto open_fail;
+	}
+	afu->context = buffer[0];
 	free(buffer);
 	query = PSLSE_QUERY;
 	if (put_bytes_silent(afu->fd, 1, &query, -1) != 1) {
