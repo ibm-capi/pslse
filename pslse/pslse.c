@@ -323,8 +323,10 @@ static void * _client_loop(void *ptr)
 
 	while (client->pending) {
 		data = get_bytes(client->fd, 1, 10, fp, -1, -1);
-		if (data == NULL)
+		if (data == NULL) {
+			client->pending = 0;
 			break;
+		}
 		if (data[0] == '\0') {
 			free(data);
 			continue;
@@ -335,6 +337,10 @@ static void * _client_loop(void *ptr)
 		}
 		free(data);
 		data = get_bytes(client->fd, 2, timeout, fp, -1, -1);
+		if (data == NULL) {
+			client->pending = 0;
+			break;
+		}
 		_client_associate(client, data[0], (char) data[1]);
 		free(data);
 		break;

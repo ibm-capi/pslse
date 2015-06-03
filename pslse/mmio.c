@@ -254,6 +254,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 	}
 	if ((flags = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
 	     == NULL) {
+		client->valid = -1;
 		warn_msg("Socket failure with client context %d",
 			 client->context);
 		ack = PSLSE_MMIO_FAIL;
@@ -291,17 +292,18 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	uint64_t *data64;
 	uint32_t *data32;
 	uint64_t data;
-	uint8_t ack;
 	int fd = client->fd;
 
 	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
-	    == NULL)
+	    == NULL) {
 		goto write_fail;
+	}
 	if (dw) {
 		if ((data64 = (uint64_t *) get_bytes_silent(fd, 8,
 							    mmio->timeout))
-		     == NULL)
+		     == NULL) {
 			goto write_fail;
+		}
 		// Convert data from client from little endian to host
 		data = le64toh(*data64);
 		free(data64);
@@ -309,8 +311,9 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	else {
 		if ((data32 = (uint32_t *) get_bytes_silent(fd, 4,
 							    mmio->timeout))
-		    == NULL)
+		    == NULL) {
 			goto write_fail;
+		}
 		// Convert data from client from little endian to host
 		*data32 = le32toh(*data32);
 		data = (uint64_t) *data32;
@@ -323,12 +326,8 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	return event;
 	
 write_fail:
-	// Send fail acknowledge to client
-	ack = PSLSE_MMIO_FAIL;
-	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, mmio->timeout, mmio->dbg_fp, mmio->dbg_id,
-		  client->context);
-	pthread_mutex_unlock(mmio->psl_lock);
+	// Socket connection is dead
+	client->valid = -1;
 	return NULL;
 }
 
@@ -338,23 +337,19 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 {
 	struct mmio_event *event;
 	uint32_t *offset;
-	uint8_t ack;
 	int fd = client->fd;
 
 	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
-	    == NULL)
+	    == NULL) {
 		goto read_fail;
+	}
 	event = _add_mmio(mmio, client, 1, dw, le32toh(*offset)/4, 0);
 	free(offset);
 	return event;
 	
 read_fail:
-	// Send fail acknowledge to client
-	ack = PSLSE_MMIO_FAIL;
-	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, mmio->timeout, mmio->dbg_fp, mmio->dbg_id,
-		  client->context);
-	pthread_mutex_unlock(mmio->psl_lock);
+	// Socket connection is dead
+	client->valid = -1;
 	return NULL;
 }
 
