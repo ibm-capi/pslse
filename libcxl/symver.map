@@ -10,6 +10,7 @@ LIBCXL_1 {
 		cxl_afu_open_dev;
 		cxl_afu_free;
 		cxl_afu_opened;
+		cxl_afu_attach_full;
 		cxl_afu_attach;
 		cxl_afu_fd;
 

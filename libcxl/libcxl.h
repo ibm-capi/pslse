@@ -92,8 +92,8 @@ int cxl_afu_opened(struct cxl_afu_h *afu);
 /*
  * Attach AFU context to this process
  */
-//int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-//                      __u64 amr);
+int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
+			__u64 amr);
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
 
 /*

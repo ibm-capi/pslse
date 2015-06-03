@@ -914,6 +914,48 @@ int cxl_afu_opened(struct cxl_afu_h *afu) {
 	return afu->opened;
 }
 
+int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
+			__u64 amr) {
+	uint8_t *buffer;
+	int rc, size;
+	uint16_t value;
+
+	rc = cxl_afu_attach(afu, wed);
+
+	size = 1+sizeof(uint16_t);
+	buffer = (uint8_t*)malloc(size);
+	buffer[0] = PSLSE_MAX_INT;
+	value = htole16(num_interrupts);
+	memcpy((char*)&(buffer[1]), (char*) &value, sizeof(uint16_t));
+	if (put_bytes_silent(afu->fd, size, buffer, -1) != size) {
+		perror("put_bytes");
+		close(afu->fd);
+		afu->opened = 0;
+		afu->attached = 0;
+		free(buffer);
+		return -1;
+	}
+	free(buffer);
+	if ((buffer = get_bytes_silent(afu->fd, size, -1)) == NULL) {
+		close(afu->fd);
+		afu->opened = 0;
+		afu->attached = 0;
+		free(buffer);
+		return -1;
+	}
+	if (buffer[0] != PSLSE_MAX_INT) {
+		close(afu->fd);
+		afu->opened = 0;
+		afu->attached = 0;
+		free(buffer);
+		return -1;
+	}
+	memcpy((char*) &value, (char*)&(buffer[1]), sizeof(uint16_t));
+	afu->irqs_max = le16toh(value);
+
+	return rc;
+}
+
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	uint64_t *wed_ptr;
 	uint8_t *buffer;
