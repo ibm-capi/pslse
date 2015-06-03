@@ -1083,6 +1083,21 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 	return 0;
 }
 
+int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
+			    __u32 type, __u16 irq) {
+	if (cxl_read_event(afu, event) < 0)
+		return -1;
+
+	if (event->header.type != type)
+		return -1;
+
+	if ((event->header.type == CXL_EVENT_AFU_INTERRUPT) &&
+	    (event->irq.irq != irq))
+		return -1;
+
+	return 0;
+}
+
 int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 {
 	uint8_t buffer[MAX_LINE_CHARS];

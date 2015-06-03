@@ -20,6 +20,7 @@ LIBCXL_1 {
 		cxl_get_irqs_min;
 		cxl_pending_event;
 		cxl_read_event;
+		cxl_read_expected_event;
 
 		cxl_mmio_map;
 		cxl_mmio_unmap;
