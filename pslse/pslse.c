@@ -401,6 +401,7 @@ int main(int argc, char **argv)
 {
 	struct sockaddr_in client_addr;
 	struct client *client;
+	struct client **client_ptr;
 	int listen_fd, connect_fd;
 	socklen_t client_len;
 	sigset_t set;
@@ -463,8 +464,9 @@ int main(int argc, char **argv)
 			  INET_ADDRSTRLEN);
 		info_msg("Connection from %s", ip);
 		client = _client_connect(connect_fd, ip);
+		pthread_mutex_lock(&client_lock);
 		if (client != NULL) {
-			pthread_mutex_lock(&client_lock);
+			printf("Adding client\n");
 			if (client_list != NULL)
 				client_list->_prev = client;
 			client->_next = client_list;
@@ -476,8 +478,22 @@ int main(int argc, char **argv)
 				return -1;
 			}
 			client_list = client;
-			pthread_mutex_unlock(&client_lock);
 		}
+		// Clean up disconnected clients
+		client_ptr = &client_list;
+		while (*client_ptr != NULL) {
+			client = *client_ptr;
+			if ((client->pending == 0) && (client->valid== 0)) {
+				printf("Removing detached client\n");
+				*client_ptr = client->_next;
+				if (client->_next != NULL)
+					client->_next->_prev = client->_prev;
+				free(client);
+				continue;
+			}
+			client_ptr = &((*client_ptr)->_next);
+		}
+		pthread_mutex_unlock(&client_lock);
 	}
 	info_msg("No AFUs connected, Shutting down PSLSE\n");
 

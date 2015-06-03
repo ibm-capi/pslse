@@ -397,7 +397,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 		}
 		else {
 			cmd->credits--;
-			if (!cmd->client[handle]->valid) {
+			if (cmd->client[handle] == NULL) {
 				_add_other(cmd, handle, tag, command,
 					   PSL_RESPONSE_AERROR, 0);
 				return;
@@ -446,7 +446,7 @@ void handle_buffer_write(struct cmd *cmd)
 		return;
 
 	client = cmd->client[event->context];
-	if ((!client->valid) && (event->state != MEM_RECEIVED)) {
+	if ((client == NULL) && (event->state != MEM_RECEIVED)) {
 		event->resp = PSL_RESPONSE_AERROR;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -582,7 +582,7 @@ void handle_touch(struct cmd *cmd)
 	client = cmd->client[event->context];
 
 	// Abort if client disconnected
-	if (!client->valid) {
+	if (client == NULL) {
 		event->state = MEM_DONE;
 		return;
 	}
@@ -637,7 +637,7 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send interrupt to client
 	client = cmd->client[event->context];
-	if (!client->valid) {
+	if (client == NULL) {
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -674,7 +674,7 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 		goto buffer_data_fail;
 	}
 	client = cmd->client[cmd->buffer_read->context];
-	if (!client->valid) {
+	if (client == NULL) {
 		cmd->buffer_read->resp = PSL_RESPONSE_AERROR;
 		cmd->buffer_read->state = MEM_DONE;
 		cmd->buffer_read = NULL;

@@ -157,7 +157,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	if (poll(&pfd, 1, 1) > 0) {
 		if ((buffer=get_bytes(client->fd, 1, psl->timeout, psl->dbg_fp,
 				      psl->dbg_id, client->context)) == NULL) {
-			_free(psl, client);
+			client->valid = -1;
 			return;
 		}
 		if (buffer[0]==PSLSE_QUERY) {
@@ -269,6 +269,7 @@ static void *_psl_loop(void *ptr)
 					  psl->dbg_id, psl->client[i]->context);
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
+				psl->client[i] = NULL;
 				continue;
 			}
 			if (psl->client[i]->idle_cycles)
