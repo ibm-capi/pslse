@@ -37,65 +37,6 @@
 #include "../common/debug.h"
 #include "../common/psl_interface.h"
 
-// Query AFU descriptor data
-static void _query(struct psl *psl, struct client* client)
-{
-	uint8_t *buffer;
-	int size, offset;
-
-	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process) +
-	       sizeof(client->max_irqs);
-	buffer = (uint8_t*)malloc(size);
-	buffer[0] = PSLSE_QUERY;
-	offset = 1;
-	memcpy(&(buffer[offset]),
-	       (char*) &(psl->mmio->desc.num_ints_per_process),
-	       sizeof(psl->mmio->desc.num_ints_per_process));
-	offset += sizeof(psl->mmio->desc.num_ints_per_process);
-	memcpy(&(buffer[offset]),
-	       (char*) &(client->max_irqs),
-	       sizeof(client->max_irqs));
-	pthread_mutex_lock(&(psl->lock));
-	put_bytes(client->fd, size, buffer, psl->timeout, psl->dbg_fp,
-		  psl->dbg_id, client->context);
-	pthread_mutex_unlock(&(psl->lock));
-	free(buffer);
-}
-
-// Increase the maximum number of interrupts
-static void _max_irqs(struct psl *psl, struct client* client)
-{
-	uint8_t *buffer;
-	uint16_t value;
-
-	// Retrieve requested new maximum interrupts
-	pthread_mutex_lock(&(psl->lock));
-	if ((buffer=get_bytes(client->fd, 2, psl->timeout, psl->dbg_fp,
-			      psl->dbg_id, client->context)) == NULL) {
-		client->valid = -1;
-		pthread_mutex_unlock(&(psl->lock));
-		return;
-	}
-	client->max_irqs = le16toh(*((uint16_t *)buffer));
-	free(buffer);
-
-	// Limit to legal value
-	if (client->max_irqs < psl->mmio->desc.num_ints_per_process)
-		client->max_irqs = psl->mmio->desc.num_ints_per_process;
-	if (client->max_irqs > 2037/psl->mmio->desc.num_of_processes)
-		client->max_irqs = 2037/psl->mmio->desc.num_of_processes;
-
-	// Return set value
-	buffer = (uint8_t*) malloc(3);
-	buffer[0] = PSLSE_MAX_INT;
-	value = htole16(client->max_irqs);
-	memcpy(&(buffer[1]), (char*) &value, 2);
-	put_bytes(client->fd, 3, buffer, psl->timeout, psl->dbg_fp,
-		  psl->dbg_id, client->context);
-	free(buffer);
-	pthread_mutex_unlock(&(psl->lock));
-}
-
 // Attach to AFU
 static void _attach(struct psl *psl, struct client* client)
 {
@@ -198,12 +139,6 @@ static void _handle_client(struct psl *psl, struct client *client)
 				      psl->dbg_id, client->context)) == NULL) {
 			client->valid = -1;
 			return;
-		}
-		if (buffer[0]==PSLSE_QUERY) {
-			_query(psl, client);
-		}
-		if (buffer[0]==PSLSE_MAX_INT) {
-			_max_irqs(psl, client);
 		}
 		if (buffer[0]==PSLSE_DETACH) {
 			client->idle_cycles = PSL_IDLE_CYCLES;
@@ -487,6 +422,30 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	if (psl->_next != NULL)
 		psl->_next->_prev = psl;
 	*head = psl;
+
+	add_job(psl->job, PSL_JOB_RESET, 0L);
+	psl->state = PSLSE_RESET;
+	while (psl->state != PSLSE_IDLE) ns_delay(4);
+	psl->state = PSLSE_DESC;
+	read_descriptor(psl->mmio);
+	psl->state = PSLSE_IDLE;
+	if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
+	    PROG_MODEL_DEDICATED) {
+		// Dedicated AFU
+		psl->max_clients = 1;
+	}
+	if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
+	    PROG_MODEL_DIRECTED) {
+		// Dedicated AFU
+		psl->max_clients = psl->mmio->desc.num_of_processes;
+	}
+	if (psl->max_clients == 0) {
+		error_msg("AFU programming model is invalid");
+		goto init_fail_lock;
+	}
+	psl->client = (struct client**)calloc(psl->max_clients,
+					      sizeof(struct client*));
+	psl->cmd->client = psl->client;
 
 	return location;
 

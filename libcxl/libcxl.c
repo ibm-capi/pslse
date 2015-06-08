@@ -34,6 +34,9 @@
 #include "libcxl_internal.h"
 #include "../common/utils.h"
 
+#define API_VERSION            1
+#define API_VERSION_COMPATIBLE 1
+
 #ifdef DEBUG
 #define DPRINTF(...) printf(__VA_ARGS__)
 #else
@@ -49,8 +52,6 @@
 #define FOURK_MASK        0xFFFFFFFFFFFFF000L
 
 #define DSISR 0x4000000040000000L
-
-#define PSLSE_VERSION 1
 
 static void _delay_1ms() {
 	struct timespec ts;
@@ -381,19 +382,18 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 		goto connect_fail;
 	}
 	memset(&ssadr, 0, sizeof(ssadr));
+	free(buffer);
 	memcpy(&ssadr.sin_addr, he->h_addr_list[0], he->h_length);
 	ssadr.sin_family = AF_INET;
 	ssadr.sin_port = htons(port);
 	if ((*fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("socket");
-		free(buffer);
 		goto connect_fail;
 	}
 	ssadr.sin_family = AF_INET;
 	ssadr.sin_port = htons(port);
 	if (connect(*fd, (struct sockaddr *)&ssadr, sizeof(ssadr)) < 0) {
 		perror("connect");
-		free(buffer);
 		goto connect_fail;
 	}
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
@@ -401,21 +401,18 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	buffer[5] = (uint8_t) PSLSE_VERSION;
 	if (put_bytes_silent(*fd, 6, buffer, -1) != 6) {
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
-		free(host);
 		free(buffer);
 		goto connect_fail;
 	}
 	free(buffer);
 	if ((buffer = get_bytes_silent(*fd, 3, -1)) == NULL) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
-		free(host);
 		close(*fd);
 		*fd = -1;
 		goto connect_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
 		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
-		free(host);
 		free(buffer);
 		close(*fd);
 		*fd = -1;
@@ -424,8 +421,6 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	memcpy((char*) afu_map, (char*) &(buffer[1]), 2);
 	*afu_map = (long) le16toh(*afu_map);
 	free(buffer);
-	printf("Connection to %s:%d\n", host, port);
-	free(host);
 	return 0;
 
 connect_fail:
@@ -433,7 +428,8 @@ connect_fail:
 	return -1;
 }
 
-static struct cxl_adapter_h * _new_adapter(uint16_t afu_map, uint16_t position)
+static struct cxl_adapter_h * _new_adapter(uint16_t afu_map, uint16_t position,
+					   int fd)
 {
 	struct cxl_adapter_h *adapter;
 	uint16_t mask = 0xf000;
@@ -451,16 +447,20 @@ static struct cxl_adapter_h * _new_adapter(uint16_t afu_map, uint16_t position)
 	adapter->map = afu_map;
 	adapter->position = position;
 	adapter->mask = mask;
+	adapter->fd = fd;
 	adapter->id = calloc(6, sizeof(char));
 	sprintf(adapter->id, "card%d", id_num);
 	return adapter;
 }
 
-static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position)
+static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position, int fd)
 {
 	struct cxl_afu_h *afu;
+	uint8_t *buffer;
 	uint16_t adapter_mask = 0xf000;
 	uint16_t afu_mask = 0x8000;
+	uint16_t query16;
+	size_t query_size;
 	int major = 0;
 	int minor = 0;
 
@@ -483,17 +483,51 @@ static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position)
 		errno = ENOMEM;
 		return NULL;
 	}
-	afu->adapter = major;
+
+	afu->fd = fd;
 	afu->map = afu_map;
+	afu->dbg_id = (major << 4) | minor;
+	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
+	buffer[0] = PSLSE_QUERY;
+	buffer[1] = afu->dbg_id;
+	if (put_bytes_silent(afu->fd, 2, buffer, -1) != 2) {
+		warn_msg("open:Failed to write to socket!");
+		free(buffer);
+		goto new_fail;
+	}
+	free(buffer);
+	query_size = sizeof(uint8_t)+sizeof(uint16_t)+sizeof(uint16_t);
+	if ((buffer = get_bytes_silent(afu->fd, query_size, -1)) == NULL) {
+		warn_msg("open:Socket failed context retrieve");
+		goto new_fail;
+	}
+	if (buffer[0] != (uint8_t) PSLSE_QUERY) {
+		warn_msg("open:Bad QUERY acknowledge");
+		free(buffer);
+		goto new_fail;
+	}
+	memcpy((char*) &query16, (char*) &(buffer[1]), 2);
+	afu->irqs_min = (long) le16toh(query16);
+	memcpy((char*) &query16, (char*) &(buffer[3]), 2);
+	afu->irqs_max = (long) le16toh(query16);
+	free(buffer);
+	afu->adapter = major;
 	afu->position = position;
 	afu->id = calloc(7, sizeof(char));
 	sprintf(afu->id, "afu%d.%d", major, minor);
+
 	return afu;
+
+new_fail:
+	close(fd);
+	free(afu);
+	return NULL;
 }
 
 static void _release_afus(struct cxl_afu_h *afu)
 {
 	struct cxl_afu_h *last, *current;
+	uint8_t rc = PSLSE_DETACH;
 	int adapter;
 
 	if (afu==NULL)
@@ -512,6 +546,10 @@ static void _release_afus(struct cxl_afu_h *afu)
 	while ((current != NULL) && (current->adapter == adapter)) {
 		afu = current;
 		current = current->_next;
+		if (afu->fd) {
+			put_bytes_silent(afu->fd, 1, &rc, -1);
+			close(afu->fd);
+		}
 		free(afu->id);
 		free(afu);
 	}
@@ -520,12 +558,18 @@ static void _release_afus(struct cxl_afu_h *afu)
 static void _release_adapters(struct cxl_adapter_h *adapter)
 {
 	struct cxl_adapter_h *current;
+	uint8_t rc = PSLSE_DETACH;
 
 	_release_afus(adapter->afu_list);
 	current = adapter;
 	while (current != NULL) {
 		adapter = current;
 		current = current->_next;
+		// Disconnect from PSLSE
+		if (adapter->fd) {
+			put_bytes_silent(adapter->fd, 1, &rc, -1);
+			close(adapter->fd);
+		}
 		free(adapter->id);
 		free(adapter);
 	}
@@ -536,80 +580,53 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 {
 	struct cxl_afu_h *afu;
 	uint8_t *buffer;
-	uint16_t position, query16;
-	uint8_t dbg_id, query;
-	size_t query_size;
+	uint16_t position;
 
-	dbg_id = (major << 4) | minor;
 	position = 0x8000;
 	position >>= 4*major;
 	position >>= minor;
 	if ((afu_map & position) != position) {
-		warn_msg("cxl_afu_open_dev:AFU not in system");
+		warn_msg("open:AFU not in system");
 		close(fd);
 		errno = ENODEV;
 		return NULL;
 	}
 
 	// Create struct for AFU
-	afu = _new_afu(afu_map, position);
+	afu = _new_afu(afu_map, position, fd);
 	if (afu == NULL)
 		return NULL;
 
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	buffer[0] = (uint8_t) PSLSE_OPEN;
-	buffer[1] = dbg_id;
+	buffer[1] = afu->dbg_id;
 	buffer[2] = afu_type;
 	afu->fd = fd;
 	if (put_bytes_silent(afu->fd, 3, buffer, -1) != 3) {
-		warn_msg("cxl_afu_open_dev:Failed to write to socket");
+		warn_msg("open:Failed to write to socket");
 		free(buffer);
 		goto open_fail;
 	}
 	free(buffer);
 	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
-		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
+		warn_msg("open:Socket failed open acknowledge");
 		close(afu->fd);
 		goto open_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_OPEN) {
-		warn_msg("cxl_afu_open_dev:bad OPEN acknowledge");
+		warn_msg("open:bad OPEN acknowledge");
 		free(buffer);
 		close(afu->fd);
 		goto open_fail;
 	}
 	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
-		warn_msg("cxl_afu_open_dev:Getting context failed");
+		warn_msg("open:Getting context failed");
 		close(afu->fd);
 		goto open_fail;
 	}
 	afu->context = buffer[0];
 	free(buffer);
-	query = PSLSE_QUERY;
-	if (put_bytes_silent(afu->fd, 1, &query, -1) != 1) {
-		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
-		goto open_fail;
-	}
-	query_size = sizeof(uint8_t)+sizeof(uint16_t)+sizeof(uint16_t);
-	if ((buffer = get_bytes_silent(afu->fd, query_size, -1)) == NULL) {
-		warn_msg("cxl_afu_open_dev:Socket failed context retrieve");
-		close(afu->fd);
-		goto open_fail;
-	}
-	if (buffer[0] != (uint8_t) PSLSE_QUERY) {
-		warn_msg("cxl_afu_open_dev:Bad QUERY acknowledge");
-		free(buffer);
-		close(afu->fd);
-		goto open_fail;
-	}
-	memcpy((char*) &query16, (char*) &(buffer[1]), 2);
-	afu->irqs_min = (long) le16toh(query16);
-	memcpy((char*) &query16, (char*) &(buffer[3]), 2);
-	afu->irqs_max = (long) le16toh(query16);
-	free(buffer);
 	afu->opened = 1;
-	afu->api_version = 1;
-	afu->api_version_compatible = 1;
 	afu->_head = afu;
 	pthread_mutex_init(&(afu->lock), NULL);
 	if (pthread_create(&(afu->thread), NULL, _psl_loop, afu)) {
@@ -634,15 +651,11 @@ struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter)
 	struct cxl_adapter_h *head;
 	uint16_t afu_map, afu_mask;
 	int fd;
-	uint8_t rc = PSLSE_DETACH;
 
 	// First adapter
 	if (adapter == NULL) {
 		// Query PSLSE
 		if (_pslse_connect(&afu_map, &fd) < 0)
-			return NULL;
-		// Disconnect from PSLSE
-		if (put_bytes_silent(fd, 1, &rc, -1) != 1)
 			return NULL;
 		// No devices?
 		assert (afu_map != 0);
@@ -650,14 +663,17 @@ struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter)
 		// Find first AFU and return struct for it
 		while ((afu_map & afu_mask) != afu_mask)
 			afu_mask >>= 1;
-		head = _new_adapter(afu_map, afu_mask);
+		head = _new_adapter(afu_map, afu_mask, fd);
 		head->_head = head;
 		return head;
 	}
 
 	// Return next adapter if already set
-	if (adapter->_next != NULL)
+	if (adapter->_next != NULL) {
+		adapter->_next->fd = adapter->fd;
+		adapter->fd = 0;
 		return adapter->_next;
+	}
 
 	// Find next adapter
 	afu_mask = adapter->position;
@@ -676,8 +692,9 @@ struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter)
 	}
 
 	// Update pointers and return next adapter
-	adapter->_next = _new_adapter(afu_map, afu_mask);
+	adapter->_next = _new_adapter(afu_map, afu_mask, adapter->fd);
 	adapter->_next->_head = adapter->_head;
+	adapter->fd = 0;
 	return adapter->_next;
 }
 
@@ -720,12 +737,21 @@ struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cx
 {
 	struct cxl_afu_h *head;
 	uint16_t afu_map, afu_mask;
+	int fd;
 
 	if (adapter==NULL)
 		return NULL;
 
 	afu_mask = adapter->position;
-	afu_map = adapter->map;
+
+	// Query PSLSE
+	if (adapter->fd==0) {
+		if (_pslse_connect(&afu_map, &fd) < 0)
+			return NULL;
+	}
+	else {
+		afu_map = adapter->map;
+	}
 
 	// First afu
 	if (afu == NULL) {
@@ -735,7 +761,8 @@ struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cx
 		afu_mask = adapter->mask & 0x8888;
 		while ((afu_map & afu_mask) != afu_mask)
 			afu_mask >>= 1;
-		head = _new_afu(afu_map, afu_mask);
+		head = _new_afu(afu_map, afu_mask, adapter->fd);
+		adapter->fd = 0;
 		head->_head = head;
 		if (head != NULL)
 			head->_head = head;
@@ -743,12 +770,14 @@ struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cx
 	}
 
 	// Return next afu if already set
-	if (afu->_next != NULL)
+	if (afu->_next != NULL) {
+		afu->_next->fd = afu->fd;
+		afu->fd = 0;
 		return afu->_next;
+	}
 
 	// Find next afu on this adapter
 	afu_mask = afu->position >> 1;
-	afu_map = afu->map;
 	while (((afu_mask & adapter->mask)!=0) && ((afu_mask & afu->map)==0))
 		afu_mask >>= 1;
 
@@ -759,8 +788,9 @@ struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cx
 	}
 
 	// Update pointers and return next afu
-	afu->_next = _new_afu(afu_map, afu_mask);
+	afu->_next = _new_afu(afu_map, afu_mask, afu->fd);
 	afu->_next->_head = afu->_head;
+	afu->fd = 0;
 	return afu->_next;
 }
 
@@ -769,36 +799,37 @@ struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu)
 	struct cxl_afu_h *head;
 	uint16_t afu_map, afu_mask;
 	int fd;
-	uint8_t rc = PSLSE_DETACH;
+
+	// Query PSLSE
+	if ((afu==NULL) || (afu->fd==0)) {
+		if (_pslse_connect(&afu_map, &fd) < 0)
+			return NULL;
+	}
 
 	// First afu
 	if (afu == NULL) {
-		// Query PSLSE
-		if (_pslse_connect(&afu_map, &fd) < 0)
-			return NULL;
-		// Disconnect from PSLSE
-		if (put_bytes_silent(fd, 1, &rc, -1) != 1)
-			return NULL;
 		// No devices?
 		assert (afu_map != 0);
 		afu_mask = 0x8000;
 		// Find first AFU and return struct for it
 		while ((afu_map & afu_mask) != afu_mask)
 			afu_mask >>= 1;
-		head = _new_afu(afu_map, afu_mask);
+		head = _new_afu(afu_map, afu_mask, fd);
 		head->_head = head;
 		return head;
 	}
 
 	// Return next afu if already set
-	if (afu->_next != NULL)
+	if (afu->_next != NULL) {
+		afu->_next->fd = afu->fd;
+		afu->fd = 0;
 		return afu->_next;
+	}
 
 	// Find next afu
 	afu_mask = afu->position;
-	afu_map = afu->map;
 	afu_mask >>= 1;
-	while ((afu_mask != 0) && ((afu_mask & afu_map) == 0))
+	while ((afu_mask != 0) && ((afu_mask & afu->map) == 0))
 		afu_mask >>= 1;
 
 	// No more AFUs
@@ -808,8 +839,9 @@ struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu)
 	}
 
 	// Update pointers and return next afu
-	afu->_next = _new_afu(afu_map, afu_mask);
+	afu->_next = _new_afu(afu_map, afu_mask, afu->fd);
 	afu->_next->_head = afu->_head;
+	afu->fd = 0;
 	return afu->_next;
 }
 
@@ -854,6 +886,17 @@ struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 	uint8_t major, minor;
 	uint16_t mask;
 	char afu_type;
+
+	if (afu==NULL) {
+		errno = ENODEV;
+		return NULL;
+	}
+
+	// Query PSLSE
+	if (afu->fd==0) {
+		if (_pslse_connect(&(afu->map), &afu->fd) < 0)
+			return NULL;
+	}
 
 	mask = 0xf000;
 	major = minor = 0;
@@ -917,10 +960,8 @@ int cxl_afu_opened(struct cxl_afu_h *afu) {
 int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 			__u64 amr) {
 	uint8_t *buffer;
-	int rc, size;
+	int size;
 	uint16_t value;
-
-	rc = cxl_afu_attach(afu, wed);
 
 	size = 1+sizeof(uint16_t);
 	buffer = (uint8_t*)malloc(size);
@@ -953,7 +994,7 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 	memcpy((char*) &value, (char*)&(buffer[1]), sizeof(uint16_t));
 	afu->irqs_max = le16toh(value);
 
-	return rc;
+	return cxl_afu_attach(afu, wed);
 }
 
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
@@ -1024,23 +1065,23 @@ int cxl_afu_fd(struct cxl_afu_h *afu)
 
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
 {
-	if (afu==NULL)
+	if ((afu==NULL) || (afu->opened))
 		return -1;
-	*valp = afu->api_version;
+	*valp = API_VERSION;
 	return 0;
 }
 
 int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 {
-	if (afu==NULL)
+	if ((afu==NULL) || (afu->opened))
 		return -1;
-	*valp = afu->api_version_compatible;
+	*valp = API_VERSION_COMPATIBLE;
 	return 0;
 }
 
 int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp)
 {
-	if (afu==NULL)
+	if ((afu==NULL) || (afu->opened))
 		return -1;
 	*valp = afu->irqs_max;
 	return 0;
@@ -1048,7 +1089,7 @@ int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp)
 
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp)
 {
-	if (afu==NULL)
+	if ((afu==NULL) || (afu->opened))
 		return -1;
 	*valp = afu->irqs_min;
 	return 0;

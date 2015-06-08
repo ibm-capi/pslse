@@ -34,6 +34,7 @@ struct cxl_afu_h {
 	uint8_t context;
 	uint16_t map;
 	uint16_t position;
+	uint8_t dbg_id;
 	int fd;
 	int opened;
 	int attached;
@@ -41,8 +42,6 @@ struct cxl_afu_h {
 	int pipe;
 	volatile int mmio_pending;
 	uint64_t mmio_data;
-	long api_version;
-	long api_version_compatible;
 	long irqs_max;
 	long irqs_min;
 	long mmio_size;
@@ -63,6 +62,7 @@ struct cxl_adapter_h {
 	long caia_major;
 	long caia_minor;
 	long pslse_version;
+	int fd;
 	char *id;
 	uint16_t map;
 	uint16_t mask;
