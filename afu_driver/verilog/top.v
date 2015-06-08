@@ -90,26 +90,32 @@ module top (
   reg    [0:5]    ha_bwad;
   reg    [0:7]    ha_brtag;
   reg             ha_brtagpar;
-  reg             ha_rvalid0;
-  reg             ha_rvalid1;
-  reg             ha_rvalid2;
+  reg    [0:7]    rtag;
+  reg             rtagpar;
+  reg    [0:7]    response;
+  reg    [0:8]    rcredits;
   reg             ha_rvalid;
-  reg    [0:7]    ha_rtag0;
-  reg    [0:7]    ha_rtag1;
-  reg    [0:7]    ha_rtag2;
   reg    [0:7]    ha_rtag;
-  reg             ha_rtagpar0;
-  reg             ha_rtagpar1;
-  reg             ha_rtagpar2;
   reg             ha_rtagpar;
-  reg    [0:7]    ha_response0;
-  reg    [0:7]    ha_response1;
-  reg    [0:7]    ha_response2;
   reg    [0:7]    ha_response;
-  reg    [0:8]    ha_rcredits0;
-  reg    [0:8]    ha_rcredits1;
-  reg    [0:8]    ha_rcredits2;
   reg    [0:8]    ha_rcredits;
+  reg             rvalid;
+  reg             rvalid_l;
+  reg    [0:7]    rtag_l;
+  reg             rtagpar_l;
+  reg    [0:7]    response_l;
+  reg    [0:8]    rcredits_l;
+  reg             rvalid_ll;
+  reg    [0:7]    rtag_ll;
+  reg             rtagpar_ll;
+  reg    [0:7]    response_ll;
+  reg    [0:8]    rcredits_ll;
+  reg    [0:5]    r_wr_ptr;
+  reg    [0:5]    r_rd_ptr;
+  reg    [0:7]    rtag_array     [0:63];
+  reg             rtagpar_array  [0:63];
+  reg    [0:7]    response_array [0:63];
+  reg    [0:8]    rcredits_array [0:63];
   reg    [0:5]    bw_wr_ptr;
   reg    [0:5]    bw_rd_ptr;
   reg    [0:5]    bw_rd_ptr_l;
@@ -174,6 +180,7 @@ module top (
   wire            ah_jyield;
   wire            ah_tbreq;
   wire            ah_paren;
+  wire            rvalid_ul;
 
   // Integers
 
@@ -187,6 +194,8 @@ module top (
     br_rd_ptr <= 0;
     bw_wr_ptr <= 0;
     bw_rd_ptr <= 0;
+    r_wr_ptr <= 0;
+    r_rd_ptr <= 0;
     ha_jval_top <= 0;
     ha_brvalid_top <= 0;
     ha_bwvalid_top <= 0;
@@ -488,26 +497,56 @@ module top (
   // Response delay
 
   always @ (posedge ha_pclock) begin
-    ha_rvalid0 <= ha_rvalid_top;
-    ha_rvalid1 <= ha_rvalid0;
-    ha_rvalid2 <= ha_rvalid1;
-    ha_rvalid <= ha_rvalid2;
-    ha_rtag0 <= ha_rtag_top;
-    ha_rtag1 <= ha_rtag0;
-    ha_rtag2 <= ha_rtag1;
-    ha_rtag <= ha_rtag2;
-    ha_rtagpar0 <= ha_rtagpar_top;
-    ha_rtagpar1 <= ha_rtagpar0;
-    ha_rtagpar2 <= ha_rtagpar1;
-    ha_rtagpar <= ha_rtagpar2;
-    ha_response0 <= ha_response_top;
-    ha_response1 <= ha_response0;
-    ha_response2 <= ha_response1;
-    ha_response <= ha_response2;
-    ha_rcredits0 <= ha_rcredits_top;
-    ha_rcredits1 <= ha_rcredits0;
-    ha_rcredits2 <= ha_rcredits1;
-    ha_rcredits <= ha_rcredits2;
+    if (ha_rvalid_top)
+      r_wr_ptr <= r_wr_ptr+6'h01;
+    else
+      r_wr_ptr <= r_wr_ptr;
+  end
+
+  assign rvalid_ul = (r_wr_ptr!=r_rd_ptr) & !ha_bwvalid_top;
+
+  always @ (posedge ha_pclock) begin
+    if (rvalid_ul)
+      r_rd_ptr <= r_rd_ptr+6'h01;
+    else
+      r_rd_ptr <= r_rd_ptr;
+  end
+
+  always @ (posedge ha_pclock) begin
+    if (ha_rvalid_top) begin
+      rtag_array[r_wr_ptr] <= ha_rtag_top;
+      rtagpar_array[r_wr_ptr] <= ha_rtagpar_top;
+      response_array[r_wr_ptr] <= ha_response_top;
+      rcredits_array[r_wr_ptr] <= ha_rcredits_top;
+    end
+  end
+
+  always @ (posedge ha_pclock) begin
+    if (rvalid_ul) begin
+      rtag <= rtag_array[r_rd_ptr];
+      rtagpar <= rtagpar_array[r_rd_ptr];
+      response <= response_array[r_rd_ptr];
+      rcredits <= rcredits_array[r_rd_ptr];
+    end
+  end
+
+  always @ (posedge ha_pclock) begin
+    rvalid <= rvalid_ul;
+    rvalid_l <= rvalid;
+    rtag_l <= rtag;
+    rtagpar_l <= rtagpar;
+    response_l <= response;
+    rcredits_l <= rcredits;
+    rvalid_ll <= rvalid_l;
+    rtag_ll <= rtag_l;
+    rtagpar_ll <= rtagpar_l;
+    response_ll <= response_l;
+    rcredits_ll <= rcredits_l;
+    ha_rvalid <= rvalid_ll;
+    ha_rtag <= rtag_ll;
+    ha_rtagpar <= rtagpar_ll;
+    ha_response <= response_ll;
+    ha_rcredits <= rcredits_ll;
   end
 
   // AFU instance
