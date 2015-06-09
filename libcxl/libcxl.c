@@ -1104,8 +1104,10 @@ int cxl_event_pending(struct cxl_afu_h *afu)
 
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 {
-	if (!event)
+	if (afu == NULL || event == NULL) {
+		errno = EINVAL;
 		return -1;
+	}
 
 	// Function will block until event occurs
 	while (afu->first_event == NULL)	/*infinite loop*/
