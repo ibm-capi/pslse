@@ -8,6 +8,7 @@
 #
 CC=gcc
 APP=app
+COMMON_DIR=../common
 LIBCXL_DIR=../libcxl
 LINKFLAGS=-lpthread -lrt -lcxl
 CFLAGS=-O2
@@ -17,10 +18,10 @@ ifdef DEBUG
 endif
 
 all: $(APP).o
-	$(CC) -L $(LIBCXL_DIR) -o $(APP) $^ $(LINKFLAGS)
+	$(CC) -L$(LIBCXL_DIR) -o $(APP) $^ $(LINKFLAGS)
 
 $(APP).o: $(APP).c
-	$(CC) $(CFLAGS) -c -I $(LIBCXL_DIR) $^
+	$(CC) $(CFLAGS) -c -I$(COMMON_DIR) -I$(LIBCXL_DIR) $^
 
 clean:
 	rm -f $(APP) *.o
