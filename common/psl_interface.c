@@ -38,7 +38,7 @@ static uint32_t genoddParitybitperbytes(uint64_t data)
 	// Count off least significant asserted bit
 	while (data) {
 		oddparity = 1 - oddparity;	// 0->1 or 1->0
-		data &= data - 1;	// Remove lsb
+		data &= data - 1;	// Remove lsb that is set to 1
 	}
 
 	return oddparity;
