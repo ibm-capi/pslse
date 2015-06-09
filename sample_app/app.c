@@ -6,7 +6,6 @@
 #include <libcxl.h>
 #include <stdio.h>
 
-#define DEVICE "/dev/cxl/afu0.0d"
 #define CACHELINE_BYTES 128
 
 struct wed {
@@ -34,11 +33,16 @@ struct wed {
 int main (int argc, char *argv[])
 {
 
-  // Open AFU
+  // Open first AFU found
   struct cxl_afu_h *afu_h;
-  afu_h = cxl_afu_open_dev (DEVICE);
+  afu_h = cxl_afu_next(NULL);
   if (!afu_h) {
-    perror("cxl_afu_open_dev:"DEVICE);
+    fprintf(stderr, "\nNo AFU found!\n\n");
+    return -1;
+  }
+  afu_h = cxl_afu_open_h (afu_h, CXL_VIEW_DEDICATED);
+  if (!afu_h) {
+    perror("cxl_afu_open_h");
     return -1;
   }
 
@@ -58,7 +62,7 @@ int main (int argc, char *argv[])
   // Map AFU MMIO registers, if needed
   printf ("Mapping AFU registers...\n");
   if ((cxl_mmio_map (afu_h, CXL_MMIO_BIG_ENDIAN)) < 0) {
-    perror("cxl_mmio_map:"DEVICE);
+    perror("cxl_mmio_map");
     return -1;
   }
 
