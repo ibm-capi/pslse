@@ -1258,7 +1258,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	uint32_t le_data;
 
 	pthread_mutex_lock(&(afu->lock));
-	if ((!afu->mapped) || (offset & 0x7))
+	if ((!afu->mapped) || (offset & 0x3))
 		goto write32_fail;
 	buffer[0] = PSLSE_MMIO_WRITE32;
 	addr = htole32((uint32_t) offset);
@@ -1288,7 +1288,7 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	uint32_t addr;
 
 	pthread_mutex_lock(&(afu->lock));
-	if ((!afu->mapped) || (offset & 0x7))
+	if ((!afu->mapped) || (offset & 0x3))
 		goto read32_fail;
 	buffer[0] = PSLSE_MMIO_READ32;
 	addr = htole32((uint32_t) offset);
