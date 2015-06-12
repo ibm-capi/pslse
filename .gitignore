@@ -4,5 +4,8 @@
 *.o
 *.sl
 .*.swp
+common/misc
+debug/debug
 libcxl/include
+pslse/debug.log
 pslse/pslse
