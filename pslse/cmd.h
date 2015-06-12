@@ -48,9 +48,9 @@ struct cmd_event {
 	uint32_t tag;
 	uint32_t size;
 	uint32_t resp;
-	uint8_t resp_delay;
 	uint8_t unlock;
 	uint8_t restart;
+	uint8_t buffer_activity;
 	uint8_t *data;
 	uint8_t *parity;
 	enum cmd_type type;

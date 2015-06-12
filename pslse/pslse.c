@@ -70,6 +70,9 @@ static int get_key()
 	int character;
 	struct termios orig, temp;
 
+	// Flush pending stdout before waiting for key input
+	fflush(stdout);
+
 	// Display echo and set to non-canonial mode for stdin
 	tcgetattr(fileno(stdin), &orig);
 	memcpy(&temp, &orig, sizeof(struct termios));

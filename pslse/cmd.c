@@ -453,14 +453,15 @@ void handle_buffer_write(struct cmd *cmd)
 				 event->context, event->resp);
 		return;
 	}
-	if ((event->state == MEM_IDLE) && allow_buffer(cmd->parms)) {
-		// Buffer write with bogus data
+	if ((event->state == MEM_IDLE) && !event->buffer_activity &&
+	    allow_buffer(cmd->parms)) {
+		// Buffer write with bogus data, but only once
 		debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		pthread_mutex_lock(cmd->psl_lock);
 		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				 CACHELINE_BYTES, event->data, event->parity);
 		pthread_mutex_unlock(cmd->psl_lock);
-		event->resp_delay += 2;
+		event->buffer_activity = 1;
 	}
 	else if ((event->state == MEM_IDLE) && (client->mem_access == NULL)) {
 		if (allow_paged(cmd->parms)) {
@@ -505,7 +506,6 @@ void handle_buffer_write(struct cmd *cmd)
 					 event->context, event->resp);
 		}
 		pthread_mutex_unlock(cmd->psl_lock);
-		event->resp_delay += 2;
 	}
 }
 
@@ -545,9 +545,8 @@ void handle_buffer_read(struct cmd *cmd)
 		// will block any more buffer read requests until buffer read
 		// data is returned and handled in handle_buffer_data().
 		pthread_mutex_lock(cmd->psl_lock);
-		if (psl_buffer_read(cmd->afu_event, event->tag,
-					event->addr, CACHELINE_BYTES)
-			 == PSL_SUCCESS) {
+		if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
+				    CACHELINE_BYTES) == PSL_SUCCESS) {
 			cmd->buffer_read = event;
 			debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id,
 					      event->tag);
@@ -702,8 +701,10 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 			free(parity_check);
 		}
 		// Randomly decide to not send data to client yet
-		if (allow_buffer(cmd->parms)) {
+		if (!cmd->buffer_read->buffer_activity &&
+		    allow_buffer(cmd->parms)) {
 			cmd->buffer_read->state = MEM_IDLE;
+			cmd->buffer_read->buffer_activity = 1;
 			cmd->buffer_read = NULL;
 			goto buffer_data_done;
 		}
@@ -794,10 +795,6 @@ void handle_response(struct cmd *cmd)
 	// Select a random pending response (or none)
 	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
-		if ((*head)->resp_delay > 0)
-			(*head)->resp_delay--;
-		if ((*head)->resp_delay > 0)
-			continue;
 		// Fast track error responses
 		if (((*head)->resp == PSL_RESPONSE_PAGED) ||
 		    ((*head)->resp == PSL_RESPONSE_NRES) ||
