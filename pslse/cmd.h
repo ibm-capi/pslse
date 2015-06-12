@@ -53,6 +53,7 @@ struct cmd_event {
 	uint8_t buffer_activity;
 	uint8_t *data;
 	uint8_t *parity;
+	int *abort;
 	enum cmd_type type;
 	enum mem_state state;
 	struct cmd_event *_next;

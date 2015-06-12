@@ -252,7 +252,8 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		ack = PSLSE_MMIO_FAIL;
 		goto map_done;
 	}
-	if ((flags = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
+	if ((flags = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout,
+						   &(client->abort)))
 	     == NULL) {
 		client->valid = -1;
 		warn_msg("Socket failure with client context %d",
@@ -278,8 +279,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 map_done:
 	// Send acknowledge to client
 	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, mmio->timeout, mmio->dbg_fp, mmio->dbg_id,
-		  client->context);
+	put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context);
 	pthread_mutex_unlock(mmio->psl_lock);
 }
 
@@ -294,13 +294,15 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	uint64_t data;
 	int fd = client->fd;
 
-	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
+	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout,
+						    &(client->abort)))
 	    == NULL) {
 		goto write_fail;
 	}
 	if (dw) {
 		if ((data64 = (uint64_t *) get_bytes_silent(fd, 8,
-							    mmio->timeout))
+							    mmio->timeout,
+							    &(client->abort)))
 		     == NULL) {
 			goto write_fail;
 		}
@@ -310,7 +312,8 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	}
 	else {
 		if ((data32 = (uint32_t *) get_bytes_silent(fd, 4,
-							    mmio->timeout))
+							    mmio->timeout,
+							    &(client->abort)))
 		    == NULL) {
 			goto write_fail;
 		}
@@ -339,7 +342,8 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	uint32_t *offset;
 	int fd = client->fd;
 
-	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout))
+	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout,
+						    &(client->abort)))
 	    == NULL) {
 		goto read_fail;
 	}
@@ -386,23 +390,23 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			buffer = (uint8_t*)malloc(9);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 8);
-			put_bytes(fd, 9, buffer, mmio->timeout, mmio->dbg_fp,
-				  mmio->dbg_id, client->context);
+			put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
+				  client->context);
 		}
 		else {
 			buffer = (uint8_t*)malloc(5);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 4);
-			put_bytes(fd, 5, buffer, mmio->timeout, mmio->dbg_fp,
-				  mmio->dbg_id, client->context);
+			put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
+				  client->context);
 		}
 	}
 	else {
 		// Return acknowledge for write
 		buffer = (uint8_t*)malloc(1);
 		buffer[0] = PSLSE_MMIO_ACK;
-		put_bytes(fd, 1, buffer, mmio->timeout, mmio->dbg_fp,
-			  mmio->dbg_id, client->context);
+		put_bytes(fd, 1, buffer, mmio->dbg_fp, mmio->dbg_id,
+			  client->context);
 	}
 	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);
 	free(event);

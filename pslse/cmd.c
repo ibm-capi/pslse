@@ -481,8 +481,9 @@ void handle_buffer_write(struct cmd *cmd)
 			addr = (uint64_t*) &(buffer[2]);
 			*addr = htole64(event->addr);
 			pthread_mutex_lock(cmd->psl_lock);
-			put_bytes(client->fd, 10, buffer, cmd->parms->timeout,
-				  cmd->dbg_fp, cmd->dbg_id, event->context);
+			event->abort = &(client->abort);
+			put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
+				  cmd->dbg_id, event->context);
 			pthread_mutex_unlock(cmd->psl_lock);
 			event->state = MEM_REQUEST;
 			debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -604,8 +605,9 @@ void handle_touch(struct cmd *cmd)
 	addr = (uint64_t*) &(buffer[2]);
 	*addr = htole64(event->addr & CACHELINE_MASK);
 	pthread_mutex_lock(cmd->psl_lock);
-	put_bytes(client->fd, 10, buffer, cmd->parms->timeout, cmd->dbg_fp,
-		  cmd->dbg_id, event->context);
+	event->abort = &(client->abort);
+	put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
+		  event->context);
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_REQUEST;
@@ -647,8 +649,9 @@ void handle_interrupt(struct cmd *cmd)
 	irq = htole16(cmd->irq);
 	memcpy(&(buffer[1]), &irq, 2);
 	pthread_mutex_lock(cmd->psl_lock);
-	put_bytes(client->fd, 3, buffer, cmd->parms->timeout, cmd->dbg_fp,
-		  cmd->dbg_id, event->context);
+	event->abort = &(client->abort);
+	put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
+		  event->context);
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_DONE;
@@ -721,9 +724,9 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 		addr = (uint64_t*) &(buffer[2]);
 		*addr = htole64(cmd->buffer_read->addr);
 		memcpy(&(buffer[10]), &(data[offset]), cmd->buffer_read->size);
+		cmd->buffer_read->abort = &(client->abort);
 		put_bytes(client->fd, cmd->buffer_read->size+10, buffer,
-			  cmd->parms->timeout, cmd->dbg_fp, cmd->dbg_id,
-			  client->context);
+			  cmd->dbg_fp, cmd->dbg_id, client->context);
 		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id,
 				 cmd->buffer_read->tag,
 				 cmd->buffer_read->context);
@@ -750,7 +753,8 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
 
 	// Client is returning data from memory read
 	pthread_mutex_lock(lock);
-	data = get_bytes_silent(fd, event->size, cmd->parms->timeout);
+	data = get_bytes_silent(fd, event->size, cmd->parms->timeout,
+			        event->abort);
 	pthread_mutex_unlock(lock);
 	if (data == NULL) {
 		event->resp = PSL_RESPONSE_DERROR;

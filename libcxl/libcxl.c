@@ -107,7 +107,7 @@ static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 		_handle_dsi(afu, addr);
 		DPRINTF("READ from invalid addr @ 0x%016"PRIx64"\n", addr);
 		buffer[0] = (uint8_t) PSLSE_MEM_FAILURE;
-		if (put_bytes_silent(afu->fd, 1, buffer, -1) != 1) {
+		if (put_bytes_silent(afu->fd, 1, buffer) != 1) {
 			afu->opened = 0;
 			afu->attached = 0;
 		}
@@ -115,7 +115,7 @@ static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 	}
 	buffer[0] = PSLSE_MEM_SUCCESS;
 	memcpy(&(buffer[1]), (void *) addr, size);
-	if (put_bytes_silent(afu->fd, size+1, buffer, -1) != size+1) {
+	if (put_bytes_silent(afu->fd, size+1, buffer) != size+1) {
 		afu->opened = 0;
 		afu->attached = 0;
 	}
@@ -131,7 +131,7 @@ static void _handle_write(struct cxl_afu_h *afu, uint64_t addr, uint8_t size,
 		_handle_dsi(afu, addr);
 		DPRINTF("WRITE to invalid addr @ 0x%016"PRIx64"\n", addr);
 		buffer = PSLSE_MEM_FAILURE;
-		if (put_bytes_silent(afu->fd, 1, &buffer, -1) != 1) {
+		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
 			afu->opened = 0;
 			afu->attached = 0;
 		}
@@ -139,7 +139,7 @@ static void _handle_write(struct cxl_afu_h *afu, uint64_t addr, uint8_t size,
 	}
 	memcpy((void *) addr, data, size);
 	buffer = PSLSE_MEM_SUCCESS;
-	if (put_bytes_silent(afu->fd, 1, &buffer, -1) != 1) {
+	if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
 		afu->opened = 0;
 		afu->attached = 0;
 	}
@@ -154,14 +154,14 @@ static void _handle_touch(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 		_handle_dsi(afu, addr);
 		DPRINTF("TOUCH of invalid addr @ 0x%016"PRIx64"\n", addr);
 		buffer = (uint8_t) PSLSE_MEM_FAILURE;
-		if (put_bytes_silent(afu->fd, 1, &buffer, -1) != 1) {
+		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
 			afu->opened = 0;
 			afu->attached = 0;
 		}
 		return;
 	}
 	buffer = PSLSE_MEM_SUCCESS;
-	if (put_bytes_silent(afu->fd, 1, &buffer, -1) != 1) {
+	if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
 		afu->opened = 0;
 		afu->attached = 0;
 	}
@@ -174,7 +174,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 
 	DPRINTF("MMIO ACK\n");
 	if (afu->mmio_pending == PSLSE_MMIO_READ64) {
-		if ((data = get_bytes_silent(afu->fd, 8, -1)) == NULL) {
+		if ((data = get_bytes_silent(afu->fd, 8, -1, 0)) == NULL) {
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio_data = 0xFEEDB00FFEEDB00FL;
@@ -185,7 +185,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		}
 	}
 	if (afu->mmio_pending == PSLSE_MMIO_READ32) {
-		if ((data = get_bytes_silent(afu->fd, 4, -1)) == NULL) {
+		if ((data = get_bytes_silent(afu->fd, 4, -1, 0)) == NULL) {
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio_data = 0xFEEDB00FL;
@@ -205,7 +205,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	uint8_t type;
 
 	DPRINTF("AFU INTERRUPT\n");
-	if ((data = get_bytes_silent(afu->fd, 4, -1)) == NULL) {
+	if ((data = get_bytes_silent(afu->fd, 4, -1, 0)) == NULL) {
 		afu->opened = 0;
 		afu->attached = 0;
 		return;
@@ -239,7 +239,9 @@ static void *_psl_loop(void *ptr)
 
 	pthread_mutex_lock(&(afu->lock));
 	while (afu->opened) {
-		if ((buffer = get_bytes_silent(afu->fd, 1, 0)) == NULL) {
+		if ((buffer = get_bytes_silent(afu->fd, 1, 0, 0)) == NULL) {
+			afu->mapped = 0;
+			afu->attached = 0;
 			afu->opened = 0;
 			pthread_mutex_unlock(&(afu->lock));
 			break;
@@ -260,14 +262,14 @@ static void *_psl_loop(void *ptr)
 		case PSLSE_MEMORY_READ:
 			free(buffer);
 			DPRINTF("AFU MEMORY READ\n");
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1))
+			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
 			}
 			size = (uint8_t) buffer[0];
 			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 8, -1))
+			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
@@ -279,21 +281,21 @@ static void *_psl_loop(void *ptr)
 		case PSLSE_MEMORY_WRITE:
 			free(buffer);
 			DPRINTF("AFU MEMORY WRITE\n");
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1))
+			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
 			}
 			size = (uint8_t) buffer[0];
 			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 8, -1))
+			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
 			}
 			addr = le64toh(*((uint64_t *) buffer));
 			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, size, -1))
+			if ((buffer = get_bytes_silent(afu->fd, size, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
@@ -304,14 +306,14 @@ static void *_psl_loop(void *ptr)
 		case PSLSE_MEMORY_TOUCH:
 			free(buffer);
 			DPRINTF("AFU MEMORY TOUCH\n");
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1))
+			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
 			}
 			size = (uint8_t) buffer[0];
 			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 8, -1))
+			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
 				break;
@@ -399,13 +401,13 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	strcpy((char*) buffer, "PSLSE");
 	buffer[5] = (uint8_t) PSLSE_VERSION;
-	if (put_bytes_silent(*fd, 6, buffer, -1) != 6) {
+	if (put_bytes_silent(*fd, 6, buffer) != 6) {
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		free(buffer);
 		goto connect_fail;
 	}
 	free(buffer);
-	if ((buffer = get_bytes_silent(*fd, 3, -1)) == NULL) {
+	if ((buffer = get_bytes_silent(*fd, 3, -1, 0)) == NULL) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close(*fd);
 		*fd = -1;
@@ -490,14 +492,14 @@ static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position, int fd)
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	buffer[0] = PSLSE_QUERY;
 	buffer[1] = afu->dbg_id;
-	if (put_bytes_silent(afu->fd, 2, buffer, -1) != 2) {
+	if (put_bytes_silent(afu->fd, 2, buffer) != 2) {
 		warn_msg("open:Failed to write to socket!");
 		free(buffer);
 		goto new_fail;
 	}
 	free(buffer);
 	query_size = sizeof(uint8_t)+sizeof(uint16_t)+sizeof(uint16_t);
-	if ((buffer = get_bytes_silent(afu->fd, query_size, -1)) == NULL) {
+	if ((buffer = get_bytes_silent(afu->fd, query_size, -1, 0)) == NULL) {
 		warn_msg("open:Socket failed context retrieve");
 		goto new_fail;
 	}
@@ -547,7 +549,7 @@ static void _release_afus(struct cxl_afu_h *afu)
 		afu = current;
 		current = current->_next;
 		if (afu->fd) {
-			put_bytes_silent(afu->fd, 1, &rc, -1);
+			put_bytes_silent(afu->fd, 1, &rc);
 			close(afu->fd);
 		}
 		free(afu->id);
@@ -567,7 +569,7 @@ static void _release_adapters(struct cxl_adapter_h *adapter)
 		current = current->_next;
 		// Disconnect from PSLSE
 		if (adapter->fd) {
-			put_bytes_silent(adapter->fd, 1, &rc, -1);
+			put_bytes_silent(adapter->fd, 1, &rc);
 			close(adapter->fd);
 		}
 		free(adapter->id);
@@ -602,13 +604,13 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	buffer[1] = afu->dbg_id;
 	buffer[2] = afu_type;
 	afu->fd = fd;
-	if (put_bytes_silent(afu->fd, 3, buffer, -1) != 3) {
+	if (put_bytes_silent(afu->fd, 3, buffer) != 3) {
 		warn_msg("open:Failed to write to socket");
 		free(buffer);
 		goto open_fail;
 	}
 	free(buffer);
-	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
+	if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0)) == NULL) {
 		warn_msg("open:Socket failed open acknowledge");
 		close(afu->fd);
 		goto open_fail;
@@ -619,7 +621,7 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 		close(afu->fd);
 		goto open_fail;
 	}
-	if ((buffer = get_bytes_silent(afu->fd, 1, -1)) == NULL) {
+	if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0)) == NULL) {
 		warn_msg("open:Getting context failed");
 		close(afu->fd);
 		goto open_fail;
@@ -936,10 +938,10 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	DPRINTF("AFU FREE\n");
 	buffer = PSLSE_DETACH;
 	pthread_mutex_lock(&(afu->lock));
-	rc = put_bytes_silent(afu->fd, 1, &buffer, -1);
+	rc = put_bytes_silent(afu->fd, 1, &buffer);
 	pthread_mutex_unlock(&(afu->lock));
 	if (rc==1) {
-		while (afu->attached)	/*infinite loop*/
+		while (afu->attached) /*infinite loop*/
 			_delay_1ms();
 	}
 	pthread_mutex_lock(&(afu->lock));
@@ -968,7 +970,7 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 	buffer[0] = PSLSE_MAX_INT;
 	value = htole16(num_interrupts);
 	memcpy((char*)&(buffer[1]), (char*) &value, sizeof(uint16_t));
-	if (put_bytes_silent(afu->fd, size, buffer, -1) != size) {
+	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		perror("put_bytes");
 		close(afu->fd);
 		afu->opened = 0;
@@ -977,7 +979,7 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 		return -1;
 	}
 	free(buffer);
-	if ((buffer = get_bytes_silent(afu->fd, size, -1)) == NULL) {
+	if ((buffer = get_bytes_silent(afu->fd, size, -1, 0)) == NULL) {
 		close(afu->fd);
 		afu->opened = 0;
 		afu->attached = 0;
@@ -1020,7 +1022,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	*wed_ptr = htole64(wed);
 	buffer[9] = '\0';
 	pthread_mutex_lock(&(afu->lock));
-	if (put_bytes_silent(afu->fd, 9, buffer, -1) != 9) {
+	if (put_bytes_silent(afu->fd, 9, buffer) != 9) {
 		warn_msg("cxl_afu_attach: Socket fail on attach");
 		afu->opened = 0;
 		errno = ENODEV;
@@ -1028,10 +1030,10 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		return -1;
 	}
 	free(buffer);
-	buffer = get_bytes_silent(afu->fd, 1, -1);
+	buffer = get_bytes_silent(afu->fd, 1, -1, 0);
 	while ((buffer != NULL) && (buffer[0] == '\0')) {
 		free(buffer);
-		buffer = get_bytes_silent(afu->fd, 1, -1);
+		buffer = get_bytes_silent(afu->fd, 1, -1, 0);
 	}
 	if (buffer == NULL) {
 		warn_msg("cxl_afu_attach: Socket fail on attach acknowledge");
@@ -1110,7 +1112,7 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 	}
 
 	// Function will block until event occurs
-	while (afu->first_event == NULL)	/*infinite loop*/
+	while (afu->opened && (afu->first_event == NULL)) /*infinite loop*/
 		_delay_1ms();
 
 	// Copy event data, free and move next event, if any, to first
@@ -1165,15 +1167,17 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 	buffer[0] = PSLSE_MMIO_MAP;
 	flags_ptr = (uint32_t *) &(buffer[1]);
 	*flags_ptr = htole32(flags);
-	if (put_bytes_silent(afu->fd, 5, buffer, -1) != 5) {
+	if (put_bytes_silent(afu->fd, 5, buffer) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
 	}
 	afu->mmio_pending = PSLSE_MMIO_MAP;
 	pthread_mutex_unlock(&(afu->lock));
-	while (afu->mmio_pending == PSLSE_MMIO_MAP)
+	while (afu->opened && (afu->mmio_pending == PSLSE_MMIO_MAP))
 		_delay_1ms();
+	if (!afu->opened)
+		goto map_fail;
 
 	afu->mapped = 1;
 	return 0;
@@ -1195,29 +1199,39 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	uint32_t addr;
 	uint64_t le_data;
 
-	pthread_mutex_lock(&(afu->lock));
-	if ((!afu->mapped) || (offset & 0x7))
+	if (offset & 0x7) {
+		errno = EINVAL;
+		return -1;
+	}
+	if ((afu == NULL) || !afu->mapped)
 		goto write64_fail;
+
+	pthread_mutex_lock(&(afu->lock));
 	buffer[0] = PSLSE_MMIO_WRITE64;
 	addr = htole32((uint32_t) offset);
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
 	le_data = htole64(data);
 	memcpy((char*)&(buffer[5]), (char*)&(le_data), 8);
-	if (put_bytes_silent(afu->fd, 13, buffer, -1) != 13) {
+	if (put_bytes_silent(afu->fd, 13, buffer) != 13) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto write64_fail;
 	}
 	afu->mmio_pending = PSLSE_MMIO_WRITE64;
 	pthread_mutex_unlock(&(afu->lock));
-	while (afu->mmio_pending == PSLSE_MMIO_WRITE64)
+
+	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_WRITE64))
 		_delay_1ms();
+	if (!afu->mapped)
+		goto write64_fail;
+
 	return 0;
+
 write64_fail:
-	pthread_mutex_unlock(&(afu->lock));
-	errno = EADDRNOTAVAIL;
-	return 1;
+	errno = ENODEV;
+	return -1;
 }
 
 int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
@@ -1225,29 +1239,39 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	uint8_t buffer[MAX_LINE_CHARS];
 	uint32_t addr;
 
-	pthread_mutex_lock(&(afu->lock));
-	if ((!afu->mapped) || (offset & 0x7))
+	if (offset & 0x7) {
+		errno = EINVAL;
+		return -1;
+	}
+	if ((afu == NULL) || !afu->mapped)
 		goto read64_fail;
+
+	pthread_mutex_lock(&(afu->lock));
 	buffer[0] = PSLSE_MMIO_READ64;
 	addr = htole32((uint32_t) offset);
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
-	if (put_bytes_silent(afu->fd, 5, buffer, -1) != 5) {
+	if (put_bytes_silent(afu->fd, 5, buffer) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto read64_fail;
 	}
 	afu->mmio_pending = PSLSE_MMIO_READ64;
 	pthread_mutex_unlock(&(afu->lock));
-	while (afu->mmio_pending == PSLSE_MMIO_READ64)
+
+	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_READ64))
 		_delay_1ms();
+	if (!afu->mapped)
+		goto read64_fail;
+
 	*data = afu->mmio_data;
-	pthread_mutex_unlock(&(afu->lock));
 	return 0;
+
 read64_fail:
 	pthread_mutex_unlock(&(afu->lock));
-	errno = EADDRNOTAVAIL;
-	return 1;
+	errno = ENODEV;
+	return -1;
 }
 
 
@@ -1257,29 +1281,40 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	uint32_t addr;
 	uint32_t le_data;
 
-	pthread_mutex_lock(&(afu->lock));
-	if ((!afu->mapped) || (offset & 0x3))
+	if (offset & 0x7) {
+		errno = EINVAL;
+		return -1;
+	}
+	if ((afu == NULL) || !afu->mapped)
 		goto write32_fail;
+
+	pthread_mutex_lock(&(afu->lock));
 	buffer[0] = PSLSE_MMIO_WRITE32;
 	addr = htole32((uint32_t) offset);
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
 	le_data = htole32(data);
 	memcpy((char*)&(buffer[5]), (char*)&(le_data), 4);
-	if (put_bytes_silent(afu->fd, 9, buffer, -1) != 9) {
+	if (put_bytes_silent(afu->fd, 9, buffer) != 9) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto write32_fail;
 	}
 	afu->mmio_pending = PSLSE_MMIO_WRITE32;
 	pthread_mutex_unlock(&(afu->lock));
-	while (afu->mmio_pending == PSLSE_MMIO_WRITE32)
+
+	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_WRITE32))
 		_delay_1ms();
+	if (!afu->mapped)
+		goto write32_fail;
+
 	return 0;
+
 write32_fail:
 	pthread_mutex_unlock(&(afu->lock));
-	errno = EADDRNOTAVAIL;
-	return 1;
+	errno = ENODEV;
+	return -1;
 }
 
 int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
@@ -1287,28 +1322,38 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	uint8_t buffer[MAX_LINE_CHARS];
 	uint32_t addr;
 
-	pthread_mutex_lock(&(afu->lock));
-	if ((!afu->mapped) || (offset & 0x3))
+	if (offset & 0x7) {
+		errno = EINVAL;
+		return -1;
+	}
+	if ((afu == NULL) || !afu->mapped)
 		goto read32_fail;
+
+	pthread_mutex_lock(&(afu->lock));
 	buffer[0] = PSLSE_MMIO_READ32;
 	addr = htole32((uint32_t) offset);
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
-	if (put_bytes_silent(afu->fd, 5, buffer, -1) != 5) {
+	if (put_bytes_silent(afu->fd, 5, buffer) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto read32_fail;
 	}
 	afu->mmio_pending = PSLSE_MMIO_READ32;
 	pthread_mutex_unlock(&(afu->lock));
-	while (afu->mmio_pending == PSLSE_MMIO_READ32)
+
+	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_READ32))
 		_delay_1ms();
+	if (!afu->mapped)
+		goto read32_fail;
+
 	*data = (uint32_t) afu->mmio_data;
-	pthread_mutex_unlock(&(afu->lock));
 	return 0;
+
 read32_fail:
 	pthread_mutex_unlock(&(afu->lock));
-	errno = EADDRNOTAVAIL;
-	return 1;
+	errno = ENODEV;
+	return -1;
 }
 

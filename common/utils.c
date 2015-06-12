@@ -102,11 +102,18 @@ void ns_delay(long ns)
 }
 
 // Get bytes from socket
-uint8_t * get_bytes_silent(int fd, int size, int timeout)
+uint8_t * get_bytes_silent(int fd, int size, int timeout, int *abort)
 {
 	struct pollfd pfd;
+	struct timespec start, now;
+	double milliseconds;
 	uint8_t *data;
 	int count, bytes, rc;
+
+	if (clock_gettime(CLOCK_REALTIME, &start) < 0) {
+		perror("clock_gettime");
+		return 0;
+	}
 
 	data = (uint8_t *) malloc(size+1);
 	memset(data, 0, size+1);
@@ -116,9 +123,30 @@ uint8_t * get_bytes_silent(int fd, int size, int timeout)
 	pfd.events = POLLIN | POLLHUP;
 	pfd.revents = 0;
 	while (data && (bytes < size)) {
-		rc = poll(&pfd, 1, timeout);
-		if (rc == 0)
+		// Check for timeout
+		if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
+			perror("clock_gettime");
 			break;
+		}
+		milliseconds = (double) (now.tv_sec - start.tv_sec) *
+			       (double) 1000L +
+			       (double) (now.tv_nsec - start.tv_nsec) /
+			       (double) (1000000L);
+		if ((timeout > 0) && (((int) milliseconds) > timeout)) {
+			warn_msg("Timeout waiting to put data on socket");
+			break;
+		}
+
+		// Check for socket activity
+		rc = poll(&pfd, 1, 1);
+		if (rc == 0) {
+			if ((abort != NULL) && (*abort != 0)) {
+				free(data);
+				data = NULL;
+				warn_msg("Socket abort");
+			}
+			continue;
+		}
 		if (rc < 0) {
 			free(data);
 			data = NULL;
@@ -153,33 +181,26 @@ uint8_t * get_bytes_silent(int fd, int size, int timeout)
 }
 
 // Get bytes from socket with debug output
-uint8_t * get_bytes(int fd, int size, int timeout, FILE *dbg_fp,
+uint8_t * get_bytes(int fd, int size, int timeout, int *abort, FILE *dbg_fp,
 		    uint8_t dbg_id, uint16_t context)
 {
 	uint8_t *data;
 
-	data = get_bytes_silent(fd, size, timeout);
+	data = get_bytes_silent(fd, size, timeout, abort);
 	if (data != NULL)
 		debug_socket_get(dbg_fp, dbg_id, context, data[0]);
 	return data;
 }
 
 // Put bytes on socket
-int put_bytes_silent(int fd, int size, uint8_t *data, int timeout)
+int put_bytes_silent(int fd, int size, uint8_t *data)
 {
-	struct timespec start, now;
 	int count, bytes;
-	double milliseconds;
 
-	if (clock_gettime(CLOCK_REALTIME, &start) < 0) {
-		perror("clock_gettime");
-		return 0;
-	}
 #if DEBUG
 	int i;
 	DPRINTF("Socket out:0x");
 #endif /* DEBUG */
-	now = start;
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = write(fd, &(data[bytes]), size);
@@ -190,18 +211,6 @@ int put_bytes_silent(int fd, int size, uint8_t *data, int timeout)
 			DPRINTF("%02x", data[i]);
 #endif /* DEBUG */
 		bytes += count;
-		if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
-			perror("clock_gettime");
-			break;
-		}
-		milliseconds = (double) (now.tv_sec - start.tv_sec) *
-			       (double) 1000L +
-			       (double) (now.tv_nsec - start.tv_nsec) /
-			       (double) (1000000L);
-		if ((timeout > 0) && (((int) milliseconds) > timeout)) {
-			warn_msg("Timeout waiting to put data on socket");
-			break;
-		}
 	}
 	DPRINTF("\n");
 
@@ -209,12 +218,12 @@ int put_bytes_silent(int fd, int size, uint8_t *data, int timeout)
 }
 
 // Put bytes on socket with debug output;
-int put_bytes(int fd, int size, uint8_t *data, int timeout, FILE *dbg_fp,
-	      uint8_t dbg_id, uint16_t context)
+int put_bytes(int fd, int size, uint8_t *data, FILE *dbg_fp, uint8_t dbg_id,
+	      uint16_t context)
 {
 	int bytes;
 
-	bytes = put_bytes_silent(fd, size, data, timeout);
+	bytes = put_bytes_silent(fd, size, data);
 	if (bytes == size) {
 		debug_socket_put(dbg_fp, dbg_id, context, data[0]);
 	}

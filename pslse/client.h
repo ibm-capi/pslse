@@ -26,6 +26,7 @@ struct client {
 	int idle_cycles;
 	int fd;
 	int context;
+	int abort;
 	uint16_t max_irqs;
 	char type;
 	uint32_t mmio_offset;
