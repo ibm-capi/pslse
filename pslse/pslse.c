@@ -129,8 +129,10 @@ static void disconnect_afu()
 		++i;
 	}
 	info_msg("Shutting down connection to %s\n", psl->name);
-	for (i = 0; i<psl->max_clients; i++)
-		psl->client[i]->abort = 1;
+	for (i = 0; i<psl->max_clients; i++) {
+		if (psl->client[i] != NULL)
+			psl->client[i]->abort = 1;
+	}
 	psl->state = PSLSE_DONE;
 	pthread_join(psl->thread, NULL);
 	disconnect_afu();
