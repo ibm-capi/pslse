@@ -53,10 +53,11 @@ typedef uint8_t DBG_HEADER;
 #define DBG_AUX2_LAT_MASK		0x07
 
 #define DBG_PARM_TIMEOUT		0x0
-#define DBG_PARM_RESP_PERCENT		0x1
-#define DBG_PARM_PAGED_PERCENT		0x2
-#define DBG_PARM_REORDER_PERCENT	0x3
-#define DBG_PARM_BUFFER_PERCENT		0x4
+#define DBG_PARM_CREDITS		0x1
+#define DBG_PARM_RESP_PERCENT		0x2
+#define DBG_PARM_PAGED_PERCENT		0x3
+#define DBG_PARM_REORDER_PERCENT	0x4
+#define DBG_PARM_BUFFER_PERCENT		0x5
 
 size_t debug_get_64(FILE* fp, uint64_t *value);
 size_t debug_get_32(FILE* fp, uint32_t *value);

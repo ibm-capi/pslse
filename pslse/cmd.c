@@ -47,7 +47,6 @@
 #include "../common/debug.h"
 #include "../common/utils.h"
 
-#define MAX_CREDITS    64
 #define IRQ_MASK       0x00000000000007FFL
 #define CACHELINE_MASK 0xFFFFFFFFFFFFFF80L
 
@@ -69,7 +68,7 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 	cmd->psl_state = state;
 	cmd->psl_lock = lock;
 	pthread_mutex_init(&(cmd->lock), NULL);
-	cmd->credits = MAX_CREDITS;
+	cmd->credits = parms->credits;
 	cmd->dbg_fp = dbg_fp;
 	cmd->dbg_id = dbg_id;
 

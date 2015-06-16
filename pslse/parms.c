@@ -82,6 +82,7 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 
 	// Set default parameter values
 	parms->timeout = 10;
+	parms->credits = 64;
 	parms->resp_percent = 20;
 	parms->paged_percent = 5;
 	parms->reorder_percent = 20;
@@ -130,6 +131,14 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 			parms->timeout = atoi(value);
 			debug_parm(dbg_fp, DBG_PARM_TIMEOUT,
 				   parms->timeout);
+		} else if (!(strcmp(parm, "CREDITS"))) {
+			data = atoi(value);
+			if ((data > 64) || (data <= 0))
+				warn_msg("CREDITS must be 1-64");
+			else
+				parms->credits = data;
+			debug_parm(dbg_fp, DBG_PARM_CREDITS,
+				   parms->credits);
 		} else if (!(strcmp(parm, "RESPONSE_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data > 100) || (data <= 0))

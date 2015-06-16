@@ -21,6 +21,7 @@
 
 struct parms {
 	unsigned int timeout;
+	unsigned int credits;
 	unsigned int resp_percent;
 	unsigned int paged_percent;
 	unsigned int reorder_percent;

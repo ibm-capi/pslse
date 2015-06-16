@@ -12,7 +12,13 @@
 #
 
 # Timeout delay in seconds: If 0 then timeouts are disabled.
-TIMEOUT:10
+# NOTE: Must be a single value, not a min,max range
+#TIMEOUT:10
+
+# Credits:  Normally the 64 will always provide 64 credits.  Tweaking this
+# value is primarily for PSLSE testing purposes only.
+# NOTE: Must be a single value, not a min,max range
+#CREDITS:64
 
 # Percentage chance of PSL driving any pending responses in a clock cycle.
 # Can not be 0 otherwise PSL will never generate responses to commands.
