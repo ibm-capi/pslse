@@ -238,8 +238,9 @@ static void *_psl_loop(void *ptr)
 	uint64_t addr;
 
 	pthread_mutex_lock(&(afu->lock));
+	afu->opened = 1;
 	while (afu->opened) {
-		if ((buffer = get_bytes_silent(afu->fd, 1, 0, 0)) == NULL) {
+		if ((buffer = get_bytes_silent(afu->fd, 1, 1, 0)) == NULL) {
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
@@ -628,7 +629,6 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	}
 	afu->context = buffer[0];
 	free(buffer);
-	afu->opened = 1;
 	afu->_head = afu;
 	pthread_mutex_init(&(afu->lock), NULL);
 	if (pthread_create(&(afu->thread), NULL, _psl_loop, afu)) {
@@ -638,6 +638,9 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	}
 	afu->adapter = major;
 	afu->id = (char *) malloc(7);
+
+	// Wait for thread to start
+	while (!afu->opened); /*infinite loop*/
 	sprintf(afu->id, "afu%d.%d", major, minor);
 
 	return afu;

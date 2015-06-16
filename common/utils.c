@@ -132,10 +132,8 @@ uint8_t * get_bytes_silent(int fd, int size, int timeout, int *abort)
 			       (double) 1000L +
 			       (double) (now.tv_nsec - start.tv_nsec) /
 			       (double) (1000000L);
-		if ((timeout > 0) && (((int) milliseconds) > timeout)) {
-			warn_msg("Timeout waiting to put data on socket");
+		if ((timeout > 0) && (((int) milliseconds) > timeout))
 			break;
-		}
 
 		// Check for socket activity
 		rc = poll(&pfd, 1, 1);
