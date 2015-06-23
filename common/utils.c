@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <errno.h>
 #include <malloc.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -146,15 +147,19 @@ uint8_t * get_bytes_silent(int fd, int size, int timeout, int *abort)
 			continue;
 		}
 		if (rc < 0) {
+			if (errno==EINTR)
+				continue;
+			perror("poll");
 			free(data);
 			data = NULL;
-			warn_msg("Socket disconnect");
+			warn_msg("Socket disconnect on poll");
 			break;
 		}
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
+			perror("recv");
 			free(data);
 			data = NULL;
-			warn_msg("Socket disconnect");
+			warn_msg("Socket disconnect on recv");
 			break;
 		}
 	}
