@@ -27,6 +27,7 @@ struct client {
 	int fd;
 	int context;
 	int abort;
+	int flushing;
 	uint16_t max_irqs;
 	char type;
 	uint32_t mmio_offset;

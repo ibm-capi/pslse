@@ -179,7 +179,6 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		warn_msg("AFU issued interrupt with illegal source id");
 		resp = PSL_RESPONSE_FAILED;
 		type = CMD_OTHER;
-		cmd->flushing = 1;
 		goto int_done;
 	}
 	// Only track first interrupt until software reads event
@@ -401,7 +400,8 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 					   PSL_RESPONSE_AERROR, 0);
 				return;
 			}
-			if (cmd->flushing && (command!=PSL_COMMAND_RESTART)) {
+			if (cmd->client[handle]->flushing &&
+			    (command!=PSL_COMMAND_RESTART)) {
 				_add_other(cmd, handle, tag, command,
 					   PSL_RESPONSE_FLUSHED, 0);
 				return;
@@ -826,9 +826,11 @@ drive_resp:
 		assert(event != cmd->buffer_read);
 	}
 	// Send response, remove command from list and free memory
-	if (event->resp == PSL_RESPONSE_PAGED) {
+	if ((event->resp == PSL_RESPONSE_PAGED) ||
+	    (event->resp == PSL_RESPONSE_AERROR) ||
+	    (event->resp == PSL_RESPONSE_DERROR)) {
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
-		cmd->flushing = 1;
+		cmd->client[event->context]->flushing = 1;
 	}
 	pthread_mutex_lock(cmd->psl_lock);
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
@@ -836,7 +838,7 @@ drive_resp:
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if (event->restart)
-			cmd->flushing = 0;
+			cmd->client[event->context]->flushing = 0;
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);

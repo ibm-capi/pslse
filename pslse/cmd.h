@@ -76,7 +76,6 @@ struct cmd {
 	uint32_t credits;
 	uint16_t irq;
 	uint8_t locked;
-	uint8_t flushing;
 };
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
