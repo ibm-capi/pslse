@@ -829,6 +829,8 @@ drive_resp:
 	if ((event->resp == PSL_RESPONSE_PAGED) ||
 	    (event->resp == PSL_RESPONSE_AERROR) ||
 	    (event->resp == PSL_RESPONSE_DERROR)) {
+		if ((cmd->client!=NULL) && (cmd->client[event->context]!=NULL))
+			cmd->client[event->context]->flushing = 1;
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
 	pthread_mutex_lock(cmd->psl_lock);
