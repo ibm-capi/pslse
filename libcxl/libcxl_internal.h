@@ -23,9 +23,36 @@
 #include <poll.h>
 #include <pthread.h>
 
+enum libcxl_req_state {
+	LIBCXL_REQ_IDLE,
+	LIBCXL_REQ_REQUEST,
+	LIBCXL_REQ_PENDING
+};
+
+struct int_req {
+	enum libcxl_req_state state;
+	uint16_t max;
+};
+
+struct open_req {
+	enum libcxl_req_state state;
+	uint8_t context;
+};
+
+struct attach_req {
+	enum libcxl_req_state state;
+	uint64_t wed;
+};
+
+struct mmio_req {
+	enum libcxl_req_state state;
+	uint8_t type;
+	uint32_t addr;
+	uint64_t data;
+};
+
 struct cxl_afu_h {
 	pthread_t thread;
-	pthread_mutex_t lock;
 	struct cxl_event *irq;
 	struct cxl_event *dsi;
 	struct cxl_event *first_event;
@@ -40,16 +67,17 @@ struct cxl_afu_h {
 	int attached;
 	int mapped;
 	int pipe;
-	volatile int mmio_pending;
-	uint64_t mmio_data;
 	long irqs_max;
 	long irqs_min;
-	long mmio_size;
 	long mode;
 	long modes_supported;
 	long mmio_len;
 	long mmio_off;
 	long prefault_mode;
+	struct int_req int_req;
+	struct open_req open;
+	struct attach_req attach;
+	struct mmio_req mmio;
 	struct cxl_afu_h *_head;
 	struct cxl_afu_h *_next;
 	struct cxl_afu_h *_next_adapter;
