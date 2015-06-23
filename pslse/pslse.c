@@ -223,7 +223,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	struct psl* psl;
 	uint32_t mmio_offset, mmio_size;
 	uint8_t major, minor;
-	int i;
+	int i, context, clients;
 	uint8_t rc[2];
 
 	// Associate with PSL
@@ -267,17 +267,20 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	// Look for open client slot
 	assert (psl->max_clients > 0);
 	pthread_mutex_lock(&client_lock);
+	clients = 0;
+	context = -1;
 	for(i = 0; i < psl->max_clients; i++) {
-		if (psl->client[i]== NULL) {
-			client->context = i;
+		if (psl->client[i]!= NULL)
+			++clients;
+		if ((context < 0) && (psl->client[i]== NULL)) {
+			client->context = context = i;
 			client->valid = 1;
 			client->pending = 0;
 			psl->client[i] = client;
-			break;
 		}
 	}
 	pthread_mutex_unlock(&client_lock);
-	if (i == psl->max_clients) {
+	if (context < 0) {
 		info_msg("No room for new client on afu%d.%d\n", major, minor);
 		put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
 		close (client->fd);
@@ -286,7 +289,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 
 	// Attach to PSL
 	rc[0] = PSLSE_OPEN;
-	rc[1] = client->context;
+	rc[1] = context;
 	mmio_offset = 0;
 	if (psl->mmio->desc.PerProcessPSA & PROCESS_PSA_REQUIRED) {
 		mmio_size = psl->mmio->desc.PerProcessPSA & PSA_MASK;
@@ -301,10 +304,23 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	client->mmio_offset = mmio_offset;
 	client->max_irqs = PSL_MAX_IRQS/psl->mmio->desc.num_of_processes;
 	client->type = afu_type;
-	put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, client->context);
 
-	// DEBUG
-	debug_context_add(fp, psl->dbg_id, client->context);
+	// Send reset to AFU, if no other clients already connected
+	pthread_mutex_lock(&client_lock);
+	if (clients == 0) {
+		// Remove lingering job
+		if (psl->job->job != NULL) {
+			free (psl->job->job);
+			psl->job->job = NULL;
+		}
+	 	add_job(psl->job, PSL_JOB_RESET, 0L);
+		psl->state = PSLSE_RESET;
+	}
+
+	// Acknowledge to client
+	put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context);
+	pthread_mutex_unlock(&client_lock);
+	debug_context_add(fp, psl->dbg_id, context);
 
 	return 0;
 }

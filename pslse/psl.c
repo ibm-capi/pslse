@@ -235,12 +235,14 @@ static void *_psl_loop(void *ptr)
 			ns_delay(1000000);
 		}
 
+		// Skip client section if AFU descriptor hasn't been read yet
+		if (psl->client == NULL)
+			continue;
+
 		// Check for event from application
 		for (i = 0; i<psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			if (psl->client[i]->valid > 0)
-				_handle_client(psl, psl->client[i]);
 			if ((psl->client[i]->valid < 0) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
@@ -252,6 +254,11 @@ static void *_psl_loop(void *ptr)
 				psl->client[i] = NULL;
 				continue;
 			}
+			if (psl->state == PSLSE_RESET) {
+				continue;
+			}
+			if (psl->client[i]->valid > 0)
+				_handle_client(psl, psl->client[i]);
 			if (psl->client[i]->idle_cycles)
 				psl->client[i]->idle_cycles--;
 			if (client_cmd(psl->cmd, psl->client[i]))
@@ -425,11 +432,16 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		psl->_next->_prev = psl;
 	*head = psl;
 
+	// Send reset to AFU
 	add_job(psl->job, PSL_JOB_RESET, 0L);
 	psl->state = PSLSE_RESET;
 	while (psl->state != PSLSE_IDLE) ns_delay(4);
+
+	// Read AFU descriptor
 	psl->state = PSLSE_DESC;
 	read_descriptor(psl->mmio);
+
+	// Finish PSL configuration
 	psl->state = PSLSE_IDLE;
 	if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
 	    PROG_MODEL_DEDICATED) {

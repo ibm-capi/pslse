@@ -23,6 +23,7 @@
  *  here for implementing "directed mode" AFU support.
  */
 
+#include <assert.h>
 #include <inttypes.h>
 #include <malloc.h>
 #include <string.h>
@@ -53,6 +54,8 @@ struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 {
 	struct job_event *event;
+
+	assert(job->job==NULL);
 
 	event = (struct job_event *) malloc(sizeof(struct job_event));
 	if (!event)
@@ -96,8 +99,8 @@ void send_job(struct job *job)
 	// Attempt to send job to AFU
 	if(psl_job_control(job->afu_event, event->code, event->addr) ==
 	   PSL_SUCCESS) {
-		// Change state for reset only
 		event->state = PSLSE_PENDING;
+		// Change job state for reset only
 		if (event->code == PSL_JOB_RESET)
 			*(job->psl_state) = PSLSE_RESET;
 
