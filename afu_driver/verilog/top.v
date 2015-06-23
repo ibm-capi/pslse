@@ -122,6 +122,7 @@ module top (
   reg             bwhalf;
   reg    [0:1023] bwdata;
   reg    [0:15]   bwpar;
+  reg    [0:1]    bw_active    [0:255];
   reg    [0:5]    br_wr_ptr;
   reg    [0:5]    br_rd_ptr;
   reg    [0:16]   brvalid_delay;
@@ -260,20 +261,20 @@ module top (
 
   // Passthrough signals
 
-  assign ha_croom   = ha_croom_top;
-  assign ha_mmval   = ha_mmval_top;
-  assign ha_mmcfg   = ha_mmcfg_top;
-  assign ha_mmrnw   = ha_mmrnw_top;
-  assign ha_mmdw    = ha_mmdw_top;
-  assign ha_mmad    = ha_mmad_top;
-  assign ha_mmadpar    = ha_mmadpar_top;
-  assign ha_mmdata  = ha_mmdata_top;
-  assign ha_mmdatapar  = ha_mmdatapar_top;
-  assign ha_jval    = ha_jval_top;
-  assign ha_jcom    = ha_jcom_top;
-  assign ha_jcompar = ha_jcompar_top;
-  assign ha_jea     = ha_jea_top;
-  assign ha_jeapar  = ha_jeapar_top;
+  assign ha_croom     = ha_croom_top;
+  assign ha_mmval     = ha_mmval_top;
+  assign ha_mmcfg     = ha_mmcfg_top;
+  assign ha_mmrnw     = ha_mmrnw_top;
+  assign ha_mmdw      = ha_mmdw_top;
+  assign ha_mmad      = ha_mmad_top;
+  assign ha_mmadpar   = ha_mmadpar_top;
+  assign ha_mmdata    = ha_mmdata_top;
+  assign ha_mmdatapar = ha_mmdatapar_top;
+  assign ha_jval      = ha_jval_top;
+  assign ha_jcom      = ha_jcom_top;
+  assign ha_jcompar   = ha_jcompar_top;
+  assign ha_jea       = ha_jea_top;
+  assign ha_jeapar    = ha_jeapar_top;
 
   always @ (posedge ha_pclock) begin
     ah_jrunning_l <= ah_jrunning;
@@ -313,6 +314,19 @@ module top (
                       ah_jdone | ah_jcack | (ah_jrunning & !ah_jrunning_l);
 
   // Buffer write
+
+  always @ (posedge ha_pclock) begin
+    for (i = 0; i < 256; i = i + 1) begin
+      if (ha_bwvalid_top & (i==ha_bwtag_top))
+        bw_active[i] <= bw_active[i] + 1;
+      else if (bwhalf & (i==ha_bwtag_l))
+        bw_active[i] <= bw_active[i] - 1;
+      else if (bw_wr_ptr == bw_rd_ptr)
+        bw_active[i] <= 1'b0;
+      else
+        bw_active[i] <= bw_active[i];
+    end
+  end
 
   always @ (posedge ha_pclock) begin
     if (ha_bwvalid_top)
@@ -503,7 +517,8 @@ module top (
       r_wr_ptr <= r_wr_ptr;
   end
 
-  assign rvalid_ul = (r_wr_ptr!=r_rd_ptr) & !ha_bwvalid_top;
+  assign rvalid_ul = (r_wr_ptr!=r_rd_ptr) &
+                     (bw_active[rtag_array[r_rd_ptr]]==0);
 
   always @ (posedge ha_pclock) begin
     if (rvalid_ul)
