@@ -65,86 +65,27 @@ uint16_t afu_map;
 int timeout;
 FILE *fp;
 
-static int get_key()
-{
-	int character;
-	struct termios orig, temp;
-
-	// Flush pending stdout before waiting for key input
-	fflush(stdout);
-
-	// Display echo and set to non-canonial mode for stdin
-	tcgetattr(fileno(stdin), &orig);
-	memcpy(&temp, &orig, sizeof(struct termios));
-	temp.c_lflag &= ~(ECHO|ICANON);
-	tcsetattr(fileno(stdin), TCSANOW, &temp);
-
-	// Get key pressed
-	character = fgetc(stdin);
-
-	// Restore stdin settings
-	tcsetattr(fileno(stdin), TCSANOW, &orig);
-
-	// Only accept 1-4 as valid inputs
-	character -= (int) '0';
-	if (character < 1)
-		character = 0;
-	if (character > 4)
-		character = 0;
-
-	return character;
-}
-
-static void disconnect_afu()
-{
-	// Shut down PSL threads
-	struct psl* psl;
-	int i, key;
-
-	psl = psl_list;
-	if (psl == NULL)
-		return;
-
-	printf("\n\n");
-	printf("Choose an AFU to disconnect or any other key to continue:\n");
-	printf("\n");
-	i = 1;
-	while (psl) {
-		printf("\t%d) %s\n", i, psl->name);
-		psl = psl->_next;
-		++i;
-	}
-	printf("\n");
-
-	key = get_key();
-	if ((key == 0) || (key >= i)) {
-		info_msg("Continuing, no AFU shut down.");
-		return;
-	}
-
-	i = 1;
-	psl = psl_list;
-	while (i < key) {
-		psl = psl->_next;
-		++i;
-	}
-	info_msg("Shutting down connection to %s\n", psl->name);
-	for (i = 0; i<psl->max_clients; i++) {
-		if (psl->client[i] != NULL)
-			psl->client[i]->abort = 1;
-	}
-	psl->state = PSLSE_DONE;
-	pthread_join(psl->thread, NULL);
-	disconnect_afu();
-}
-
 // Disconnect client connections and stop threads gracefully on Ctrl-C
 static void _INThandler(int sig)
 {
+	struct psl* psl;
+	int i;
+
 	// Flush debug output
 	fflush(fp);
-	// Handle AFU disconnect
-	disconnect_afu();
+
+	// Shut down PSL threads
+	psl = psl_list;
+	while (psl != NULL) {
+		info_msg("Shutting down connection to %s\n", psl->name);
+		for (i = 0; i<psl->max_clients; i++) {
+			if (psl->client[i] != NULL)
+				psl->client[i]->abort = 1;
+		}
+		psl->state = PSLSE_DONE;
+		pthread_join(psl->thread, NULL);
+		psl = psl->_next;
+	}
 }
 
 // Find PSL for specific AFU id
