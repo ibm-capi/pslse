@@ -830,7 +830,6 @@ drive_resp:
 	    (event->resp == PSL_RESPONSE_AERROR) ||
 	    (event->resp == PSL_RESPONSE_DERROR)) {
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
-		cmd->client[event->context]->flushing = 1;
 	}
 	pthread_mutex_lock(cmd->psl_lock);
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
