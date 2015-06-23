@@ -328,8 +328,8 @@ static void * _client_loop(void *ptr)
 		}
 		if (data[0] == PSLSE_QUERY) {
 			free(data);
-			data = get_bytes(client->fd, 1, timeout,
-					 &(client->abort), fp, -1, -1);
+			data = get_bytes_silent(client->fd, 1, timeout,
+					 &(client->abort));
 			if (data == NULL) {
 				client->pending = 0;
 				break;
@@ -352,8 +352,8 @@ static void * _client_loop(void *ptr)
 		}
 		if (data[0] == PSLSE_OPEN) {
 			free(data);
-			data = get_bytes(client->fd, 2, timeout,
-					 &(client->abort), fp, -1, -1);
+			data = get_bytes_silent(client->fd, 2, timeout,
+					 &(client->abort));
 			if (data == NULL) {
 				client->pending = 0;
 				break;
