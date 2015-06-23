@@ -268,7 +268,7 @@ static void *_psl_loop(void *ptr)
 
 	// Disconnect clients
 	for (i = 0; i< psl->max_clients; i++) {
-		if (psl->client[i] != NULL) {
+		if ((psl->client != NULL) && (psl->client[i] != NULL)) {
 			// FIXME: Send warning to clients first?
 			info_msg("Disconnected %s context %d\n", psl->name,
 				 psl->client[i]->context);

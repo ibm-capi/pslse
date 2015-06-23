@@ -838,8 +838,10 @@ drive_resp:
 	pthread_mutex_unlock(cmd->psl_lock);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		if (event->restart)
+		if (event->restart &&(cmd->client!=NULL) &&
+		    (cmd->client[event->context]!=NULL)) {
 			cmd->client[event->context]->flushing = 0;
+		}
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);

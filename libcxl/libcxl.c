@@ -829,8 +829,8 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	}
 
 	// Wait for open acknowledgement
-	while (afu->open.state != LIBCXL_REQ_IDLE)
-		_delay_1ms(); /*infinite loop*/
+	while (afu->open.state != LIBCXL_REQ_IDLE) /*infinite loop*/
+		_delay_1ms();
 
 	if (!afu->opened) {
 		pthread_join(afu->thread, NULL);
@@ -1001,10 +1001,13 @@ struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu)
 	uint16_t afu_map, afu_mask;
 	int fd;
 
-	// Query PSLSE
 	if ((afu==NULL) || (afu->fd==0)) {
+		// Query PSLSE
 		if (_pslse_connect(&afu_map, &fd) < 0)
 			return NULL;
+	}
+	else {
+		afu_map = afu->map;
 	}
 
 	// First afu
