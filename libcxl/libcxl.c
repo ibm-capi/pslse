@@ -239,15 +239,18 @@ static void *_psl_loop(void *ptr)
 
 	afu->opened = 1;
 	while (afu->opened) {
+		_delay_1ms();
+		pthread_mutex_lock(&(afu->lock));
 		if ((buffer = get_bytes_silent(afu->fd, 1, 1, 0)) == NULL) {
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
+			pthread_mutex_unlock(&(afu->lock));
 			break;
 		}
 		if (strlen((char*) buffer)==0) {
 			free(buffer);
-			_delay_1ms();
+			pthread_mutex_unlock(&(afu->lock));
 			continue;
 		}
 		DPRINTF("PSL EVENT\n");
@@ -262,6 +265,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			size = (uint8_t) buffer[0];
@@ -269,6 +273,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			addr = le64toh(*((uint64_t *) buffer));
@@ -281,6 +286,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			size = (uint8_t) buffer[0];
@@ -288,6 +294,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			addr = le64toh(*((uint64_t *) buffer));
@@ -295,6 +302,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, size, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			_handle_write(afu, addr, size, buffer);
@@ -306,6 +314,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			size = (uint8_t) buffer[0];
@@ -313,6 +322,7 @@ static void *_psl_loop(void *ptr)
 			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
 			    == NULL) {
 				afu->opened = 0;
+				pthread_mutex_unlock(&(afu->lock));
 				break;
 			}
 			addr = le64toh(*((uint64_t *) buffer));
@@ -330,7 +340,7 @@ static void *_psl_loop(void *ptr)
 		default:
 			free(buffer);
 		}
-		_delay_1ms();
+		pthread_mutex_unlock(&(afu->lock));
 	}
 
 	afu->attached = 0;
@@ -487,6 +497,7 @@ static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position, int fd)
 	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	buffer[0] = PSLSE_QUERY;
 	buffer[1] = afu->dbg_id;
+	pthread_mutex_unlock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 2, buffer) != 2) {
 		warn_msg("open:Failed to write to socket!");
 		free(buffer);
@@ -496,8 +507,10 @@ static struct cxl_afu_h * _new_afu(uint16_t afu_map, uint16_t position, int fd)
 	query_size = sizeof(uint8_t)+sizeof(uint16_t)+sizeof(uint16_t);
 	if ((buffer = get_bytes_silent(afu->fd, query_size, -1, 0)) == NULL) {
 		warn_msg("open:Socket failed context retrieve");
+		pthread_mutex_unlock(&(afu->lock));
 		goto new_fail;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	if (buffer[0] != (uint8_t) PSLSE_QUERY) {
 		warn_msg("open:Bad QUERY acknowledge");
 		free(buffer);
@@ -544,7 +557,9 @@ static void _release_afus(struct cxl_afu_h *afu)
 		afu = current;
 		current = current->_next;
 		if (afu->fd) {
+			pthread_mutex_lock(&(afu->lock));
 			put_bytes_silent(afu->fd, 1, &rc);
+			pthread_mutex_unlock(&(afu->lock));
 			close(afu->fd);
 		}
 		free(afu->id);
@@ -611,7 +626,7 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 		goto open_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_OPEN) {
-		warn_msg("open:bad OPEN acknowledge");
+		warn_msg("open:Bad OPEN acknowledge");
 		free(buffer);
 		close(afu->fd);
 		goto open_fail;
@@ -624,6 +639,7 @@ static struct cxl_afu_h * _pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	afu->context = buffer[0];
 	free(buffer);
 	afu->_head = afu;
+	pthread_mutex_init(&(afu->lock), NULL);
 	if (pthread_create(&(afu->thread), NULL, _psl_loop, afu)) {
 		perror("pthread_create");
 		close(afu->fd);
@@ -934,7 +950,9 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 
 	DPRINTF("AFU FREE\n");
 	buffer = PSLSE_DETACH;
+	pthread_mutex_lock(&(afu->lock));
 	rc = put_bytes_silent(afu->fd, 1, &buffer);
+	pthread_mutex_unlock(&(afu->lock));
 	if (rc==1) {
 		while (afu->attached) /*infinite loop*/
 			_delay_1ms();
@@ -963,12 +981,14 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 	buffer[0] = PSLSE_MAX_INT;
 	value = htole16(num_interrupts);
 	memcpy((char*)&(buffer[1]), (char*) &value, sizeof(uint16_t));
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		perror("put_bytes");
 		close(afu->fd);
 		afu->opened = 0;
 		afu->attached = 0;
 		free(buffer);
+		pthread_mutex_unlock(&(afu->lock));
 		return -1;
 	}
 	free(buffer);
@@ -977,8 +997,10 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 		afu->opened = 0;
 		afu->attached = 0;
 		free(buffer);
+		pthread_mutex_unlock(&(afu->lock));
 		return -1;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	if (buffer[0] != PSLSE_MAX_INT) {
 		close(afu->fd);
 		afu->opened = 0;
@@ -1014,10 +1036,12 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 	wed_ptr = (uint64_t *) &(buffer[1]);
 	*wed_ptr = htole64(wed);
 	buffer[9] = '\0';
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 9, buffer) != 9) {
 		warn_msg("cxl_afu_attach: Socket fail on attach");
 		afu->opened = 0;
 		errno = ENODEV;
+		pthread_mutex_unlock(&(afu->lock));
 		return -1;
 	}
 	free(buffer);
@@ -1026,6 +1050,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed) {
 		free(buffer);
 		buffer = get_bytes_silent(afu->fd, 1, -1, 0);
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	if (buffer == NULL) {
 		warn_msg("cxl_afu_attach: Socket fail on attach acknowledge");
 		afu->opened = 0;
@@ -1154,11 +1179,13 @@ int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
 	buffer[0] = PSLSE_MMIO_MAP;
 	flags_ptr = (uint32_t *) &(buffer[1]);
 	*flags_ptr = htole32(flags);
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 5, buffer) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	afu->mmio_pending = PSLSE_MMIO_MAP;
 	while (afu->opened && (afu->mmio_pending == PSLSE_MMIO_MAP))
 		_delay_1ms();
@@ -1196,12 +1223,15 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
 	le_data = htole64(data);
 	memcpy((char*)&(buffer[5]), (char*)&(le_data), 8);
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 13, buffer) != 13) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto write64_fail;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	afu->mmio_pending = PSLSE_MMIO_WRITE64;
 
 	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_WRITE64))
@@ -1231,12 +1261,15 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	buffer[0] = PSLSE_MMIO_READ64;
 	addr = htole32((uint32_t) offset);
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 5, buffer) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto read64_fail;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	afu->mmio_pending = PSLSE_MMIO_READ64;
 
 	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_READ64))
@@ -1271,12 +1304,15 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
 	le_data = htole32(data);
 	memcpy((char*)&(buffer[5]), (char*)&(le_data), 4);
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 9, buffer) != 9) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto write32_fail;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	afu->mmio_pending = PSLSE_MMIO_WRITE32;
 
 	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_WRITE32))
@@ -1306,12 +1342,15 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	buffer[0] = PSLSE_MMIO_READ32;
 	addr = htole32((uint32_t) offset);
 	memcpy((char*)&(buffer[1]), (char*)&(addr), 4);
+	pthread_mutex_lock(&(afu->lock));
 	if (put_bytes_silent(afu->fd, 5, buffer) != 5) {
 		perror("write");
 		close(afu->fd);
 		afu->opened = 0;
+		pthread_mutex_unlock(&(afu->lock));
 		goto read32_fail;
 	}
+	pthread_mutex_unlock(&(afu->lock));
 	afu->mmio_pending = PSLSE_MMIO_READ32;
 
 	while (afu->mapped && (afu->mmio_pending == PSLSE_MMIO_READ32))

@@ -25,6 +25,7 @@
 
 struct cxl_afu_h {
 	pthread_t thread;
+	pthread_mutex_t lock;
 	struct cxl_event *irq;
 	struct cxl_event *dsi;
 	struct cxl_event *first_event;
