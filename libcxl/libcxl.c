@@ -1126,7 +1126,6 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 free_done:
 	if (afu->id != NULL)
 		free(afu->id);
-	pthread_join(afu->thread, NULL);
 	free(afu);
 }
 
