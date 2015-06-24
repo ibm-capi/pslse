@@ -19,6 +19,11 @@
 #include <pthread.h>
 #include <stdint.h>
 
+struct flush_page {
+	uint64_t addr;
+	struct flush_page *_next;
+};
+
 struct client {
 	struct job_event *job;
 	int pending;
@@ -27,9 +32,13 @@ struct client {
 	int fd;
 	int context;
 	int abort;
-	int flushing;
+	int flushing_strict;
+	struct flush_page *flushing_pages;
 	uint16_t max_irqs;
 	char type;
+	uint64_t page_size;
+	uint64_t page_mask;
+	uint64_t fault_page;
 	uint32_t mmio_offset;
 	uint32_t mmio_size;
 	void *mem_access;

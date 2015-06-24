@@ -26,6 +26,9 @@
 #include "parms.h"
 #include "../common/psl_interface.h"
 
+#define ABORT_STRICT 0x0
+#define ABORT_PAGE   0x2
+
 enum cmd_type {
 	CMD_READ,
 	CMD_WRITE,
@@ -46,6 +49,7 @@ struct cmd_event {
 	uint64_t addr;
 	uint32_t context;
 	uint32_t tag;
+	uint32_t abt;
 	uint32_t size;
 	uint32_t resp;
 	uint8_t unlock;

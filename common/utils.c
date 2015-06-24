@@ -147,15 +147,19 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 			       (double) 1000L +
 			       (double) (now.tv_nsec - start.tv_nsec) /
 			       (double) (1000000L);
-		if ((timeout > 0) && (((int) milliseconds) > timeout))
-			break;
+		if ((timeout > 0) && (((int) milliseconds) > timeout)) {
+			warn_msg("Socket timeout");
+			break; 
+		}
 
 		// Check for socket activity
 		rc = bytes_ready(fd, abort);
 		if (rc == 0)
 			continue;
-		if (rc < 0)
+		if (rc < 0) {
+			perror("bytes_ready");
 			break;
+		}
 
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
 			perror("recv");
@@ -170,8 +174,12 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = recv(fd, &(data[bytes]), size, 0);
-		if (count <= 0)
-			break;
+		if (count <= 0) {
+			if (errno!=EINTR)
+				break;
+			else
+				continue;
+		}
 		bytes += count;
 	}
 #if DEBUG

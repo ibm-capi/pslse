@@ -174,7 +174,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 
 	DPRINTF("MMIO ACK\n");
 	if (afu->mmio.type == PSLSE_MMIO_READ64) {
-		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, -1, 0)
+		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 0, 0)
 		    < 0) {
 			afu->opened = 0;
 			afu->attached = 0;
@@ -186,7 +186,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		}
 	}
 	if (afu->mmio.type == PSLSE_MMIO_READ32) {
-		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, -1, 0)
+		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, 0, 0)
 		    < 0) {
 			afu->opened = 0;
 			afu->attached = 0;
@@ -207,7 +207,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	uint8_t type;
 
 	DPRINTF("AFU INTERRUPT\n");
-	if (get_bytes_silent(afu->fd, 4, data, -1, 0) < 0) {
+	if (get_bytes_silent(afu->fd, 4, data, 0, 0) < 0) {
 		afu->opened = 0;
 		afu->attached = 0;
 		return;
@@ -261,14 +261,21 @@ static void _pslse_attach(struct cxl_afu_h *afu)
 {
 	uint8_t *buffer;
 	uint64_t *wed_ptr;
-	int size;
+	uint64_t *page_ptr;
+	uint64_t page_size;
+	int size, offset;
 
-	size = 1+sizeof(uint64_t);
+	size = 1+2*sizeof(uint64_t);
 	buffer = (uint8_t*) malloc(size);
 	buffer[0] = PSLSE_ATTACH;
-	wed_ptr = (uint64_t *) &(buffer[1]);
+	offset = 1;
+	wed_ptr = (uint64_t *) &(buffer[offset]);
 	*wed_ptr = htole64(afu->attach.wed);
-	if (put_bytes_silent(afu->fd, 9, buffer) != 9) {
+	offset += sizeof(uint64_t);
+	page_size = (uint64_t) getpagesize();
+	page_ptr = (uint64_t *) &(buffer[offset]);
+	*page_ptr = htole64(page_size);
+	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
 		close(afu->fd);
 		afu->opened = 0;
@@ -432,7 +439,7 @@ static void *_psl_loop(void *ptr)
 			afu->opened = 0;
 			break;
 		}
-		if (get_bytes_silent(afu->fd, 1, buffer, 1, 0) < 0) {
+		if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
@@ -441,7 +448,7 @@ static void *_psl_loop(void *ptr)
 		DPRINTF("PSL EVENT\n");
 		switch (buffer[0]) {
 		case PSLSE_OPEN:
-			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
 				afu->opened = 0;
 				afu->open.state = LIBCXL_REQ_IDLE;
 				break;
@@ -453,11 +460,13 @@ static void *_psl_loop(void *ptr)
 			afu->attach.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_DETACH:
+			afu->mapped = 0;
 			afu->attached = 0;
+			afu->opened = 0;
 			break;
 		case PSLSE_MAX_INT:
 			size = sizeof(uint16_t);
-			if (get_bytes_silent(afu->fd, size, buffer, -1, 0) < 0) 			{
+			if (get_bytes_silent(afu->fd, size, buffer, 0, 0) < 0) 			{
 				afu->opened = 0;
 				break;
 			}
@@ -467,7 +476,7 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_QUERY:
 			size = sizeof(uint16_t)+sizeof(uint16_t);
-			if (get_bytes_silent(afu->fd, size, buffer, -1, 0) < 0)
+			if (get_bytes_silent(afu->fd, size, buffer, 0, 0) < 0)
 			{
 				afu->opened = 0;
 				break;
@@ -479,7 +488,7 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MEMORY_READ:
 			DPRINTF("AFU MEMORY READ\n");
-			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
@@ -495,7 +504,7 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MEMORY_WRITE:
 			DPRINTF("AFU MEMORY WRITE\n");
-			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
@@ -507,7 +516,7 @@ static void *_psl_loop(void *ptr)
 			}
 			memcpy((char*) &addr, (char*) buffer, sizeof(uint64_t));
 			addr = le64toh(addr);
-			if (get_bytes_silent(afu->fd, size, buffer, -1, 0) < 0)
+			if (get_bytes_silent(afu->fd, size, buffer, 0, 0) < 0)
 			{
 				afu->opened = 0;
 				break;
@@ -516,7 +525,7 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MEMORY_TOUCH:
 			DPRINTF("AFU MEMORY TOUCH\n");
-			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
@@ -602,7 +611,7 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		goto connect_fail;
 	}
-	if (get_bytes_silent(*fd, 3, buffer, -1, 0) < 0) {
+	if (get_bytes_silent(*fd, 3, buffer, 0, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close(*fd);
 		*fd = -1;

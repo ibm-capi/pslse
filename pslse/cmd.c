@@ -136,9 +136,9 @@ static void _update_pending_resps(struct cmd *cmd, uint32_t resp)
 
 // Add new command to list
 static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
-		     uint32_t command, enum cmd_type type, uint64_t addr,
-		     uint32_t size, enum mem_state state, uint32_t resp,
-		     uint8_t unlock, uint8_t restart)
+		     uint32_t command, uint32_t abort, enum cmd_type type,
+		     uint64_t addr, uint32_t size, enum mem_state state,
+		     uint32_t resp, uint8_t unlock, uint8_t restart)
 {
 	struct cmd_event **head;
 	struct cmd_event *event;
@@ -146,6 +146,7 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	event = (struct cmd_event*) calloc(1, sizeof(struct cmd_event));
 	event->context = context;
 	event->tag = tag;
+	event->abt = abort;
 	event->type = type;
 	event->addr = addr;
 	event->size = size;
@@ -170,7 +171,7 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 
 // Format and add interrupt to command list
 static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
-			   uint32_t command, uint16_t irq)
+			   uint32_t command, uint32_t abort, uint16_t irq)
 {
 	uint32_t resp = PSL_RESPONSE_DONE;
 	enum cmd_type type = CMD_INTERRUPT;
@@ -185,53 +186,56 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	if (!cmd->irq)
 		cmd->irq = irq;
 int_done:
-	_add_cmd(cmd, handle, tag, command, type, (uint64_t) irq, 0, MEM_DONE,
-		 resp, 0, 0);
+	_add_cmd(cmd, handle, tag, command, abort, type, (uint64_t) irq, 0,
+		 MEM_DONE, resp, 0, 0);
 }
 
 // Format and add memory touch to command list
 static void _add_touch(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint64_t addr, uint8_t unlock)
+		       uint32_t command, uint32_t abort, uint64_t addr,
+		       uint8_t unlock)
 {
-	_add_cmd(cmd, handle, tag, command, CMD_TOUCH, addr, CACHELINE_BYTES,
-		 MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
+	_add_cmd(cmd, handle, tag, command, abort, CMD_TOUCH, addr,
+		 CACHELINE_BYTES, MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
 }
 
 // Format and add unlock to command list
 static void _add_unlock(struct cmd *cmd, uint32_t handle, uint32_t tag,
-			uint32_t command)
+			uint32_t command, uint32_t abort)
 {
-	_add_cmd(cmd, handle, tag, command, CMD_OTHER, 0, 0, MEM_DONE,
+	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
 		 PSL_RESPONSE_DONE, 0, 0);
 }
 
 // Format and add memory read to command list
 static void _add_read(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		      uint32_t command, uint64_t addr, uint32_t size)
+		      uint32_t command, uint32_t abort, uint64_t addr,
+		      uint32_t size)
 {
 	// Reads will be added to the list and will next be processed
 	// in the function handle_buffer_write()
-	_add_cmd(cmd, handle, tag, command, CMD_READ, addr, size, MEM_IDLE,
-		 PSL_RESPONSE_DONE, 0, 0);
+	_add_cmd(cmd, handle, tag, command, abort, CMD_READ, addr, size,
+		 MEM_IDLE, PSL_RESPONSE_DONE, 0, 0);
 }
 
 // Format and add memory write to command list
 static void _add_write(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint64_t addr, uint32_t size,
-		       uint8_t unlock)
+		       uint32_t command, uint32_t abort, uint64_t addr,
+		       uint32_t size, uint8_t unlock)
 {
 	// Writes will be added to the list and will next be processed
 	// in the function handle_buffer_read()
-	_add_cmd(cmd, handle, tag, command, CMD_WRITE, addr, size, MEM_IDLE,
-		 PSL_RESPONSE_DONE, unlock, 0);
+	_add_cmd(cmd, handle, tag, command, abort, CMD_WRITE, addr, size,
+		 MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
 }
 
 // Format and add misc. command to list
 static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint32_t resp, uint8_t restart)
+		       uint32_t command, uint32_t abort, uint32_t resp,
+		       uint8_t restart)
 {
-	_add_cmd(cmd, handle, tag, command, CMD_OTHER, 0, 0, MEM_DONE, resp,
-		 0, restart);
+	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
+		 resp, 0, restart);
 }
 
 // Determine what type of command to add to list
@@ -242,17 +246,19 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	uint16_t irq = (uint16_t) (addr & IRQ_MASK);
 	uint8_t unlock = 0;
 	if (handle >= cmd->mmio->desc.num_of_processes) {
-		_add_other(cmd, handle, tag, command, PSL_RESPONSE_CONTEXT, 0);
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_CONTEXT, 0);
 		return;
 	}
 	switch (command) {
 	// Interrupt
 	case PSL_COMMAND_INTREQ:
-		_add_interrupt(cmd, handle, tag, command, irq);
+		_add_interrupt(cmd, handle, tag, command, abort, irq);
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
-		_add_other(cmd, handle, tag, command, PSL_RESPONSE_DONE, 1);
+		_add_other(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE,
+			   1);
 		break;
 	// Cacheline lock
 	case PSL_COMMAND_LOCK:
@@ -261,7 +267,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
-		_add_touch(cmd, handle, tag, command, addr, 0);
+		_add_touch(cmd, handle, tag, command, abort, addr, 0);
 		break;
 	// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
@@ -282,11 +288,11 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_RD_GO_S:	/*fall through*/
 	case PSL_COMMAND_RD_GO_M:	/*fall through*/
 	case PSL_COMMAND_RWITM:		/*fall through*/
-		_add_read(cmd, handle, tag, command, addr, size);
+		_add_read(cmd, handle, tag, command, abort, addr, size);
 		break;
 	// Cacheline unlock
 	case PSL_COMMAND_UNLOCK:
-		_add_unlock(cmd, handle, tag, command);
+		_add_unlock(cmd, handle, tag, command, abort);
 		break;
 	// Memory Writes
 	case PSL_COMMAND_WRITE_UNLOCK:
@@ -301,19 +307,20 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_WRITE_LM:	/*fall through*/
 		if (!(latency % 2) || (latency > 3))
 			error_msg("Write with invalid br_lat=%d", latency);
-		_add_write(cmd, handle, tag, command, addr, size, unlock);
+		_add_write(cmd, handle, tag, command, abort, addr, size,
+			   unlock);
 		break;
 	// Treat these as memory touch to test for valid addresses
 	case PSL_COMMAND_EVICT_I:
 		if (cmd->locked && cmd->res_addr) {
-			_add_other(cmd, handle, tag, command,
+			_add_other(cmd, handle, tag, command, abort,
 				   PSL_RESPONSE_NRES, 0);
 			break;
 		}
 	case PSL_COMMAND_PUSH_I:	/*fall through*/
 	case PSL_COMMAND_PUSH_S:	/*fall through*/
 		if (cmd->locked) {
-			_add_other(cmd, handle, tag, command,
+			_add_other(cmd, handle, tag, command, abort,
 				   PSL_RESPONSE_NLOCK, 0);
 			break;
 		}
@@ -325,7 +332,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_INVALIDATE:	/*fall through*/
 	case PSL_COMMAND_CLAIM_M:	/*fall through*/
 	case PSL_COMMAND_CLAIM_U:	/*fall through*/
-		_add_touch(cmd, handle, tag, command, addr, unlock);
+		_add_touch(cmd, handle, tag, command, abort, addr, unlock);
 		break;
 	default:
 		error_msg("Command currently unsupported 0x%04x", cmd);
@@ -339,6 +346,73 @@ static void _cmd_parity_error(const char *msg, uint64_t value, uint8_t parity)
 {
 	error_msg("Command %s parity error 0x%04"PRIx64",%d", msg, value,
 		  parity);
+}
+
+// Set flushing mode
+static void _set_flush(struct cmd *cmd, struct cmd_event *event)
+{
+	struct flush_page *current;
+	struct client *client;
+
+	client = cmd->client[event->context];
+
+	if (event->abt==ABORT_STRICT)
+		client->flushing_strict = 1;
+
+	if (event->abt==ABORT_PAGE) {
+		current = (struct flush_page*)
+				calloc(1, sizeof(struct flush_page));
+		current->addr = event->addr & client->page_mask;
+		current->_next = client->flushing_pages;
+		client->flushing_pages = current;
+	}
+}
+
+// Set flushing mode
+static void _clear_flush(struct cmd *cmd, struct cmd_event *event)
+{
+	struct flush_page **current;
+	struct flush_page *dead_man;
+	struct client *client;
+	uint64_t page;
+
+	client = cmd->client[event->context];
+
+	if (event->abt==ABORT_STRICT)
+		cmd->client[event->context]->flushing_strict = 0;
+
+	page = event->addr & client->page_mask;
+	current = &(client->flushing_pages);
+	while ((*current!=NULL) && (event->abt==ABORT_PAGE)) {
+		if ((*current)->addr==page) {
+			dead_man = *current;
+			*current = dead_man->_next;
+			free(dead_man);
+		}
+		else {
+			current = &((*current)->_next);
+		}
+	}
+}
+
+// Will command flush?
+static int _will_flush(struct client *client, uint64_t addr, uint64_t abt)
+{
+	struct flush_page *current;
+	uint64_t page;
+
+	if (client->flushing_strict && (abt==ABORT_STRICT))
+		return 1;
+
+	page = addr & client->page_mask;
+	current = client->flushing_pages;
+	while ((current!=NULL) && (abt==ABORT_PAGE)) {
+		if (current->addr==page)
+			return 1;
+		current = current->_next;
+	}
+
+	return 0;
 }
 
 // See if a command was sent by AFU and process if so
@@ -384,25 +458,25 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 			}
 		}
 		if (fail) {
-			_add_other(cmd, handle, tag, command,
+			_add_other(cmd, handle, tag, command, abort,
 				   PSL_RESPONSE_FAILED, 0);
 		}
 		// Check credits and parse
 		if (!cmd->credits) {
 			error_msg("AFU issued command without any credits");
-			_add_other(cmd, handle, tag, command,
+			_add_other(cmd, handle, tag, command, abort,
 				   PSL_RESPONSE_FAILED, 0);
 		}
 		else {
 			cmd->credits--;
 			if (cmd->client[handle] == NULL) {
-				_add_other(cmd, handle, tag, command,
+				_add_other(cmd, handle, tag, command, abort,
 					   PSL_RESPONSE_AERROR, 0);
 				return;
 			}
-			if (cmd->client[handle]->flushing &&
+			if (_will_flush(cmd->client[handle], address, abort) &&
 			    (command!=PSL_COMMAND_RESTART)) {
-				_add_other(cmd, handle, tag, command,
+				_add_other(cmd, handle, tag, command, abort,
 					   PSL_RESPONSE_FLUSHED, 0);
 				return;
 			}
@@ -829,7 +903,9 @@ drive_resp:
 	    (event->resp == PSL_RESPONSE_AERROR) ||
 	    (event->resp == PSL_RESPONSE_DERROR)) {
 		if ((cmd->client!=NULL) && (cmd->client[event->context]!=NULL))
-			cmd->client[event->context]->flushing = 1;
+		{
+			_set_flush(cmd, event);
+		}
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
 	pthread_mutex_lock(cmd->psl_lock);
@@ -839,7 +915,7 @@ drive_resp:
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if (event->restart &&(cmd->client!=NULL) &&
 		    (cmd->client[event->context]!=NULL)) {
-			cmd->client[event->context]->flushing = 0;
+			_clear_flush(cmd, event);
 		}
 		*head = event->_next;
 		free(event->data);

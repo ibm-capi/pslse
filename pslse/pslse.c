@@ -226,7 +226,6 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	uint8_t rc[2];
 
 	// Associate with PSL
-	info_msg("Associate");
 	rc[0] = PSLSE_DETACH;
 	psl = _find_psl(id, &major, &minor);
 	if (!psl) {
@@ -487,7 +486,6 @@ int main(int argc, char **argv)
 		while (*client_ptr != NULL) {
 			client = *client_ptr;
 			if ((client->pending == 0) && (client->valid== 0)) {
-				printf("Removing detached client\n");
 				*client_ptr = client->_next;
 				if (client->_next != NULL)
 					client->_next->_prev = client->_prev;
@@ -501,7 +499,6 @@ int main(int argc, char **argv)
 		client = _client_connect(connect_fd, ip);
 		pthread_mutex_lock(&client_lock);
 		if (client != NULL) {
-			printf("Adding client\n");
 			if (client_list != NULL)
 				client_list->_prev = client;
 			client->_next = client_list;
