@@ -42,17 +42,17 @@ static void _attach(struct psl *psl, struct client* client)
 {
 	uint64_t wed;
 	uint8_t ack;
-	uint8_t *buffer;
+	uint8_t buffer[MAX_LINE_CHARS];
 
 	// Get wed value from application
 	ack = PSLSE_DETACH;
-	if ((buffer = get_bytes_silent(client->fd, 8, psl->timeout,
-				       &(client->abort))) == NULL) {
+	if (get_bytes_silent(client->fd, 8, buffer, psl->timeout,
+			     &(client->abort)) < 0) {
 		warn_msg("Failed to get WED value from client");
 		goto attach_done;
 	}
-	wed = le64toh(*((uint64_t *)buffer));
-	free(buffer);
+	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
+	wed = le64toh(wed);
 
 	// Send start to AFU
 	// FIXME: This only works for dedicate mode
@@ -120,8 +120,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 {
 	struct mmio_event *mmio;
 	struct cmd_event *cmd;
-	struct pollfd pfd;
-	uint8_t *buffer;
+	uint8_t buffer[MAX_LINE_CHARS];
 
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
@@ -131,14 +130,11 @@ static void _handle_client(struct psl *psl, struct client *client)
 
 	// Check for event from application
 	cmd = (struct cmd_event*) client->mem_access;
-	pfd.fd = client->fd;
-	pfd.events = POLLIN | POLLHUP;
-	pfd.revents = 0;
 	mmio = NULL;
-	if (poll(&pfd, 1, 1) > 0) {
-		if ((buffer=get_bytes(client->fd, 1, psl->timeout,
-				      &(client->abort), psl->dbg_fp,
-				      psl->dbg_id, client->context)) == NULL) {
+	if (bytes_ready(client->fd, &(client->abort))) {
+		if (get_bytes(client->fd, 1, buffer, psl->timeout,
+			      &(client->abort), psl->dbg_fp, psl->dbg_id,
+			      client->context) < 0) {
 			client->valid = -1;
 			return;
 		}
@@ -175,7 +171,6 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (buffer[0]==PSLSE_MMIO_READ32) {
 			mmio = handle_mmio(psl->mmio, client, 1, 0);
 		}
-		free(buffer);
 		if (mmio) {
 			client->mmio_access = (void*) mmio;
 		}

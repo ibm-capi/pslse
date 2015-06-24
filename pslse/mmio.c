@@ -242,7 +242,7 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 // Handle MMIO map request from client
 void handle_mmio_map(struct mmio *mmio, struct client *client)
 {
-	uint32_t *flags;
+	uint32_t flags;
 	uint8_t ack = PSLSE_MMIO_ACK;
 	int fd = client->fd;
 
@@ -252,9 +252,8 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		ack = PSLSE_MMIO_FAIL;
 		goto map_done;
 	}
-	if ((flags = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout,
-						   &(client->abort)))
-	     == NULL) {
+	if (get_bytes_silent(fd, 4, (uint8_t*) &flags, mmio->timeout,
+			     &(client->abort)) < 0) {
 		client->valid = -1;
 		warn_msg("Socket failure with client context %d",
 			 client->context);
@@ -264,9 +263,9 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 
 	// Check flags value and set
 	if (!mmio->flags) {
-		mmio->flags = le32toh(*flags);
+		mmio->flags = le32toh(flags);
 	}
-	else if (mmio->flags != le32toh(*flags)) {
+	else if (mmio->flags != le32toh(flags)) {
 		warn_msg("Set conflicting mmio endianess for AFU");
 		ack = PSLSE_MMIO_FAIL;
 	}
@@ -275,7 +274,6 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		debug_mmio_map(mmio->dbg_fp, mmio->dbg_id, client->context);
 	}
 
-	free(flags);
 map_done:
 	// Send acknowledge to client
 	pthread_mutex_lock(mmio->psl_lock);
@@ -288,44 +286,37 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 					     struct client *client, int dw)
 {
 	struct mmio_event *event;
-	uint32_t *offset;
-	uint64_t *data64;
-	uint32_t *data32;
+	uint32_t offset;
+	uint64_t data64;
+	uint32_t data32;
 	uint64_t data;
 	int fd = client->fd;
 
-	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout,
-						    &(client->abort)))
-	    == NULL) {
+	if (get_bytes_silent(fd, 4, (uint8_t*) &offset, mmio->timeout,
+			     &(client->abort)) < 0) {
 		goto write_fail;
 	}
+	offset = le32toh(offset);
 	if (dw) {
-		if ((data64 = (uint64_t *) get_bytes_silent(fd, 8,
-							    mmio->timeout,
-							    &(client->abort)))
-		     == NULL) {
+		if (get_bytes_silent(fd, 8, (uint8_t*) &data64, mmio->timeout,
+				     &(client->abort)) < 0) {
 			goto write_fail;
 		}
 		// Convert data from client from little endian to host
-		data = le64toh(*data64);
-		free(data64);
+		data = le64toh(data64);
 	}
 	else {
-		if ((data32 = (uint32_t *) get_bytes_silent(fd, 4,
-							    mmio->timeout,
-							    &(client->abort)))
-		    == NULL) {
+		if (get_bytes_silent(fd, 4, (uint8_t*) &data32, mmio->timeout,
+				     &(client->abort)) < 0) {
 			goto write_fail;
 		}
 		// Convert data from client from little endian to host
-		*data32 = le32toh(*data32);
-		data = (uint64_t) *data32;
+		data32 = le32toh(data32);
+		data = (uint64_t) data32;
 		data <<= 32;
-		data |= (uint64_t) *data32;
-		free(data32);
+		data |= (uint64_t) data32;
 	}
-	event = _add_mmio(mmio, client, 0, dw, le32toh(*offset)/4, data);
-	free(offset);
+	event = _add_mmio(mmio, client, 0, dw, offset/4, data);
 	return event;
 	
 write_fail:
@@ -339,16 +330,15 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 					    struct client *client, int dw)
 {
 	struct mmio_event *event;
-	uint32_t *offset;
+	uint32_t offset;
 	int fd = client->fd;
 
-	if ((offset = (uint32_t *) get_bytes_silent(fd, 4, mmio->timeout,
-						    &(client->abort)))
-	    == NULL) {
+	if (get_bytes_silent(fd, 4, (uint8_t*) &offset, mmio->timeout,
+			     &(client->abort)) < 0) {
 		goto read_fail;
 	}
-	event = _add_mmio(mmio, client, 1, dw, le32toh(*offset)/4, 0);
-	free(offset);
+	offset = le32toh(offset);
+	event = _add_mmio(mmio, client, 1, dw, offset/4, 0);
 	return event;
 	
 read_fail:

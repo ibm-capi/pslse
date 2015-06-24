@@ -83,12 +83,15 @@ void info_msg(const char *format, ...);
 // Delay for up to ns nanoseconds
 void ns_delay(long ns);
 
+// Is there incoming data on socket?
+int bytes_ready(int fd, int *abort);
+
 // Allocate memory for data and get size bytes from fd, no debug
-uint8_t * get_bytes_silent(int fd, int size, int timeout, int *abort);
+int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort);
 
 // Allocate memory for data and get size bytes from fd
-uint8_t * get_bytes(int fd, int size, int timeout, int *abort, FILE *dbg_fp,
-		    uint8_t dbg_id, uint16_t context);
+int get_bytes(int fd, int size, uint8_t *data, int timeout, int *abort,
+		    FILE *dbg_fp, uint8_t dbg_id, uint16_t context);
 
 // Put bytes on socket and return number of bytes successfully written, no debug
 int put_bytes_silent(int fd, int size, uint8_t *data);

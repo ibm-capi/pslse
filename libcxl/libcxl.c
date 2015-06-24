@@ -170,29 +170,31 @@ static void _handle_touch(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 
 static void _handle_ack(struct cxl_afu_h *afu)
 {
-	uint8_t *data;
+	uint8_t data[sizeof(uint64_t)];
 
 	DPRINTF("MMIO ACK\n");
 	if (afu->mmio.type == PSLSE_MMIO_READ64) {
-		if ((data = get_bytes_silent(afu->fd, 8, -1, 0)) == NULL) {
+		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, -1, 0)
+		    < 0) {
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FFEEDB00FL;
 		}
 		else {
-			afu->mmio.data = le64toh(*((uint64_t *) data));
-			free(data);
+			memcpy(&(afu->mmio.data), data, sizeof(uint64_t));
+			afu->mmio.data = le64toh(afu->mmio.data);
 		}
 	}
 	if (afu->mmio.type == PSLSE_MMIO_READ32) {
-		if ((data = get_bytes_silent(afu->fd, 4, -1, 0)) == NULL) {
+		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, -1, 0)
+		    < 0) {
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FL;
 		}
 		else {
-			afu->mmio.data = le32toh(*((uint32_t *) data));
-			free(data);
+			memcpy(&(afu->mmio.data), data, sizeof(uint32_t));
+			afu->mmio.data = le32toh(afu->mmio.data);
 		}
 	}
 	afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -201,16 +203,17 @@ static void _handle_ack(struct cxl_afu_h *afu)
 static void _handle_interrupt(struct cxl_afu_h *afu)
 {
 	uint16_t size, irq;
-	uint8_t *data;
+	uint8_t data[sizeof(uint16_t)];
 	uint8_t type;
 
 	DPRINTF("AFU INTERRUPT\n");
-	if ((data = get_bytes_silent(afu->fd, 4, -1, 0)) == NULL) {
+	if (get_bytes_silent(afu->fd, 4, data, -1, 0) < 0) {
 		afu->opened = 0;
 		afu->attached = 0;
 		return;
 	}
-	irq = le16toh(*((uint16_t *) data));
+	memcpy(&irq, data, sizeof(uint16_t));
+	irq = le16toh(irq);
 
 	// Only track a single interrupt at a time
 	if (afu->irq != NULL)
@@ -386,10 +389,11 @@ static void _mmio_read(struct cxl_afu_h *afu)
 static void *_psl_loop(void *ptr)
 {
 	struct cxl_afu_h *afu = (struct cxl_afu_h*)ptr;
-	uint8_t *buffer;
+	uint8_t buffer[MAX_LINE_CHARS];
 	uint8_t size;
 	uint64_t addr;
 	uint16_t value;
+	int rc;
 
 	afu->opened = 1;
 	while (afu->opened) {
@@ -419,57 +423,52 @@ static void *_psl_loop(void *ptr)
 			}
 		}
 		// Process socket input from PSLSE
-		if ((buffer = get_bytes_silent(afu->fd, 1, 1, 0)) == NULL) {
+		rc = bytes_ready(afu->fd, 0);
+		if (rc == 0)
+			continue;
+		if (rc < 0) {
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
 			break;
 		}
-		if (strlen((char*) buffer)==0) {
-			free(buffer);
-			continue;
+		if (get_bytes_silent(afu->fd, 1, buffer, 1, 0) < 0) {
+			afu->mapped = 0;
+			afu->attached = 0;
+			afu->opened = 0;
+			break;
 		}
 		DPRINTF("PSL EVENT\n");
 		switch (buffer[0]) {
 		case PSLSE_OPEN:
-			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
 				afu->opened = 0;
 				afu->open.state = LIBCXL_REQ_IDLE;
 				break;
 			}
 			afu->context = (uint8_t) buffer[0];
 			afu->open.state = LIBCXL_REQ_IDLE;
-			free(buffer);
 			break;
 		case PSLSE_ATTACH:
-			free(buffer);
 			afu->attach.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_DETACH:
-			free(buffer);
 			afu->attached = 0;
 			break;
 		case PSLSE_MAX_INT:
-			free(buffer);
 			size = sizeof(uint16_t);
-			if ((buffer = get_bytes_silent(afu->fd, size, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, size, buffer, -1, 0) < 0) 			{
 				afu->opened = 0;
 				break;
 			}
-			memcpy((char*) &value, (char*) buffer,
-			       sizeof(uint16_t));
+			memcpy((char*)&value, (char*)buffer, sizeof(uint16_t));
 			afu->irqs_max = le16toh(value);
 			afu->int_req.state = LIBCXL_REQ_IDLE;
-			free(buffer);
 			break;
 		case PSLSE_QUERY:
-			free(buffer);
 			size = sizeof(uint16_t)+sizeof(uint16_t);
-			if ((buffer = get_bytes_silent(afu->fd, size, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, size, buffer, -1, 0) < 0)
+			{
 				afu->opened = 0;
 				break;
 			}
@@ -477,81 +476,68 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_min = (long) le16toh(value);
 			memcpy((char*) &value, (char*) &(buffer[3]), 2);
 			afu->irqs_max = (long) le16toh(value);
-			free(buffer);
 			break;
 		case PSLSE_MEMORY_READ:
-			free(buffer);
 			DPRINTF("AFU MEMORY READ\n");
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
 			size = (uint8_t) buffer[0];
-			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
+					     -1, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
-			addr = le64toh(*((uint64_t *) buffer));
-			free(buffer);
+			memcpy((char*) &addr, (char*) buffer, sizeof(uint64_t));
+			addr = le64toh(addr);
 			_handle_read(afu, addr, size);
 			break;
 		case PSLSE_MEMORY_WRITE:
-			free(buffer);
 			DPRINTF("AFU MEMORY WRITE\n");
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
 			size = (uint8_t) buffer[0];
-			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
+					     -1, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
-			addr = le64toh(*((uint64_t *) buffer));
-			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, size, -1, 0))
-			    == NULL) {
+			memcpy((char*) &addr, (char*) buffer, sizeof(uint64_t));
+			addr = le64toh(addr);
+			if (get_bytes_silent(afu->fd, size, buffer, -1, 0) < 0)
+			{
 				afu->opened = 0;
 				break;
 			}
 			_handle_write(afu, addr, size, buffer);
-			free(buffer);
 			break;
 		case PSLSE_MEMORY_TOUCH:
-			free(buffer);
 			DPRINTF("AFU MEMORY TOUCH\n");
-			if ((buffer = get_bytes_silent(afu->fd, 1, -1, 0))
-			    == NULL) {
+			if (get_bytes_silent(afu->fd, 1, buffer, -1, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
-			size = (uint8_t) buffer[0];
-			free(buffer);
-			if ((buffer = get_bytes_silent(afu->fd, 8, -1, 0))
-			    == NULL) {
+			size = buffer[0];
+			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
+					     -1, 0) < 0) {
 				afu->opened = 0;
 				break;
 			}
-			addr = le64toh(*((uint64_t *) buffer));
-			free(buffer);
+			memcpy((char*) &addr, (char*) buffer, sizeof(uint64_t));
+			addr = le64toh(addr);
 			_handle_touch(afu, addr, size);
 			break;
 		case PSLSE_MMIO_ACK:
-			free(buffer);
 			_handle_ack(afu);
 			break;
 		case PSLSE_INTERRUPT:
-			free(buffer);
 			_handle_interrupt(afu);
 			break;
 		default:
-			free(buffer);
+			break;
 		}
 	}
 
@@ -562,7 +548,7 @@ static void *_psl_loop(void *ptr)
 static int _pslse_connect(uint16_t *afu_map, int *fd)
 {
 	FILE *fp;
-	uint8_t *buffer;
+	uint8_t buffer[MAX_LINE_CHARS];
 	struct sockaddr_in ssadr;
 	struct hostent *he;
 	char *host, *port_str;
@@ -575,11 +561,9 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 		perror("fopen:pslse_server.dat");
 		goto connect_fail;
 	}
-	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	if(fgets((char*) buffer, MAX_LINE_CHARS-1, fp) == NULL) {
 		perror("fgets:pslse_server.dat");
 		fclose(fp);
-		free(buffer);
 		goto connect_fail;
 	}
 	fclose(fp);
@@ -589,7 +573,6 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	port_str++;
 	if (!host || !port_str) {
 		warn_msg("cxl_afu_open_dev:Invalid format in pslse_server.dat");
-		free(buffer);
 		goto connect_fail;
 	}
 	port = atoi(port_str);
@@ -597,11 +580,9 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	// Connect to PSLSE server
 	if ((he = gethostbyname(host)) == NULL) {
 		herror("gethostbyname");
-		free(buffer);
 		goto connect_fail;
 	}
 	memset(&ssadr, 0, sizeof(ssadr));
-	free(buffer);
 	memcpy(&ssadr.sin_addr, he->h_addr_list[0], he->h_length);
 	ssadr.sin_family = AF_INET;
 	ssadr.sin_port = htons(port);
@@ -615,16 +596,13 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 		perror("connect");
 		goto connect_fail;
 	}
-	buffer = (uint8_t*) calloc(1, MAX_LINE_CHARS);
 	strcpy((char*) buffer, "PSLSE");
 	buffer[5] = (uint8_t) PSLSE_VERSION;
 	if (put_bytes_silent(*fd, 6, buffer) != 6) {
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
-		free(buffer);
 		goto connect_fail;
 	}
-	free(buffer);
-	if ((buffer = get_bytes_silent(*fd, 3, -1, 0)) == NULL) {
+	if (get_bytes_silent(*fd, 3, buffer, -1, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close(*fd);
 		*fd = -1;
@@ -632,14 +610,12 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 	}
 	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
 		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
-		free(buffer);
 		close(*fd);
 		*fd = -1;
 		goto connect_fail;
 	}
 	memcpy((char*) afu_map, (char*) &(buffer[1]), 2);
 	*afu_map = (long) le16toh(*afu_map);
-	free(buffer);
 	return 0;
 
 connect_fail:
@@ -740,9 +716,6 @@ static void _release_afus(struct cxl_afu_h *afu)
 	if (afu==NULL)
 		return;
 
-	if (afu->_head->adapter == afu->adapter) {
-		current = afu->_head;
-	}
 	current = afu->_head;
 	while (current->adapter < afu->adapter) {
 		last = current;
@@ -757,7 +730,8 @@ static void _release_afus(struct cxl_afu_h *afu)
 			put_bytes_silent(afu->fd, 1, &rc);
 			close(afu->fd);
 		}
-		free(afu->id);
+		if (afu->id)
+			free(afu->id);
 		free(afu);
 	}
 }
@@ -930,7 +904,9 @@ void cxl_adapter_free(struct cxl_adapter_h *adapter)
 	}
 
 	// Free memory for adapter
-	free(adapter->id);
+	_release_afus(adapter->afu_list);
+	if (adapter->id)
+		free(adapter->id);
 	free(adapter);
 }
 
@@ -1146,9 +1122,10 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	}
 	close(afu->fd);
 	afu->opened = 0;
+
+free_done:
 	if (afu->id != NULL)
 		free(afu->id);
-free_done:
 	pthread_join(afu->thread, NULL);
 	free(afu);
 }

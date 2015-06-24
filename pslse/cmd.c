@@ -747,23 +747,22 @@ buffer_data_fail:
 static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
 			    pthread_mutex_t *lock)
 {
-	uint8_t *data;
+	uint8_t data[MAX_LINE_CHARS];
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
 
 	// Client is returning data from memory read
 	pthread_mutex_lock(lock);
-	data = get_bytes_silent(fd, event->size, cmd->parms->timeout,
-			        event->abort);
-	pthread_mutex_unlock(lock);
-	if (data == NULL) {
+	if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
+			     event->abort) < 0) {
 		event->resp = PSL_RESPONSE_DERROR;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
+		pthread_mutex_unlock(lock);
 		return;
 	}
-	memcpy((void *) &(event->data[offset]), (void *) data, event->size);
-	free(data);
+	pthread_mutex_unlock(lock);
+	memcpy((void *) &(event->data[offset]), (void *) &data, event->size);
 	generate_cl_parity(event->data, event->parity);
 	event->state = MEM_RECEIVED;
 }

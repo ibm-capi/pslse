@@ -102,28 +102,42 @@ void ns_delay(long ns)
 	nanosleep(&ts, &ts);
 }
 
-// Get bytes from socket
-uint8_t * get_bytes_silent(int fd, int size, int timeout, int *abort)
+// Is there incoming data on socket?
+int bytes_ready(int fd, int *abort)
 {
 	struct pollfd pfd;
+	int rc;
+
+	pfd.fd = fd;
+	pfd.events = POLLIN | POLLHUP;
+	pfd.revents = 0;
+	rc = poll(&pfd, 1, 1);
+	if ((abort != NULL) && (*abort != 0))
+		return -1;
+	if (rc > 0)
+		return 1;
+	if (rc == 0)
+		return 0;
+	if (errno == EINTR)
+		return 0;
+	warn_msg("Socket disconnect on poll");
+	return -1;
+}
+
+// Get bytes from socket
+int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
+{
 	struct timespec start, now;
 	double milliseconds;
-	uint8_t *data;
 	int count, bytes, rc;
 
 	if (clock_gettime(CLOCK_REALTIME, &start) < 0) {
 		perror("clock_gettime");
-		return 0;
+		return -1;
 	}
 
-	data = (uint8_t *) malloc(size+1);
-	memset(data, 0, size+1);
-
 	bytes = 0;
-	pfd.fd = fd;
-	pfd.events = POLLIN | POLLHUP;
-	pfd.revents = 0;
-	while (data && (bytes < size)) {
+	while (bytes < size) {
 		// Check for timeout
 		if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
 			perror("clock_gettime");
@@ -137,62 +151,49 @@ uint8_t * get_bytes_silent(int fd, int size, int timeout, int *abort)
 			break;
 
 		// Check for socket activity
-		rc = poll(&pfd, 1, 1);
-		if (rc == 0) {
-			if ((abort != NULL) && (*abort != 0)) {
-				free(data);
-				data = NULL;
-				warn_msg("Socket abort");
-			}
+		rc = bytes_ready(fd, abort);
+		if (rc == 0)
 			continue;
-		}
-		if (rc < 0) {
-			if (errno==EINTR)
-				continue;
-			perror("poll");
-			free(data);
-			data = NULL;
-			warn_msg("Socket disconnect on poll");
+		if (rc < 0)
 			break;
-		}
+
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
 			perror("recv");
-			free(data);
-			data = NULL;
 			warn_msg("Socket disconnect on recv");
 			break;
 		}
 	}
 
-	if (bytes == size) {
-		bytes = 0;
-		while (data && (bytes < size)) {
-			count = recv(fd, &(data[bytes]), size, 0);
-			if (count <= 0)
-				break;
-			bytes += count;
-		}
-#if DEBUG
-		DPRINTF("Socket in:0x");
-		for (count = 0; count < bytes; count++)
-			DPRINTF("%02x", data[count]);
-		DPRINTF("\n");
-#endif /* DEBUG */
-	}
+	if (bytes < size)
+		return -1;
 
-	return data;
+	bytes = 0;
+	while (data && (bytes < size)) {
+		count = recv(fd, &(data[bytes]), size, 0);
+		if (count <= 0)
+			break;
+		bytes += count;
+	}
+#if DEBUG
+	DPRINTF("Socket in:0x");
+	for (count = 0; count < bytes; count++)
+		DPRINTF("%02x", data[count]);
+	DPRINTF("\n");
+#endif /* DEBUG */
+
+	return 0;
 }
 
 // Get bytes from socket with debug output
-uint8_t * get_bytes(int fd, int size, int timeout, int *abort, FILE *dbg_fp,
-		    uint8_t dbg_id, uint16_t context)
+int get_bytes(int fd, int size, uint8_t *data, int timeout, int *abort,
+	      FILE *dbg_fp, uint8_t dbg_id, uint16_t context)
 {
-	uint8_t *data;
+	int rc;
 
-	data = get_bytes_silent(fd, size, timeout, abort);
-	if (data != NULL)
+	rc = get_bytes_silent(fd, size, data, timeout, abort);
+	if (rc == 0)
 		debug_socket_get(dbg_fp, dbg_id, context, data[0]);
-	return data;
+	return rc;
 }
 
 // Put bytes on socket

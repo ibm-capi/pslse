@@ -68,6 +68,7 @@ FILE *fp;
 // Disconnect client connections and stop threads gracefully on Ctrl-C
 static void _INThandler(int sig)
 {
+	pthread_t thread;
 	struct psl* psl;
 	int i;
 
@@ -83,8 +84,9 @@ static void _INThandler(int sig)
 				psl->client[i]->abort = 1;
 		}
 		psl->state = PSLSE_DONE;
-		pthread_join(psl->thread, NULL);
+		thread = psl->thread;
 		psl = psl->_next;
+		pthread_join(thread, NULL);
 	}
 }
 
@@ -138,22 +140,21 @@ static void _query(struct client* client, uint8_t id)
 static void _max_irqs(struct client* client, uint8_t id)
 {
 	struct psl *psl; 
-	uint8_t *buffer;
+	uint8_t buffer[MAX_LINE_CHARS];
 	uint8_t major, minor;
 	uint16_t value;
 
 	// Retrieve requested new maximum interrupts
 	psl = _find_psl(id, &major, &minor);
 	pthread_mutex_lock(&(psl->lock));
-	if ((buffer=get_bytes(client->fd, 2, psl->timeout, &(client->abort),
-			      psl->dbg_fp, psl->dbg_id, client->context))
-	    == NULL) {
+	if (get_bytes(client->fd, 2, buffer, psl->timeout, &(client->abort),
+		      psl->dbg_fp, psl->dbg_id, client->context) < 0) {
 		client->valid = -1;
 		pthread_mutex_unlock(&(psl->lock));
 		return;
 	}
-	client->max_irqs = le16toh(*((uint16_t *)buffer));
-	free(buffer);
+	memcpy ((char*) &client->max_irqs, (char*) buffer, sizeof(uint16_t));
+	client->max_irqs = le16toh(client->max_irqs);
 
 	// Limit to legal value
 	if (client->max_irqs < psl->mmio->desc.num_ints_per_process)
@@ -162,13 +163,11 @@ static void _max_irqs(struct client* client, uint8_t id)
 		client->max_irqs = 2037/psl->mmio->desc.num_of_processes;
 
 	// Return set value
-	buffer = (uint8_t*) malloc(3);
 	buffer[0] = PSLSE_MAX_INT;
 	value = htole16(client->max_irqs);
 	memcpy(&(buffer[1]), (char*) &value, 2);
 	put_bytes(client->fd, 3, buffer, psl->dbg_fp, psl->dbg_id,
 		  client->context);
-	free(buffer);
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -177,29 +176,29 @@ static void _max_irqs(struct client* client, uint8_t id)
 static struct client *_client_connect(int fd, char *ip)
 {
 	struct client *client;
-	uint8_t *buffer;
-	uint8_t rc[3];
+	uint8_t buffer[MAX_LINE_CHARS];
+	uint8_t ack[3];
 	uint16_t map;
+	int rc;
 
 	// Parse client handshake data
-	rc[0] = PSLSE_DETACH;
-	buffer = get_bytes(fd, 5, timeout, 0, fp, -1, -1);
-	if ((buffer == NULL) || (strcmp((char *) buffer, "PSLSE"))) {
+	ack[0] = PSLSE_DETACH;
+	memset(buffer, '\0', MAX_LINE_CHARS);
+	rc = get_bytes(fd, 5, buffer, timeout, 0, fp, -1, -1);
+	if ((rc < 0) || (strcmp((char *) buffer, "PSLSE"))) {
 		info_msg("Connecting application is not PSLSE client\n");
 		info_msg("Expected: \"PSLSE\" Got: \"%s\"", buffer);
-		put_bytes(fd, 1, &(rc[0]), fp, -1, -1);
+		put_bytes(fd, 1, ack, fp, -1, -1);
 		close (fd);
 		return NULL;
 	}
-	free(buffer);
-	buffer = get_bytes_silent(fd, 1, timeout, 0);
-	if ((buffer == NULL) || ((uint8_t) buffer[0] != PSLSE_VERSION)) {
+	rc = get_bytes_silent(fd, 1, buffer, timeout, 0);
+	if ((rc < 0) || ((uint8_t) buffer[0] != PSLSE_VERSION)) {
 		info_msg("Client is wrong version\n");
-		put_bytes(fd, 1, &(rc[0]), fp, -1, -1);
+		put_bytes(fd, 1, ack, fp, -1, -1);
 		close (fd);
 		return NULL;
 	}
-	free(buffer);
 
 	// Initialize client struct
 	client = (struct client *) calloc(1, sizeof(struct client));
@@ -208,10 +207,10 @@ static struct client *_client_connect(int fd, char *ip)
 	client->pending = 1;
 
 	// Return acknowledge to client
-	rc[0] = PSLSE_CONNECT;
+	ack[0] = PSLSE_CONNECT;
 	map = htole16(afu_map);
-	memcpy(&(rc[1]), &map, sizeof(map));
-	put_bytes(fd, 3, &(rc[0]), fp, -1, -1);
+	memcpy(&(ack[1]), &map, sizeof(map));
+	put_bytes(fd, 3, ack, fp, -1, -1);
 
 	info_msg("%s connected", client->ip);
 	return client;
@@ -328,58 +327,46 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 static void * _client_loop(void *ptr)
 {
 	struct client *client = (struct client*)ptr;
-	uint8_t *data;
+	uint8_t data[2];
+	int rc;
 
 	while (client->pending) {
-		data = get_bytes(client->fd, 1, 10, &(client->abort), fp, -1,
-				 -1);
-		if (data == NULL) {
+		rc = bytes_ready(client->fd, &(client->abort));
+		if (rc == 0)
+			continue;
+		if ((rc < 0) || get_bytes(client->fd, 1, data, 10,
+					  &(client->abort), fp, -1, -1) < 0) {
 			client->pending = 0;
-			free(data);
 			break;
 		}
-		if (data[0] == '\0') {
-			free(data);
-			continue;
-		}
 		if (data[0] == PSLSE_QUERY) {
-			free(data);
-			data = get_bytes_silent(client->fd, 1, timeout,
-					 &(client->abort));
-			if (data == NULL) {
+			if (get_bytes_silent(client->fd, 1, data, timeout,
+					 &(client->abort)) < 0) {
 				client->pending = 0;
 				break;
 			}
 			_query(client, data[0]);
-			free(data);
 			continue;
 		}
 		if (data[0] == PSLSE_MAX_INT) {
-			free(data);
-			data = get_bytes(client->fd, 2, timeout,
-					 &(client->abort), fp, -1, -1);
-			if (data == NULL) {
+			if (get_bytes(client->fd, 2, data, timeout,
+					 &(client->abort), fp, -1, -1) < 0) {
 				client->pending = 0;
 				break;
 			}
 			_max_irqs(client, data[0]);
-			free(data);
 			continue;
 		}
 		if (data[0] == PSLSE_OPEN) {
-			free(data);
-			data = get_bytes_silent(client->fd, 2, timeout,
-					 &(client->abort));
-			if (data == NULL) {
+			if (get_bytes_silent(client->fd, 2, data, timeout,
+					 &(client->abort)) < 0) {
 				client->pending = 0;
 				break;
 			}
 			_client_associate(client, data[0], (char) data[1]);
-			free(data);
 			break;
 		}
 		client->pending = 0;
-		free(data);
 		break;
 	}
 
