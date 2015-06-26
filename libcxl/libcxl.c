@@ -1131,6 +1131,7 @@ void cxl_afu_free(struct cxl_afu_h *afu) {
 	}
 	close(afu->fd);
 	afu->opened = 0;
+	pthread_join(afu->thread, NULL);
 
 free_done:
 	if (afu->id != NULL)
