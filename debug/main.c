@@ -34,6 +34,9 @@ static int _parse_parm(FILE *fp)
 		return -1;
 
 	switch (parm) {
+	case DBG_PARM_SEED:
+		printf("PARM:SEED=%d\n", value);
+		break;
 	case DBG_PARM_TIMEOUT:
 		printf("PARM:TIMEOUT=%d\n", value);
 		break;

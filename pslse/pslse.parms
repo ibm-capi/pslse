@@ -20,6 +20,10 @@
 # NOTE: Must be a single value, not a min,max range
 #CREDITS:64
 
+# Randomization seed.  Set this to force reproducable sequence of event
+# NOTE: Must be a single value, not a min,max range
+SEED:13
+
 # Percentage chance of PSL driving any pending responses in a clock cycle.
 # Can not be 0 otherwise PSL will never generate responses to commands.
 # Setting to 100 will cause all responses to be very rapid and generally

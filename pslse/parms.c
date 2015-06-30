@@ -17,10 +17,13 @@
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "parms.h"
 #include "../common/utils.h"
 #include "../common/debug.h"
+
+#define DEFAULT_CREDITS 64
 
 static inline int percent_chance(unsigned int chance)
 {
@@ -82,7 +85,8 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 
 	// Set default parameter values
 	parms->timeout = 10;
-	parms->credits = 64;
+	parms->credits = DEFAULT_CREDITS;
+	parms->seed = (unsigned int) time(NULL);
 	parms->resp_percent = 20;
 	parms->paged_percent = 5;
 	parms->reorder_percent = 20;
@@ -127,14 +131,18 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 		}
 
 		// Set valid parms
-		if (!(strcmp(parm, "TIMEOUT"))) {
+		if (!(strcmp(parm, "SEED"))) {
+			parms->seed = atoi(value);
+			debug_parm(dbg_fp, DBG_PARM_SEED, parms->seed);
+		} else if (!(strcmp(parm, "TIMEOUT"))) {
 			parms->timeout = atoi(value);
 			debug_parm(dbg_fp, DBG_PARM_TIMEOUT,
 				   parms->timeout);
 		} else if (!(strcmp(parm, "CREDITS"))) {
 			data = atoi(value);
-			if ((data > 64) || (data <= 0))
-				warn_msg("CREDITS must be 1-64");
+			if ((data > DEFAULT_CREDITS) || (data <= 0))
+				warn_msg("CREDITS must be 1-%d",
+					 DEFAULT_CREDITS);
 			else
 				parms->credits = data;
 			debug_parm(dbg_fp, DBG_PARM_CREDITS,
@@ -178,8 +186,12 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 		}
 	}
 	fclose(fp);
+	srand(parms->seed);
 
 	info_msg("PSLSE parm values:");
+	printf("\tSeed     = %d\n", parms->seed);
+	if (parms->credits!=DEFAULT_CREDITS)
+		printf("\tCredits  = %d\n", parms->credits);
 	if (parms->timeout)
 		printf("\tTimeout  = %d seconds\n", parms->timeout);
 	else
