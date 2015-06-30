@@ -41,25 +41,11 @@ afu_driver/verilog:	Contains the file top.v which is a top level wrapper
 
 common:			Contains code used in multiple places.
 
+debug:			Contains code for parsing debug.log created by pslse.
+
 libcxl:			Contains the replacement libcxl.c file in addition to a
 			pslse_server.dat file.
 
 pslse:			Contains the code for the PSLSE server.
 
 sample_app:		Contains shell code a sample application.
-
-QUICK START:
-
-1) cd afu_driver/src
-
-2) Set the environment variable VPI_USER_H_DIR.  The value must point to the
-	directory that contains the file "vpi_user.h".  This file is provided
-	by the Verilog simulator.
-
-3) Use "make" to compile this code.  It will build "veriuser.sl" and "libvpi.so"	for your simulator.  Refer to your simulator's documentation for details
-	on how to use Verilog VPI.
-
-4) Use top.v in afu_driver/verilog as a top level wrapper around your AFU
-	Verilog.  Build a model as required for your simulator.
-
-5) 
