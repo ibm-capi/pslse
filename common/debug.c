@@ -267,6 +267,27 @@ DBG_HEADER debug_get_header(FILE* fp)
 	return header;
 }
 
+void debug_send_version(FILE* fp, uint8_t major, uint8_t minor)
+{
+	char *buffer;
+	size_t size;
+	int offset;
+	DBG_HEADER header;
+
+	offset = 0;
+	header = adjust_header(DBG_HEADER_VERSION);
+	size = sizeof(DBG_HEADER)+sizeof(major)+sizeof(minor);
+	if ((buffer = (char*) malloc(size)) != NULL) {
+		memcpy(buffer, (char*)&header, sizeof(DBG_HEADER));
+		offset += sizeof(header);
+		buffer[offset] = major;
+		offset += sizeof(major);
+		buffer[offset] = minor;
+		fwrite(buffer, size, 1, fp);
+		free(buffer);
+	}
+}
+
 void debug_afu_connect(FILE* fp, uint8_t id)
 {
 	_debug_send_id(fp, DBG_HEADER_AFU_CONNECT, id);

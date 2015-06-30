@@ -606,8 +606,9 @@ static int _pslse_connect(uint16_t *afu_map, int *fd)
 		goto connect_fail;
 	}
 	strcpy((char*) buffer, "PSLSE");
-	buffer[5] = (uint8_t) PSLSE_VERSION;
-	if (put_bytes_silent(*fd, 6, buffer) != 6) {
+	buffer[5] = (uint8_t) PSLSE_VERSION_MAJOR;
+	buffer[6] = (uint8_t) PSLSE_VERSION_MINOR;
+	if (put_bytes_silent(*fd, 7, buffer) != 7) {
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		goto connect_fail;
 	}

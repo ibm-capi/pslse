@@ -22,28 +22,29 @@
 
 typedef uint8_t DBG_HEADER;
 
-#define DBG_HEADER_PARM			0x00
-#define DBG_HEADER_SOCKET_PUT           0x01
-#define DBG_HEADER_SOCKET_GET           0x02
-#define DBG_HEADER_AFU_CONNECT		0x03
-#define DBG_HEADER_AFU_DROP   		0x04
-#define DBG_HEADER_CONTEXT_ADD    	0x05
-#define DBG_HEADER_CONTEXT_REMOVE 	0x06
-#define DBG_HEADER_JOB_ADD       	0x07
-#define DBG_HEADER_JOB_SEND       	0x08
-#define DBG_HEADER_JOB_AUX2       	0x09
-#define DBG_HEADER_MMIO_MAP       	0x0A
-#define DBG_HEADER_MMIO_ADD       	0x0B
-#define DBG_HEADER_MMIO_SEND       	0x0C
-#define DBG_HEADER_MMIO_ACK       	0x0D
-#define DBG_HEADER_MMIO_RETURN       	0x0E
-#define DBG_HEADER_CMD_ADD       	0x0F
-#define DBG_HEADER_CMD_UPDATE       	0x10
-#define DBG_HEADER_CMD_CLIENT_REQ   	0x11
-#define DBG_HEADER_CMD_CLIENT_ACK   	0x12
-#define DBG_HEADER_CMD_BUFFER_WRITE 	0x13
-#define DBG_HEADER_CMD_BUFFER_READ 	0x14
-#define DBG_HEADER_CMD_RESPONSE    	0x15
+#define DBG_HEADER_VERSION		0x00
+#define DBG_HEADER_PARM			0x01
+#define DBG_HEADER_SOCKET_PUT           0x02
+#define DBG_HEADER_SOCKET_GET           0x03
+#define DBG_HEADER_AFU_CONNECT		0x04
+#define DBG_HEADER_AFU_DROP   		0x05
+#define DBG_HEADER_CONTEXT_ADD    	0x06
+#define DBG_HEADER_CONTEXT_REMOVE 	0x07
+#define DBG_HEADER_JOB_ADD       	0x08
+#define DBG_HEADER_JOB_SEND       	0x09
+#define DBG_HEADER_JOB_AUX2       	0x0A
+#define DBG_HEADER_MMIO_MAP       	0x0B
+#define DBG_HEADER_MMIO_ADD       	0x0C
+#define DBG_HEADER_MMIO_SEND       	0x0D
+#define DBG_HEADER_MMIO_ACK       	0x0E
+#define DBG_HEADER_MMIO_RETURN       	0x0F
+#define DBG_HEADER_CMD_ADD       	0x10
+#define DBG_HEADER_CMD_UPDATE       	0x11
+#define DBG_HEADER_CMD_CLIENT_REQ   	0x12
+#define DBG_HEADER_CMD_CLIENT_ACK   	0x13
+#define DBG_HEADER_CMD_BUFFER_WRITE 	0x14
+#define DBG_HEADER_CMD_BUFFER_READ 	0x15
+#define DBG_HEADER_CMD_RESPONSE    	0x16
 
 #define DBG_AUX2_DONE			0x80
 #define DBG_AUX2_RUNNING		0x40
@@ -66,6 +67,7 @@ size_t debug_get_16(FILE* fp, uint16_t *value);
 size_t debug_get_8(FILE* fp, uint8_t *value);
 DBG_HEADER debug_get_header(FILE* fp);
 
+void debug_send_version(FILE* fp, uint8_t major, uint8_t minor);
 void debug_afu_connect(FILE* fp, uint8_t id);
 void debug_afu_drop(FILE* fp, uint8_t id);
 void debug_cmd_add(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,

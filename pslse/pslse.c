@@ -192,8 +192,9 @@ static struct client *_client_connect(int fd, char *ip)
 		close (fd);
 		return NULL;
 	}
-	rc = get_bytes_silent(fd, 1, buffer, timeout, 0);
-	if ((rc < 0) || ((uint8_t) buffer[0] != PSLSE_VERSION)) {
+	rc = get_bytes_silent(fd, 2, buffer, timeout, 0);
+	if ((rc < 0) || ((uint8_t) buffer[0] != PSLSE_VERSION_MAJOR) ||
+	    ((uint8_t) buffer[1] != PSLSE_VERSION_MINOR)) {
 		info_msg("Client is wrong version\n");
 		put_bytes(fd, 1, ack, fp, -1, -1);
 		close (fd);
@@ -443,6 +444,11 @@ int main(int argc, char **argv)
 	sigemptyset(&(action.sa_mask));
 	action.sa_flags = 0;
 	sigaction(SIGINT, &action, NULL);
+
+	// Report version
+	info_msg("PSLSE version %d.%03d compiled @ %s %s", PSLSE_VERSION_MAJOR,
+		 PSLSE_VERSION_MINOR, __DATE__, __TIME__);
+	debug_send_version(fp, PSLSE_VERSION_MAJOR, PSLSE_VERSION_MINOR);
 
 	// Parse parameters file
 	parms = parse_parms("pslse.parms", fp);

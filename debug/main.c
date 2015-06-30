@@ -23,6 +23,21 @@ static char *_afu_name(uint8_t id)
 	return name;
 }
 
+static int _report_version(FILE *fp)
+{
+	uint8_t major;
+	uint8_t minor;
+
+	if (debug_get_8(fp, &major)<1)
+		return -1;
+	if (debug_get_8(fp, &minor)<1)
+		return -1;
+
+	printf("PSLSE_VERSION=%d.%03d\n", major, minor);
+
+	return 0;
+}
+
 static int _parse_parm(FILE *fp)
 {
 	uint32_t parm;
@@ -547,6 +562,9 @@ int main(int argc, char **argv)
 	{
 		silent = 0;
 		switch (header) {
+		case DBG_HEADER_VERSION:
+			_report_version(fp);
+			break;
 		case DBG_HEADER_PARM:
 			if (_parse_parm(fp) < 0)
 				return -1;
