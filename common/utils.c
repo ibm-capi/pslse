@@ -222,8 +222,12 @@ int put_bytes_silent(int fd, int size, uint8_t *data)
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = write(fd, &(data[bytes]), size);
-		if (count < 0)
-			break;
+		if (count < 0) {
+			if (errno == EINTR)
+				continue;
+			else
+				break;
+		}
 #if DEBUG
 		for (i = 0; i < count + bytes; i++)
 			DPRINTF("%02x", data[i]);
