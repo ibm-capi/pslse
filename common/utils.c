@@ -162,9 +162,15 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 		}
 
 		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
-			perror("recv");
-			warn_msg("Socket disconnect on recv");
-			break;
+			if (bytes <= 0) {
+				if (errno!=EINTR) {
+					perror("recv");
+					warn_msg("Socket disconnect on recv");
+					break;
+				}
+				else
+					continue;
+			}
 		}
 	}
 
