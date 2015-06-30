@@ -864,11 +864,13 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 // Send a randomly selected pending response back to AFU
 void handle_response(struct cmd *cmd)
 {
-	struct cmd_event **head = &cmd->list;
+	struct cmd_event **head;
 	struct cmd_event *event;
 	int rc;
 
 	// Select a random pending response (or none)
+	pthread_mutex_lock(cmd->psl_lock);
+	head = &cmd->list;
 	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
 		// Fast track error responses
@@ -889,6 +891,7 @@ void handle_response(struct cmd *cmd)
 	if ((event == NULL) ||
 	    ((event->type==CMD_WRITE) && !allow_resp(cmd->parms))) {
 		pthread_mutex_unlock(&(cmd->lock));
+		pthread_mutex_unlock(cmd->psl_lock);
 		return;
 	}
 
@@ -908,9 +911,7 @@ drive_resp:
 		}
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
-	pthread_mutex_lock(cmd->psl_lock);
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
-	pthread_mutex_unlock(cmd->psl_lock);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if (event->restart &&(cmd->client!=NULL) &&
@@ -923,6 +924,7 @@ drive_resp:
 		free(event);
 		cmd->credits++;
 	}
+	pthread_mutex_unlock(cmd->psl_lock);
 	pthread_mutex_unlock(&(cmd->lock));
 }
 

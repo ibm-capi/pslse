@@ -312,7 +312,6 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			psl->job->job = NULL;
 		}
 	 	add_job(psl->job, PSL_JOB_RESET, 0L);
-		psl->state = PSLSE_RESET;
 	}
 
 	// Acknowledge to client

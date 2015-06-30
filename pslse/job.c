@@ -55,7 +55,14 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 {
 	struct job_event *event;
 
-	assert(job->job==NULL);
+	// Dump previous job if not completed
+	if (job->job!=NULL) {
+		pthread_mutex_lock(job->psl_lock);
+		event = job->job;
+		job->job = NULL;
+		pthread_mutex_unlock(job->psl_lock);
+		free(event);
+	}
 
 	event = (struct job_event *) malloc(sizeof(struct job_event));
 	if (!event)
@@ -65,13 +72,17 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	event->state = PSLSE_IDLE;
 	job->job = event;
 
+	// Change job state for reset only
+	if (event->code == PSL_JOB_RESET)
+		*(job->psl_state) = PSLSE_RESET;
+
 	// DEBUG
 	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
 
 	return event;
 }
 
-// Send pending job to AFU
+
 void send_job(struct job *job)
 {
 	struct job_event *event;
@@ -100,10 +111,6 @@ void send_job(struct job *job)
 	if(psl_job_control(job->afu_event, event->code, event->addr) ==
 	   PSL_SUCCESS) {
 		event->state = PSLSE_PENDING;
-		// Change job state for reset only
-		if (event->code == PSL_JOB_RESET)
-			*(job->psl_state) = PSLSE_RESET;
-
 		// DEBUG
 		debug_job_send(job->dbg_fp, job->dbg_id, event->code);
 	}
@@ -127,9 +134,9 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	if (job == NULL)
 		return;
 
-	pthread_mutex_lock(job->psl_lock);
 	dbg_aux2 = 0;
 
+	pthread_mutex_lock(job->psl_lock);
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
 				&tb_request, &par_enable, &read_latency) ==
@@ -145,7 +152,6 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 			}
 			if (*(job->psl_state) != PSLSE_RESET) {
 				add_job(job, PSL_JOB_RESET, 0L);
-				*(job->psl_state) = PSLSE_RESET;
 			}
 			else {
 				*(job->psl_state) = PSLSE_IDLE;

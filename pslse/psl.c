@@ -94,7 +94,7 @@ static void _free(struct psl *psl, struct client* client)
 	if (client->ip)
 		free(client->ip);
 	client->ip = NULL;
-	mem_access =  (struct cmd_event *) client->mem_access;
+	mem_access = (struct cmd_event *) client->mem_access;
 	if (mem_access != NULL) {
 		if (mem_access->state != MEM_DONE) {
 			mem_access->resp = PSL_RESPONSE_AERROR;
@@ -191,7 +191,8 @@ static void _handle_client(struct psl *psl, struct client *client)
 static void *_psl_loop(void *ptr)
 {
 	struct psl *psl = (struct psl*)ptr;
-	int event, i, stopped;
+	struct cmd_event *event;
+	int events, i, stopped, reset;
 	uint8_t ack = PSLSE_DETACH;
 
 	stopped = 1;
@@ -213,15 +214,15 @@ static void *_psl_loop(void *ptr)
 			// Clock AFU
 			psl_signal_afu_model(psl->afu_event);
 			// Check for events from AFU
-			event = psl_get_afu_events(psl->afu_event);
+			events = psl_get_afu_events(psl->afu_event);
 			pthread_mutex_unlock(&(psl->lock));
 
 			// Error on socket
-			if (event < 0)
+			if (events < 0)
 				break;
 
 			// Handle events from AFU
-			if (event > 0)
+			if (events > 0)
 				_handle_afu(psl);
 
 			// Drive events to AFU
@@ -244,6 +245,7 @@ static void *_psl_loop(void *ptr)
 			continue;
 
 		// Check for event from application
+		reset = 0;
 		for (i = 0; i<psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
@@ -256,17 +258,44 @@ static void *_psl_loop(void *ptr)
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;
+				if (reset==0) {
+					reset = 1;
+				}
 				continue;
 			}
 			if (psl->state == PSLSE_RESET) {
 				continue;
 			}
-			if (psl->client[i]->valid > 0)
+			if (psl->client[i]->valid > 0) {
+				reset = -1;
 				_handle_client(psl, psl->client[i]);
+			}
 			if (psl->client[i]->idle_cycles)
 				psl->client[i]->idle_cycles--;
 			if (client_cmd(psl->cmd, psl->client[i]))
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
+		}
+
+		// Send reset to AFU
+		if (reset==1) {
+			pthread_mutex_lock(&(psl->lock));
+			warn_msg("Client dropped context before AFU completed");
+			psl->cmd->buffer_read = NULL;
+			for (event=psl->cmd->list; event!=NULL;
+			     event=event->_next) {
+				warn_msg ("Dumping command tag=0x%02x",
+					  event->tag);
+				if (event->data) {
+					free (event->data);
+				}
+				if (event->parity) {
+					free (event->parity);
+				}
+				free(event);
+			}
+			psl->cmd->list = NULL;
+			pthread_mutex_unlock(&(psl->lock));
+			add_job(psl->job, PSL_JOB_RESET, 0L);
 		}
 	}
 
@@ -438,7 +467,6 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 
 	// Send reset to AFU
 	add_job(psl->job, PSL_JOB_RESET, 0L);
-	psl->state = PSLSE_RESET;
 	while (psl->state != PSLSE_IDLE) ns_delay(4);
 
 	// Read AFU descriptor
