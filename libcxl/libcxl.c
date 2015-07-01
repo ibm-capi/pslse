@@ -207,7 +207,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	uint8_t type;
 
 	DPRINTF("AFU INTERRUPT\n");
-	if (get_bytes_silent(afu->fd, 4, data, 0, 0) < 0) {
+	if (get_bytes_silent(afu->fd, sizeof(uint16_t), data, 0, 0) < 0) {
 		afu->opened = 0;
 		afu->attached = 0;
 		return;
