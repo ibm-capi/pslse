@@ -72,10 +72,6 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	event->state = PSLSE_IDLE;
 	job->job = event;
 
-	// Change job state for reset only
-	if (event->code == PSL_JOB_RESET)
-		*(job->psl_state) = PSLSE_RESET;
-
 	// DEBUG
 	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
 
@@ -111,6 +107,11 @@ void send_job(struct job *job)
 	if(psl_job_control(job->afu_event, event->code, event->addr) ==
 	   PSL_SUCCESS) {
 		event->state = PSLSE_PENDING;
+
+		// Change job state for reset only
+		if (event->code == PSL_JOB_RESET)
+			*(job->psl_state) = PSLSE_RESET;
+
 		// DEBUG
 		debug_job_send(job->dbg_fp, job->dbg_id, event->code);
 	}
