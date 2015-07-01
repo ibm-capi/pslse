@@ -53,11 +53,11 @@
 
 #define DSISR 0x4000000040000000L
 
-static void _delay_1ms() {
+static int _delay_1ms() {
 	struct timespec ts;
 	ts.tv_sec = 0;
 	ts.tv_nsec = 1000000;
-	nanosleep(&ts, &ts);
+	return nanosleep(&ts, &ts);
 }
 
 static int _testmemaddr(uint8_t * memaddr)
@@ -1184,8 +1184,8 @@ int cxl_afu_fd(struct cxl_afu_h *afu)
 	int fd[2];
 
 	pipe(fd);
-	afu->pipe = fd[0];
-	return fd[1];
+	afu->pipe = fd[1];
+	return fd[0];
 }
 
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
@@ -1235,17 +1235,21 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 	}
 
 	// Function will block until event occurs
-	while (afu->opened && (afu->first_event == NULL)) /*infinite loop*/
-		_delay_1ms();
+	while (afu->opened && (afu->first_event == NULL)) { /*infinite loop*/
+		if (_delay_1ms()<0)
+			return -1;
+	}
 
 	// Copy event data, free and move next event, if any, to first
 	memcpy(event, afu->first_event, afu->first_event->header.size);
 	if (afu->first_event == afu->irq) {
 		free(afu->irq);
+		afu->irq = NULL;
 		afu->first_event = afu->dsi;
 	}
 	else if (afu->first_event == afu->dsi) {
 		free(afu->dsi);
+		afu->dsi = NULL;
 		afu->first_event = afu->irq;
 	}
 	return 0;
