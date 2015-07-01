@@ -28,8 +28,6 @@
 #include "parms.h"
 #include "../common/utils.h"
 
-#define PSL_IDLE_CYCLES 20
-
 struct psl {
 	struct AFU_EVENT *afu_event;
 	pthread_t thread;

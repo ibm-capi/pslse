@@ -277,7 +277,10 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 map_done:
 	// Send acknowledge to client
 	pthread_mutex_lock(mmio->psl_lock);
-	put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context);
+	if (put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context)
+	    <0) {
+		client_drop(client, PSL_IDLE_CYCLES);
+	}
 	pthread_mutex_unlock(mmio->psl_lock);
 }
 
@@ -380,23 +383,29 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			buffer = (uint8_t*)malloc(9);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 8);
-			put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
-				  client->context);
+			if (put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
+				      client->context)<0) {
+				client_drop(client, PSL_IDLE_CYCLES);
+			}
 		}
 		else {
 			buffer = (uint8_t*)malloc(5);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 4);
-			put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
-				  client->context);
+			if (put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
+				      client->context)<0) {
+				client_drop(client, PSL_IDLE_CYCLES);
+			}
 		}
 	}
 	else {
 		// Return acknowledge for write
 		buffer = (uint8_t*)malloc(1);
 		buffer[0] = PSLSE_MMIO_ACK;
-		put_bytes(fd, 1, buffer, mmio->dbg_fp, mmio->dbg_id,
-			  client->context);
+		if (put_bytes(fd, 1, buffer, mmio->dbg_fp, mmio->dbg_id,
+			      client->context)<0) {
+			client_drop(client, PSL_IDLE_CYCLES);
+		}
 	}
 	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);
 	free(event);

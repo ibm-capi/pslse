@@ -555,8 +555,10 @@ void handle_buffer_write(struct cmd *cmd)
 			*addr = htole64(event->addr);
 			pthread_mutex_lock(cmd->psl_lock);
 			event->abort = &(client->abort);
-			put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
-				  cmd->dbg_id, event->context);
+			if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
+				      cmd->dbg_id, event->context)<0) {
+				client_drop(client, PSL_IDLE_CYCLES);
+			}
 			pthread_mutex_unlock(cmd->psl_lock);
 			event->state = MEM_REQUEST;
 			debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -679,8 +681,10 @@ void handle_touch(struct cmd *cmd)
 	*addr = htole64(event->addr & CACHELINE_MASK);
 	pthread_mutex_lock(cmd->psl_lock);
 	event->abort = &(client->abort);
-	put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
-		  event->context);
+	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
+		      event->context)<0) {
+		client_drop(client, PSL_IDLE_CYCLES);
+	}
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_REQUEST;
@@ -723,8 +727,10 @@ void handle_interrupt(struct cmd *cmd)
 	memcpy(&(buffer[1]), &irq, 2);
 	pthread_mutex_lock(cmd->psl_lock);
 	event->abort = &(client->abort);
-	put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
-		  event->context);
+	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
+		      event->context)<0) {
+		client_drop(client, PSL_IDLE_CYCLES);
+	}
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_DONE;
@@ -798,8 +804,10 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 		*addr = htole64(cmd->buffer_read->addr);
 		memcpy(&(buffer[10]), &(data[offset]), cmd->buffer_read->size);
 		cmd->buffer_read->abort = &(client->abort);
-		put_bytes(client->fd, cmd->buffer_read->size+10, buffer,
-			  cmd->dbg_fp, cmd->dbg_id, client->context);
+		if (put_bytes(client->fd, cmd->buffer_read->size+10, buffer,
+			      cmd->dbg_fp, cmd->dbg_id, client->context)<0) {
+			client_drop(client, PSL_IDLE_CYCLES);
+		}
 		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id,
 				 cmd->buffer_read->tag,
 				 cmd->buffer_read->context);

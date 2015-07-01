@@ -52,6 +52,7 @@ static void _attach(struct psl *psl, struct client* client)
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
 		warn_msg("Failed to get WED value from client");
+		client_drop(client, PSL_IDLE_CYCLES);
 		goto attach_done;
 	}
 	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
@@ -72,8 +73,10 @@ static void _attach(struct psl *psl, struct client* client)
 
 attach_done:
 	pthread_mutex_lock(&(psl->lock));
-	put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
-		  client->context);
+	if (put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
+		      client->context)<0) {
+		client_drop(client, PSL_IDLE_CYCLES);
+	}
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -144,12 +147,11 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (get_bytes(client->fd, 1, buffer, psl->timeout,
 			      &(client->abort), psl->dbg_fp, psl->dbg_id,
 			      client->context) < 0) {
-			client->valid = -1;
+			client_drop(client, PSL_IDLE_CYCLES);
 			return;
 		}
 		if (buffer[0]==PSLSE_DETACH) {
-			client->idle_cycles = PSL_IDLE_CYCLES;
-			client->valid = -1;
+			client_drop(client, PSL_IDLE_CYCLES);
 		}
 		if (buffer[0]==PSLSE_ATTACH) {
 			_attach(psl, client);
@@ -252,9 +254,12 @@ static void *_psl_loop(void *ptr)
 			if ((psl->client[i]->valid < 0) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
-				put_bytes(psl->client[i]->fd, 1, &ack,
-					  psl->dbg_fp, psl->dbg_id,
-					  psl->client[i]->context);
+				if (put_bytes(psl->client[i]->fd, 1, &ack,
+					      psl->dbg_fp, psl->dbg_id,
+					      psl->client[i]->context)<0) {
+					client_drop(psl->client[i],
+						    PSL_IDLE_CYCLES);
+				}
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;

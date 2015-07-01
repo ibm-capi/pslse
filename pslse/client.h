@@ -49,4 +49,6 @@ struct client {
 	struct client *_next;
 };
 
+void client_drop(struct client *client, int cycles);
+
 #endif /* _CLIENT_H_ */

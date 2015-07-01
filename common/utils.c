@@ -226,7 +226,7 @@ int put_bytes_silent(int fd, int size, uint8_t *data)
 			if (errno == EINTR)
 				continue;
 			else
-				break;
+				return -1;
 		}
 #if DEBUG
 		for (i = 0; i < count + bytes; i++)
@@ -246,9 +246,9 @@ int put_bytes(int fd, int size, uint8_t *data, FILE *dbg_fp, uint8_t dbg_id,
 	int bytes;
 
 	bytes = put_bytes_silent(fd, size, data);
-	if (bytes == size) {
+	if (bytes == size)
 		debug_socket_put(dbg_fp, dbg_id, context, data[0]);
-	}
+
 	return bytes;
 }
 
