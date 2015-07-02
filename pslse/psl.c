@@ -298,6 +298,12 @@ static void *_psl_loop(void *ptr)
 
 		// Check for lost commands
 		cmd = psl->cmd;
+		for (event=cmd->list; event!=NULL; event=event->_next) {
+			if (event->tag == last_tag)
+				break;
+		}
+		if (event==NULL)
+			oldest_time = 0;
 		for (i = 0; i<256; i++) {
 			if (cmd->cmd_time[i]==0)
 				continue;
@@ -338,8 +344,8 @@ static void *_psl_loop(void *ptr)
 			default :
 				strcpy(event_state, "IDLE");
 			}
-			info_msg("Oldest event tag=0x%02x state=%s", oldest_tag,
-				 event_state);
+			info_msg("Oldest event tag=0x%02x state=%s age=%d",
+				 oldest_tag, event_state, oldest_time);
 		}
 
 		// Send reset to AFU
