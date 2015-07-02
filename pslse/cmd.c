@@ -435,7 +435,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 		fail = 0;
 		// Is AFU running?
 		if (*(cmd->psl_state) != PSLSE_RUNNING) {
-			error_msg("Command without jrunning, tag=0x%02x", tag);
+			warn_msg("Command without jrunning, tag=0x%02x", tag);
 			fail = 1;
 		}
 		// Check parity

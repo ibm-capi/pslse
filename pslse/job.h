@@ -28,6 +28,7 @@ struct job_event {
 	uint32_t code;
 	uint64_t addr;
 	enum pslse_state state;
+	struct job_event *_next;
 };
 
 struct job {

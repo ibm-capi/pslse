@@ -46,6 +46,8 @@ static void _attach(struct psl *psl, struct client* client)
 	size_t size;
 	int offset;
 
+	// FIXME: This only works for dedicate mode
+
 	// Get wed value from application
 	ack = PSLSE_DETACH;
 	size = 2*sizeof(uint64_t);
@@ -65,7 +67,6 @@ static void _attach(struct psl *psl, struct client* client)
 	client->page_mask = ~client->page_mask;
 
 	// Send start to AFU
-	// FIXME: This only works for dedicate mode
 	if (add_job(psl->job, PSL_JOB_START, wed) != NULL) {
 		psl->idle_cycles = PSL_IDLE_CYCLES;
 		ack = PSLSE_ATTACH;
@@ -427,6 +428,7 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		  int port, FILE *dbg_fp)
 {
 	struct psl *psl;
+	struct job_event *reset;
 	uint16_t location;
 
 	location = 0x8000;
@@ -539,8 +541,8 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	*head = psl;
 
 	// Send reset to AFU
-	add_job(psl->job, PSL_JOB_RESET, 0L);
-	while (psl->state != PSLSE_IDLE) ns_delay(4);
+	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
+	while (psl->job->job == reset) ns_delay(4); /*infinite loop*/
 
 	// Read AFU descriptor
 	psl->state = PSLSE_DESC;

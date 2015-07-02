@@ -228,6 +228,7 @@ static struct client *_client_connect(int fd, char *ip)
 static int _client_associate(struct client *client, uint8_t id, char afu_type)
 {
 	struct psl* psl;
+	struct job_event *reset;
 	uint32_t mmio_offset, mmio_size;
 	uint8_t major, minor;
 	int i, context, clients;
@@ -319,7 +320,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			free (psl->job->job);
 			psl->job->job = NULL;
 		}
-	 	add_job(psl->job, PSL_JOB_RESET, 0L);
+	 	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
 	}
 
 	// Acknowledge to client

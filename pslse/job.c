@@ -53,24 +53,31 @@ struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 // Create new job to send to AFU
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 {
+	struct job_event **tail;
 	struct job_event *event;
 
-	// Dump previous job if not completed
-	if (job->job!=NULL) {
-		pthread_mutex_lock(job->psl_lock);
+	// For resets, dump previous job if not completed
+	pthread_mutex_lock(job->psl_lock);
+	while ((code==PSL_JOB_RESET) && (job->job!=NULL) &&
+	       (job->job->code!=PSL_JOB_RESET)) {
 		event = job->job;
-		job->job = NULL;
-		pthread_mutex_unlock(job->psl_lock);
+		job->job = event->_next;
 		free(event);
 	}
 
-	event = (struct job_event *) malloc(sizeof(struct job_event));
+	tail = &(job->job);
+	while (*tail != NULL)
+		tail = &((*tail)->_next);
+
+	event = (struct job_event *) calloc(1, sizeof(struct job_event));
 	if (!event)
 		return event;
 	event->code = code;
 	event->addr = addr;
 	event->state = PSLSE_IDLE;
-	job->job = event;
+	*tail = event;
+	pthread_mutex_unlock(job->psl_lock);
+	assert(job->job->_next!=job->job);
 
 	// DEBUG
 	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
@@ -93,8 +100,9 @@ void send_job(struct job *job)
 		goto send_done;
 	// Client disconnected
 	if (job->job->state == PSLSE_DONE) {
-		free(job->job);
-		job->job = NULL;
+		event = job->job;
+		job->job = event->_next;
+		free(event);
 		goto send_done;
 	}
 	event = job->job;
@@ -108,7 +116,7 @@ void send_job(struct job *job)
 	   PSL_SUCCESS) {
 		event->state = PSLSE_PENDING;
 
-		// Change job state for reset only
+		// Change job state
 		if (event->code == PSL_JOB_RESET)
 			*(job->psl_state) = PSLSE_RESET;
 
@@ -116,12 +124,15 @@ void send_job(struct job *job)
 		debug_job_send(job->dbg_fp, job->dbg_id, event->code);
 	}
 send_done:
+	if (job->job != NULL)
+		assert(job->job->_next!=job->job);
 	pthread_mutex_unlock(job->psl_lock);
 }
 
 // See if AFU changed any of the aux2 signals and handle accordingly
 void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 {
+	struct job_event *event;
 	uint32_t job_running;
 	uint32_t job_done;
 	uint32_t job_cack_llcmd;
@@ -145,8 +156,11 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 		if (job_done) {
 			dbg_aux2 |= DBG_AUX2_DONE;
 			if (job->job != NULL) {
-				free(job->job);
-				job->job = NULL;
+				event = job->job;
+				job->job = event->_next;
+				free(event);
+				if (job->job != NULL)
+					assert(job->job->_next!=job->job);
 			}
 			else {
 				error_msg("Unexpected jdone=1 from AFU");
