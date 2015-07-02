@@ -66,7 +66,7 @@ struct cxl_afu_h {
 	int opened;
 	int attached;
 	int mapped;
-	int pipe;
+	int pipe[2];
 	long irqs_max;
 	long irqs_min;
 	long mode;

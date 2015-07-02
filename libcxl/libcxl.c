@@ -97,7 +97,7 @@ static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 		afu->first_event = afu->dsi;
 	type = (uint8_t) CXL_EVENT_DATA_STORAGE;
 	// FIXME: Handle errors on write?
-	write(afu->pipe, &type, 1);
+	write(afu->pipe[1], &type, 1);
 }
 
 static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
@@ -229,7 +229,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 		afu->first_event = afu->irq;
 	type = (uint8_t) CXL_EVENT_AFU_INTERRUPT;
 	// FIXME: Handle errors on write?
-	write(afu->pipe, &type, 1);
+	write(afu->pipe[1], &type, 1);
 }
 
 static void _req_max_int(struct cxl_afu_h *afu)
@@ -1170,11 +1170,8 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 
 int cxl_afu_fd(struct cxl_afu_h *afu)
 {
-	int fd[2];
-
-	pipe(fd);
-	afu->pipe = fd[1];
-	return fd[0];
+	pipe(afu->pipe);
+	return afu->pipe[0];
 }
 
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
@@ -1218,6 +1215,8 @@ int cxl_event_pending(struct cxl_afu_h *afu)
 
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 {
+	uint8_t type;
+
 	if (afu == NULL || event == NULL) {
 		errno = EINVAL;
 		return -1;
@@ -1239,6 +1238,7 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 		afu->dsi = NULL;
 		afu->first_event = afu->irq;
 	}
+	read(afu->pipe[0], &type, 1);
 	return 0;
 }
 
