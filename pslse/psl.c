@@ -133,6 +133,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	struct mmio_event *mmio;
 	struct cmd_event *cmd;
 	uint8_t buffer[MAX_LINE_CHARS];
+	int dw = 0;
 
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
@@ -150,41 +151,46 @@ static void _handle_client(struct psl *psl, struct client *client)
 			client_drop(client, PSL_IDLE_CYCLES);
 			return;
 		}
-		if (buffer[0]==PSLSE_DETACH) {
+		switch (buffer[0]) {
+		case PSLSE_DETACH:
 			client_drop(client, PSL_IDLE_CYCLES);
-		}
-		if (buffer[0]==PSLSE_ATTACH) {
+			break;
+		case PSLSE_ATTACH:
 			_attach(psl, client);
-		}
-		if (buffer[0]==PSLSE_MEM_FAILURE) {
-			if (client->mem_access != NULL)
+			break;
+		case PSLSE_MEM_FAILURE:
+			if (client->mem_access != NULL) {
 				handle_aerror(psl->cmd, cmd);
+			}
 			client->mem_access = NULL;
-		}
-		if (buffer[0]==PSLSE_MEM_SUCCESS) {
-			if (client->mem_access != NULL)
+			break;
+		case PSLSE_MEM_SUCCESS:
+			if (client->mem_access != NULL) {
 				handle_mem_return(psl->cmd, cmd, client->fd,
 						  &(psl->lock));
+			}
 			client->mem_access = NULL;
-		}
-		if (buffer[0]==PSLSE_MMIO_MAP) {
+			break;
+		case PSLSE_MMIO_MAP:
 			handle_mmio_map(psl->mmio, client);
+			break;
+		case PSLSE_MMIO_WRITE64:
+			dw = 1;
+		case PSLSE_MMIO_WRITE32:	/*fall through*/
+			mmio = handle_mmio(psl->mmio, client, 0, dw);
+			break;
+		case PSLSE_MMIO_READ64:
+			dw = 1;
+		case PSLSE_MMIO_READ32:		/*fall through*/
+			mmio = handle_mmio(psl->mmio, client, 1, dw);
+			break;
+		default:
+			error_msg("Unexpected 0x%02x from client", buffer[0]);
 		}
-		if (buffer[0]==PSLSE_MMIO_WRITE64) {
-			mmio = handle_mmio(psl->mmio, client, 0, 1);
-		}
-		if (buffer[0]==PSLSE_MMIO_READ64) {
-			mmio = handle_mmio(psl->mmio, client, 1, 1);
-		}
-		if (buffer[0]==PSLSE_MMIO_WRITE32) {
-			mmio = handle_mmio(psl->mmio, client, 0, 0);
-		}
-		if (buffer[0]==PSLSE_MMIO_READ32) {
-			mmio = handle_mmio(psl->mmio, client, 1, 0);
-		}
-		if (mmio) {
+
+		if (mmio)
 			client->mmio_access = (void*) mmio;
-		}
+
 		client->idle_cycles = PSL_IDLE_CYCLES;
 	}
 }
@@ -193,6 +199,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 static void *_psl_loop(void *ptr)
 {
 	struct psl *psl = (struct psl*)ptr;
+	struct cmd *cmd;
 	struct cmd_event *event;
 	int events, i, stopped, reset;
 	uint8_t ack = PSLSE_DETACH;
@@ -281,6 +288,23 @@ static void *_psl_loop(void *ptr)
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
 		}
 
+		// Check for lost commands
+		cmd = psl->cmd;
+		for (i = 0; i<256; i++) {
+			if (cmd->cmd_time[i]==0)
+				continue;
+			for (event=psl->cmd->list; event!=NULL;
+			     event=event->_next) {
+				if (event->tag==i) {
+					cmd->cmd_time[i]++;
+					break;
+				}
+			}
+			if (event==NULL) {
+				error_msg("Lost tag=0x%02x", i);
+			}
+		}
+
 		// Send reset to AFU
 		if (reset==1) {
 			pthread_mutex_lock(&(psl->lock));
@@ -290,6 +314,7 @@ static void *_psl_loop(void *ptr)
 			     event=event->_next) {
 				warn_msg ("Dumping command tag=0x%02x",
 					  event->tag);
+				cmd->cmd_time[event->tag]=0;
 				if (event->data) {
 					free (event->data);
 				}

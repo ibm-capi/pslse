@@ -74,6 +74,7 @@ struct cmd {
 	pthread_mutex_t *psl_lock;
 	pthread_mutex_t lock;
 	FILE *dbg_fp;
+	int cmd_time[256];
 	uint8_t dbg_id;
 	uint64_t lock_addr;
 	uint64_t res_addr;

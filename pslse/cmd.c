@@ -158,6 +158,8 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	memset(event->data, 0xFF, CACHELINE_BYTES);
 	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
 	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
+	assert(cmd->cmd_time[tag]==0);
+	cmd->cmd_time[tag]=1;
 
 	pthread_mutex_lock(&(cmd->lock));
 	head = &(cmd->list);
@@ -927,6 +929,7 @@ drive_resp:
 			_clear_flush(cmd, event);
 		}
 		*head = event->_next;
+		cmd->cmd_time[event->tag]=0;
 		free(event->data);
 		free(event->parity);
 		free(event);
