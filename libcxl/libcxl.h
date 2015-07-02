@@ -22,7 +22,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-
 #define CXL_KERNEL_API_VERSION 1
 
 #define CXL_SYSFS_CLASS "/sys/class/cxl"
@@ -43,8 +42,8 @@ struct cxl_afu_h;
  * cxl_adapter_next() will implicitly free used buffers if it is called on the
  * last adapter, or cxl_adapter_free() can be called explicitly.
  */
-struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter);
-char * cxl_adapter_dev_name(struct cxl_adapter_h *adapter);
+struct cxl_adapter_h *cxl_adapter_next(struct cxl_adapter_h *adapter);
+char *cxl_adapter_dev_name(struct cxl_adapter_h *adapter);
 void cxl_adapter_free(struct cxl_adapter_h *adapter);
 #define cxl_for_each_adapter(adapter) \
 	for (adapter = cxl_adapter_next(NULL); adapter; adapter = cxl_adapter_next(adapter))
@@ -64,9 +63,10 @@ void cxl_adapter_free(struct cxl_adapter_h *adapter);
  * cxl_[adapter]_afu_next() will implicitly free used buffers if it is called
  * on the last AFU, or cxl_afu_free() can be called explicitly.
  */
-struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu);
-struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu);
-char * cxl_afu_dev_name(struct cxl_afu_h *afu);
+struct cxl_afu_h *cxl_adapter_afu_next(struct cxl_adapter_h *adapter,
+				       struct cxl_afu_h *afu);
+struct cxl_afu_h *cxl_afu_next(struct cxl_afu_h *afu);
+char *cxl_afu_dev_name(struct cxl_afu_h *afu);
 #define cxl_for_each_adapter_afu(adapter, afu) \
 	for (afu = cxl_adapter_afu_next(adapter, NULL); afu; afu = cxl_adapter_afu_next(adapter, afu))
 #define cxl_for_each_afu(afu) \
@@ -84,7 +84,7 @@ enum cxl_views {
  * closed by cxl_afu_free() regardless of how it was opened.
  */
 struct cxl_afu_h *cxl_afu_open_dev(char *path);
-struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
+struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
 //struct cxl_afu_h * cxl_afu_fd_to_h(int fd);
 void cxl_afu_free(struct cxl_afu_h *afu);
 int cxl_afu_opened(struct cxl_afu_h *afu);
