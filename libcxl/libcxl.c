@@ -686,6 +686,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 		return NULL;
 	}
 
+	pipe(afu->pipe);
 	afu->fd = fd;
 	afu->map = afu_map;
 	afu->dbg_id = (major << 4) | minor;
@@ -1170,7 +1171,6 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 
 int cxl_afu_fd(struct cxl_afu_h *afu)
 {
-	pipe(afu->pipe);
 	return afu->pipe[0];
 }
 
