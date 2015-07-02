@@ -1350,7 +1350,7 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 {
-	if (offset & 0x7) {
+	if (offset & 0x3) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -1377,7 +1377,7 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 
 int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 {
-	if (offset & 0x7) {
+	if (offset & 0x3) {
 		errno = EINVAL;
 		return -1;
 	}
