@@ -201,9 +201,17 @@ static void *_psl_loop(void *ptr)
 	struct psl *psl = (struct psl*)ptr;
 	struct cmd *cmd;
 	struct cmd_event *event;
-	int events, i, stopped, reset;
+	struct cmd_event *oldest_event;
+	char event_state[10];
+	int events, i, stopped, reset, oldest_time, oldest_tag, last_tag;
+	enum mem_state oldest_state;
 	uint8_t ack = PSLSE_DETACH;
 
+	oldest_tag = -1;
+	last_tag = -1;
+	oldest_time = 0;
+	oldest_state = MEM_IDLE;
+	oldest_event = NULL;
 	stopped = 1;
 	while (psl->state != PSLSE_DONE) {
 		// idle_cycles continues to generate clock cycles for some
@@ -293,16 +301,45 @@ static void *_psl_loop(void *ptr)
 		for (i = 0; i<256; i++) {
 			if (cmd->cmd_time[i]==0)
 				continue;
-			for (event=psl->cmd->list; event!=NULL;
+			for (event=cmd->list; event!=NULL;
 			     event=event->_next) {
 				if (event->tag==i) {
 					cmd->cmd_time[i]++;
+					if (cmd->cmd_time[i]>oldest_time) {
+						oldest_tag = i;
+						oldest_time = cmd->cmd_time[i];
+						oldest_state = event->state;
+						oldest_event = event;
+					}
 					break;
 				}
 			}
 			if (event==NULL) {
 				error_msg("Lost tag=0x%02x", i);
 			}
+		}
+		if ((oldest_event!=NULL) && ((oldest_tag!=last_tag) ||
+		    (oldest_state!=oldest_event->state))) {
+			oldest_state = oldest_event->state;
+			last_tag = oldest_tag;
+			switch(oldest_state) {
+			case MEM_BUFFER:
+				strcpy(event_state, "BUFFER");
+				break;
+			case MEM_REQUEST:
+				strcpy(event_state, "REQUEST");
+				break;
+			case MEM_RECEIVED:
+				strcpy(event_state, "RECEIVED");
+				break;
+			case MEM_DONE:
+				strcpy(event_state, "DONE");
+				break;
+			default :
+				strcpy(event_state, "IDLE");
+			}
+			info_msg("Oldest event tag=0x%02x state=%s", oldest_tag,
+				 event_state);
 		}
 
 		// Send reset to AFU
