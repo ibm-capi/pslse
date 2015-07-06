@@ -352,10 +352,13 @@ static void *_psl_loop(void *ptr)
 		// Send reset to AFU
 		if (reset==1) {
 			pthread_mutex_lock(&(psl->lock));
-			warn_msg("Client dropped context before AFU completed");
 			psl->cmd->buffer_read = NULL;
 			for (event=psl->cmd->list; event!=NULL;
 			     event=event->_next) {
+				if (reset) {
+					warn_msg("Client dropped context before AFU completed");
+					reset = 0;
+				}
 				warn_msg ("Dumping command tag=0x%02x",
 					  event->tag);
 				cmd->cmd_time[event->tag]=0;
