@@ -64,7 +64,7 @@ module top (
   wire   [0:1023] ah_brdata_top;
   wire   [0:15]   ah_brpar_top;
   wire            ah_brvalid_top;
-  reg    [0:7]    ah_brtag_top;
+  wire   [0:7]    ah_brtag_top;
   reg    [0:3]    ah_brlat_top;
   reg             ah_mmack_top;
   reg    [0:63]   ah_mmdata_top;
@@ -507,6 +507,7 @@ module top (
   assign ah_brdata_top = {brdata_delay, ah_brdata};
   assign ah_brpar_top = {brpar_delay, ah_brpar};
   assign ah_brvalid_top = brvalid_delay[0];
+  assign ah_brtag_top = brtag_delay[0];
 
   // Response delay
 
