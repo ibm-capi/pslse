@@ -101,6 +101,7 @@ static void _free(struct psl *psl, struct client* client)
 	mem_access = (struct cmd_event *) client->mem_access;
 	if (mem_access != NULL) {
 		if (mem_access->state != MEM_DONE) {
+info_msg("Dropping memory access on client disconnect tag=0x%02x", mem_access->tag);
 			mem_access->resp = PSL_RESPONSE_AERROR;
 			mem_access->state = MEM_DONE;
 		}
@@ -163,6 +164,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 			if (client->mem_access != NULL) {
 				handle_aerror(psl->cmd, cmd);
 			}
+info_msg("Dropping memory access after failure tag=0x%02x", cmd->tag);
 			client->mem_access = NULL;
 			break;
 		case PSLSE_MEM_SUCCESS:
@@ -170,6 +172,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 				handle_mem_return(psl->cmd, cmd, client->fd,
 						  &(psl->lock));
 			}
+info_msg("Dropping memory access after success tag=0x%02x", cmd->tag);
 			client->mem_access = NULL;
 			break;
 		case PSLSE_MMIO_MAP:

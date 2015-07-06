@@ -835,7 +835,7 @@ info_msg("Removing psuedo buffer read tag=0x%02x", cmd->buffer_read->tag);
 				 cmd->buffer_read->context);
 		cmd->buffer_read->state = MEM_REQUEST;
 		client->mem_access = (void *) cmd->buffer_read;
-info_msg("Removing real buffer read tag=0x%02x", cmd->buffer_read->tag);
+info_msg("Sending buffer data to application tag=0x%02x", cmd->buffer_read->tag);
 		cmd->buffer_read = NULL;
 		free(buffer);
 	}
