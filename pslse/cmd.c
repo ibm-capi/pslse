@@ -426,74 +426,89 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	uint8_t parity, fail;
 	int rc;
 
+	// Check for command from AFU
 	pthread_mutex_lock(cmd->psl_lock);
 	rc = psl_get_command(cmd->afu_event, &command, &command_parity, &tag,
 			     &tag_parity, &address, &address_parity, &size,
 			     &abort, &handle);
 	pthread_mutex_unlock(cmd->psl_lock);
-	if (rc == PSL_SUCCESS) {
-		fail = 0;
-		// Is AFU running?
-		if (*(cmd->psl_state) != PSLSE_RUNNING) {
-			warn_msg("Command without jrunning, tag=0x%02x", tag);
+
+	// No command ready
+	if (rc != PSL_SUCCESS)
+		return;
+
+	fail = 0;
+	// Is AFU running?
+	if (*(cmd->psl_state) != PSLSE_RUNNING) {
+		warn_msg("Command without jrunning, tag=0x%02x", tag);
+		fail = 1;
+	}
+
+	// Check parity
+	if (parity_enabled) {
+		parity = generate_parity(address, ODD_PARITY);
+		if (parity != address_parity) {
+			_cmd_parity_error("address", (uint64_t) address,
+					  address_parity);
 			fail = 1;
 		}
-		// Check parity
-		if (parity_enabled) {
-			parity = generate_parity(address, ODD_PARITY);
-			if (parity != address_parity) {
-				_cmd_parity_error("address", (uint64_t) address,
-						  address_parity);
-				fail = 1;
-			}
-			parity = generate_parity(tag, ODD_PARITY);
-			if (parity != tag_parity) {
-				_cmd_parity_error("tag", (uint64_t) tag,
-						  tag_parity);
-				fail = 1;
-			}
-			parity = generate_parity(command, ODD_PARITY);
-			if (parity != command_parity) {
-				_cmd_parity_error("code", (uint64_t) command,
-						  command_parity);
-				fail = 1;
-			}
+		parity = generate_parity(tag, ODD_PARITY);
+		if (parity != tag_parity) {
+			_cmd_parity_error("tag", (uint64_t) tag, tag_parity);
+			fail = 1;
 		}
-		if (fail) {
-			_add_other(cmd, handle, tag, command, abort,
-				   PSL_RESPONSE_FAILED, 0);
-		}
-		// Check credits and parse
-		if (!cmd->credits) {
-			error_msg("AFU issued command without any credits");
-			_add_other(cmd, handle, tag, command, abort,
-				   PSL_RESPONSE_FAILED, 0);
-		}
-		else {
-			cmd->credits--;
-			if (cmd->client[handle] == NULL) {
-				_add_other(cmd, handle, tag, command, abort,
-					   PSL_RESPONSE_AERROR, 0);
-				return;
-			}
-			if (_will_flush(cmd->client[handle], address, abort) &&
-			    (command!=PSL_COMMAND_RESTART)) {
-				_add_other(cmd, handle, tag, command, abort,
-					   PSL_RESPONSE_FLUSHED, 0);
-				return;
-			}
-			event = cmd->list;
-			while (event!=NULL) {
-				if (event->tag == tag) {
-					error_msg("Duplicate tag 0x%02x", tag);
-					return;
-				}
-				event = event->_next;
-			}
-			_parse_cmd(cmd, command, tag, address, size, abort,
-				   handle, latency);
+		parity = generate_parity(command, ODD_PARITY);
+		if (parity != command_parity) {
+			_cmd_parity_error("code", (uint64_t) command,
+					  command_parity);
+			fail = 1;
 		}
 	}
+
+	// Add failed command
+	if (fail) {
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED, 0);
+		return;
+	}
+
+	// Check credits and parse
+	if (!cmd->credits) {
+		warn_msg("AFU issued command without any credits");
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED, 0);
+		return;
+	}
+
+	cmd->credits--;
+
+	// No clients connected
+	if (cmd->client[handle] == NULL) {
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_AERROR, 0);
+		return;
+	}
+
+	// Client is flushing new commands
+	if (_will_flush(cmd->client[handle], address, abort) &&
+	    (command!=PSL_COMMAND_RESTART)) {
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FLUSHED, 0);
+		return;
+	}
+
+	// Check for duplicate tag
+	event = cmd->list;
+	while (event!=NULL) {
+		if (event->tag == tag) {
+			error_msg("Duplicate tag 0x%02x", tag);
+			return;
+		}
+		event = event->_next;
+	}
+
+	// Parse command
+	_parse_cmd(cmd, command, tag, address, size, abort, handle, latency);
 }
 
 // Handle randomly selected pending read by either generating early buffer
@@ -625,6 +640,7 @@ void handle_buffer_read(struct cmd *cmd)
 		pthread_mutex_lock(cmd->psl_lock);
 		if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
 				    CACHELINE_BYTES) == PSL_SUCCESS) {
+info_msg("Adding buffer read tag=0x%02x", event->tag);
 			cmd->buffer_read = event;
 			debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id,
 					      event->tag);
@@ -760,6 +776,7 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 	if (client == NULL) {
 		cmd->buffer_read->resp = PSL_RESPONSE_AERROR;
 		cmd->buffer_read->state = MEM_DONE;
+info_msg("No client, removing buffer read tag=0x%02x", cmd->buffer_read->tag);
 		cmd->buffer_read = NULL;
 		goto buffer_data_fail;
 	}
@@ -784,14 +801,17 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 			}
 			free(parity_check);
 		}
+
 		// Randomly decide to not send data to client yet
 		if (!cmd->buffer_read->buffer_activity &&
 		    allow_buffer(cmd->parms)) {
 			cmd->buffer_read->state = MEM_IDLE;
 			cmd->buffer_read->buffer_activity = 1;
+info_msg("Removing psuedo buffer read tag=0x%02x", cmd->buffer_read->tag);
 			cmd->buffer_read = NULL;
 			goto buffer_data_done;
 		}
+
 		// Send data to client and clear cmd->buffer_read to allow
 		// the next buffer read to occur.  The request will now await
 		// confirmation from the client that the memory write was
@@ -815,6 +835,7 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 				 cmd->buffer_read->context);
 		cmd->buffer_read->state = MEM_REQUEST;
 		client->mem_access = (void *) cmd->buffer_read;
+info_msg("Removing real buffer read tag=0x%02x", cmd->buffer_read->tag);
 		cmd->buffer_read = NULL;
 		free(buffer);
 	}
