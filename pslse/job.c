@@ -141,12 +141,11 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	uint32_t tb_request;
 	uint32_t par_enable;
 	uint32_t read_latency;
-	uint8_t dbg_aux2;
+	uint8_t dbg_aux2 = 0;
+	int reset = 0;
 
 	if (job == NULL)
 		return;
-
-	dbg_aux2 = 0;
 
 	pthread_mutex_lock(job->psl_lock);
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
@@ -166,7 +165,7 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 				error_msg("Unexpected jdone=1 from AFU");
 			}
 			if (*(job->psl_state) != PSLSE_RESET) {
-				add_job(job, PSL_JOB_RESET, 0L);
+				reset = 1;
 			}
 			else {
 				*(job->psl_state) = PSLSE_IDLE;
@@ -197,4 +196,7 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 		debug_job_aux2(job->dbg_fp, job->dbg_id, dbg_aux2);
 	}
 	pthread_mutex_unlock(job->psl_lock);
+
+	if (reset)
+		add_job(job, PSL_JOB_RESET, 0L);
 }
