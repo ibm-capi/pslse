@@ -25,6 +25,7 @@
 #include "vpi_user.h"
 
 #define CLOCK_EDGE_DELAY 2
+#define CACHELINE_BYTES 128
 
 struct resp_event {
   uint32_t tag;
@@ -334,6 +335,8 @@ static void command () {
 
 void buffer_read () {
   uint32_t tag, valid, parity;
+  uint16_t parity16;
+  uint8_t data[CACHELINE_BYTES];
 
   get_signal32(brvalid_out, &valid);
 
@@ -341,16 +344,16 @@ void buffer_read () {
     return;
 
   get_signal32(brtag_out, &tag);
-  get_signal_long(brdata, event.buffer_rdata);
+  get_signal_long(brdata, data);
   get_signal32(brpar, &parity);
-  event.buffer_rparity[0] = (unsigned char) (parity >> 8);
-  event.buffer_rparity[1] = (unsigned char) (parity & 0xff);
-  event.buffer_rdata_valid = 1;
+  parity16 = (uint16_t) parity;
+  parity16 = htobe16(parity16);
+  psl_afu_read_buffer_data(&event, CACHELINE_BYTES, data, (uint8_t*) &parity16);
 
 #ifdef DEBUG
   info_message ("Buffer read data tag=0x%02x", tag);
   unsigned i;
-  for (i=0;i<128;i++) {
+  for (i=0;i<CACHELINE_BYTES;i++) {
     if (!(i%32))
       printf ("\n  0x");
     printf ("%02x", event.buffer_rdata[i]);
@@ -676,7 +679,11 @@ static void psl () {
   // Error case
   if (rc < 0) {
     info_message("Socket closed: Ending Simulation.");
+#ifdef FINISH
     vpi_control(vpiFinish, 1);
+#else
+    vpi_control(vpiStop, 1);
+#endif
   }
 
   // Job
