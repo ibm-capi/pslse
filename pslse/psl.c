@@ -73,11 +73,14 @@ static void _attach(struct psl *psl, struct client* client)
 	}
 
 attach_done:
+	assert(psl->locked==0);
 	pthread_mutex_lock(&(psl->lock));
+	psl->locked=1;
 	if (put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
 		client_drop(client, PSL_IDLE_CYCLES);
 	}
+	psl->locked=0;
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -91,7 +94,9 @@ static void _free(struct psl *psl, struct client* client)
 
 	info_msg("%s client disconnect from %s context %d", client->ip,
 		 psl->name, client->context);
+	assert(psl->locked==0);
 	pthread_mutex_lock(&(psl->lock));
+	psl->locked=1;
 	close(client->fd);
 	client->fd = -1;
 	client->idle_cycles = 0;
@@ -111,6 +116,7 @@ info_msg("Dropping memory access on client disconnect tag=0x%02x", mem_access->t
 	if (client->job)
 		client->job->state = PSLSE_DONE;
 	client->valid = 0;
+	psl->locked=0;
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -231,11 +237,14 @@ static void *_psl_loop(void *ptr)
 		}
 
 		if (psl->idle_cycles) {
+			assert(psl->locked==0);
 			pthread_mutex_lock(&(psl->lock));
+			psl->locked=1;
 			// Clock AFU
 			psl_signal_afu_model(psl->afu_event);
 			// Check for events from AFU
 			events = psl_get_afu_events(psl->afu_event);
+			psl->locked=0;
 			pthread_mutex_unlock(&(psl->lock));
 
 			// Error on socket
@@ -272,13 +281,16 @@ static void *_psl_loop(void *ptr)
 				continue;
 			if ((psl->client[i]->valid < 0) &&
 			    (psl->client[i]->idle_cycles == 0)) {
+				assert(psl->locked==0);
 				pthread_mutex_lock(&(psl->lock));
+				psl->locked=1;
 				if (put_bytes(psl->client[i]->fd, 1, &ack,
 					      psl->dbg_fp, psl->dbg_id,
 					      psl->client[i]->context)<0) {
 					client_drop(psl->client[i],
 						    PSL_IDLE_CYCLES);
 				}
+				psl->locked=0;
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;
@@ -354,7 +366,9 @@ static void *_psl_loop(void *ptr)
 
 		// Send reset to AFU
 		if (reset==1) {
+			assert(psl->locked==0);
 			pthread_mutex_lock(&(psl->lock));
+			psl->locked=1;
 			psl->cmd->buffer_read = NULL;
 			for (event=psl->cmd->list; event!=NULL;
 			     event=event->_next) {
@@ -374,6 +388,7 @@ static void *_psl_loop(void *ptr)
 				free(event);
 			}
 			psl->cmd->list = NULL;
+			psl->locked=0;
 			pthread_mutex_unlock(&(psl->lock));
 			add_job(psl->job, PSL_JOB_RESET, 0L);
 		}
@@ -406,7 +421,6 @@ static void *_psl_loop(void *ptr)
 		free(psl->cmd);
 	}
 	if (psl->job) {
-		pthread_mutex_destroy(&(psl->job->lock));
 		free(psl->job);
 	}
 	if (psl->mmio) {
@@ -500,14 +514,16 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	debug_afu_connect(psl->dbg_fp, psl->dbg_id);
 
 	// Initialize job handler
-	if ((psl->job = job_init(psl->afu_event, &(psl->lock), &(psl->state),
+	if ((psl->job = job_init(psl->afu_event, &(psl->lock), &(psl->locked),
+				&(psl->state),
 				 psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("job_init");
 		goto init_fail_lock;
 	}
 
 	// Initialize mmio handler
-	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock), psl->timeout,
+	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock), &(psl->locked),
+				   psl->timeout,
 				   psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("mmio_init");
 		goto init_fail_lock;
@@ -515,7 +531,8 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 
 	// Initialize cmd handler
 	if ((psl->cmd = cmd_init(psl->afu_event, parms, psl->mmio,
-				 &(psl->state), &(psl->lock), psl->dbg_fp,
+				 &(psl->state), &(psl->lock), &(psl->locked),
+				psl->dbg_fp,
 				psl->dbg_id)) == NULL) {
 		perror("cmd_init");
 		goto init_fail_lock;
