@@ -33,8 +33,8 @@
 
 // Initialize job tracking structure
 struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		     int *locked, volatile enum pslse_state *psl_state,
-		     FILE *dbg_fp, uint8_t dbg_id)
+		     volatile enum pslse_state *psl_state, FILE *dbg_fp,
+		     uint8_t dbg_id)
 {
 	struct job *job;
 
@@ -42,7 +42,6 @@ struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 	if (!job)
 		return job;
 	job->afu_event = afu_event;
-	job->psl_locked = locked;
 	job->psl_lock = psl_lock;
 	job->psl_state = psl_state;
 	job->dbg_fp = dbg_fp;
@@ -57,9 +56,7 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	struct job_event *event;
 
 	// For resets, dump previous job if not completed
-	assert(*(job->psl_locked)==0);
 	pthread_mutex_lock(job->psl_lock);
-	*(job->psl_locked)=1;
 	while ((code==PSL_JOB_RESET) && (job->job!=NULL) &&
 	       (job->job->code!=PSL_JOB_RESET)) {
 		event = job->job;
@@ -78,7 +75,6 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	event->addr = addr;
 	event->state = PSLSE_IDLE;
 	*tail = event;
-	*(job->psl_locked)=0;
 	pthread_mutex_unlock(job->psl_lock);
 	assert(job->job->_next!=job->job);
 
@@ -97,9 +93,7 @@ void send_job(struct job *job)
 	if (job == NULL)
 		return;
 
-	assert(*(job->psl_locked)==0);
 	pthread_mutex_lock(job->psl_lock);
-	*(job->psl_locked)=1;
 	// Job not assigned yet
 	if (job->job == NULL)
 		goto send_done;
@@ -131,7 +125,6 @@ void send_job(struct job *job)
 send_done:
 	if (job->job != NULL)
 		assert(job->job->_next!=job->job);
-	*(job->psl_locked)=0;
 	pthread_mutex_unlock(job->psl_lock);
 }
 
@@ -153,9 +146,7 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	if (job == NULL)
 		return;
 
-	assert(*(job->psl_locked)==0);
 	pthread_mutex_lock(job->psl_lock);
-	*(job->psl_locked)=1;
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
 				&tb_request, &par_enable, &read_latency) ==
@@ -203,7 +194,6 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 		// DEBUG
 		debug_job_aux2(job->dbg_fp, job->dbg_id, dbg_aux2);
 	}
-	*(job->psl_locked)=0;
 	pthread_mutex_unlock(job->psl_lock);
 
 	if (reset)

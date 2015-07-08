@@ -35,7 +35,6 @@ struct job {
 	struct AFU_EVENT *afu_event;
 	struct job_event *job;
 	pthread_mutex_t *psl_lock;
-	int* psl_locked;
 	volatile enum pslse_state *psl_state;
 	uint32_t read_latency;
 	FILE *dbg_fp;
@@ -43,8 +42,8 @@ struct job {
 };
 
 struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		     int *locked, volatile enum pslse_state *psl_state,
-		     FILE *dbg_fp, uint8_t dbg_id);
+		     volatile enum pslse_state *psl_state, FILE *dbg_fp,
+		     uint8_t dbg_id);
 
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr);
 

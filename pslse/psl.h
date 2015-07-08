@@ -52,7 +52,6 @@ struct psl {
 	int idle_cycles;
 	int max_clients;
 	int timeout;
-	int locked;
 };
 
 uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,

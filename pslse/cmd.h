@@ -73,8 +73,6 @@ struct cmd {
 	volatile enum pslse_state *psl_state;
 	pthread_mutex_t *psl_lock;
 	pthread_mutex_t lock;
-	int *psl_locked;
-	int cmd_locked;
 	FILE *dbg_fp;
 	int cmd_time[256];
 	uint8_t dbg_id;
@@ -82,13 +80,12 @@ struct cmd {
 	uint64_t res_addr;
 	uint32_t credits;
 	uint16_t irq;
-	uint8_t locked;
+	int locked;
 };
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     pthread_mutex_t *lock, int *locked, FILE *dbg_fp,
-		     uint8_t dbg_id);
+		     pthread_mutex_t *lock, FILE *dbg_fp, uint8_t dbg_id);
 
 void handle_cmd(struct cmd* cmd, uint32_t parity_enabled, uint32_t latency);
 

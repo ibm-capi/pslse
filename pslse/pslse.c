@@ -61,7 +61,6 @@
 struct psl* psl_list;
 struct client* client_list;
 pthread_mutex_t client_lock;
-int client_locked;
 uint16_t afu_map;
 int timeout;
 FILE *fp;
@@ -130,14 +129,11 @@ static void _query(struct client* client, uint8_t id)
 	memcpy(&(buffer[offset]),
 	       (char*) &(client->max_irqs),
 	       sizeof(client->max_irqs));
-	assert(client_locked==0);
 	pthread_mutex_lock(&(psl->lock));
-	client_locked=1;
 	if (put_bytes(client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
 		client_drop(client, PSL_IDLE_CYCLES);
 	}
-	client_locked=0;
 	pthread_mutex_unlock(&(psl->lock));
 	free(buffer);
 }
@@ -152,9 +148,7 @@ static void _max_irqs(struct client* client, uint8_t id)
 
 	// Retrieve requested new maximum interrupts
 	psl = _find_psl(id, &major, &minor);
-	assert(client_locked==0);
 	pthread_mutex_lock(&(psl->lock));
-	client_locked=1;
 	if (get_bytes(client->fd, 2, buffer, psl->timeout, &(client->abort),
 		      psl->dbg_fp, psl->dbg_id, client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES);
@@ -179,7 +173,6 @@ static void _max_irqs(struct client* client, uint8_t id)
 		client_drop(client, PSL_IDLE_CYCLES);
 	}
 max_irq_done:
-	client_locked=0;
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -281,9 +274,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 
 	// Look for open client slot
 	assert(psl->max_clients > 0);
-	assert(client_locked==0);
 	pthread_mutex_lock(&client_lock);
-	client_locked=1;
 	clients = 0;
 	context = -1;
 	for(i = 0; i < psl->max_clients; i++) {
@@ -296,7 +287,6 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			psl->client[i] = client;
 		}
 	}
-	client_locked=0;
 	pthread_mutex_unlock(&client_lock);
 	if (context < 0) {
 		info_msg("No room for new client on afu%d.%d\n", major, minor);
@@ -324,9 +314,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	client->type = afu_type;
 
 	// Send reset to AFU, if no other clients already connected
-	assert(client_locked==0);
 	pthread_mutex_lock(&client_lock);
-	client_locked=1;
 	if (clients == 0) {
 		// Remove lingering job
 		if (psl->job->job != NULL) {
@@ -341,7 +329,6 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		close (client->fd);
 		return -1;
 	}
-	client_locked=0;
 	pthread_mutex_unlock(&client_lock);
 	debug_context_add(fp, psl->dbg_id, context);
 
@@ -527,9 +514,7 @@ int main(int argc, char **argv)
 		// Add new client
 		info_msg("Connection from %s", ip);
 		client = _client_connect(connect_fd, ip);
-		assert(client_locked==0);
 		pthread_mutex_lock(&client_lock);
-		client_locked=1;
 		if (client != NULL) {
 			if (client_list != NULL)
 				client_list->_prev = client;
@@ -544,29 +529,22 @@ int main(int argc, char **argv)
 			}
 		}
 
-		client_locked=0;
 		pthread_mutex_unlock(&client_lock);
 	}
 	info_msg("No AFUs connected, Shutting down PSLSE\n");
 
 	// Shutdown unassociated client connections
-	assert(client_locked==0);
 	pthread_mutex_lock(&client_lock);
-	client_locked=1;
 	while (client_list != NULL) {
 		client = client_list;
 		client_list = client->_next;
 		if (client->pending)
 			client->pending = 0;
-		client_locked=0;
 		pthread_mutex_unlock(&client_lock);
 		pthread_join(client->thread, NULL);
 		free(client);
-		assert(client_locked==0);
 		pthread_mutex_lock(&client_lock);
-		client_locked=1;
 	}
-	client_locked=0;
 	pthread_mutex_unlock(&client_lock);
 
 	free(parms);
