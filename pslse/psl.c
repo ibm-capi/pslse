@@ -124,6 +124,7 @@ static void _handle_afu(struct psl *psl)
 		handle_buffer_write(psl->cmd);
 		handle_buffer_read(psl->cmd);
 		handle_buffer_data(psl->cmd, psl->parity_enabled);
+		handle_mem_write(psl->cmd);
 		handle_touch(psl->cmd);
 		handle_cmd(psl->cmd, psl->parity_enabled, psl->latency);
 		handle_interrupt(psl->cmd);
@@ -203,19 +204,10 @@ info_msg("Dropping memory access after success tag=0x%02x", cmd->tag);
 static void *_psl_loop(void *ptr)
 {
 	struct psl *psl = (struct psl*)ptr;
-	struct cmd *cmd;
 	struct cmd_event *event;
-	struct cmd_event *oldest_event;
-	char event_state[10];
-	int events, i, stopped, reset, oldest_time, oldest_tag, last_tag;
-	enum mem_state oldest_state;
+	int events, i, stopped, reset;
 	uint8_t ack = PSLSE_DETACH;
 
-	oldest_tag = -1;
-	last_tag = -1;
-	oldest_time = 0;
-	oldest_state = MEM_IDLE;
-	oldest_event = NULL;
 	stopped = 1;
 	while (psl->state != PSLSE_DONE) {
 		// idle_cycles continues to generate clock cycles for some
@@ -300,58 +292,6 @@ static void *_psl_loop(void *ptr)
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
 		}
 
-		// Check for lost commands
-		cmd = psl->cmd;
-		for (event=cmd->list; event!=NULL; event=event->_next) {
-			if (event->tag == last_tag)
-				break;
-		}
-		if (event==NULL)
-			oldest_time = 0;
-		for (i = 0; i<256; i++) {
-			if (cmd->cmd_time[i]==0)
-				continue;
-			for (event=cmd->list; event!=NULL;
-			     event=event->_next) {
-				if (event->tag==i) {
-					cmd->cmd_time[i]++;
-					if (cmd->cmd_time[i]>oldest_time) {
-						oldest_tag = i;
-						oldest_time = cmd->cmd_time[i];
-						oldest_state = event->state;
-						oldest_event = event;
-					}
-					break;
-				}
-			}
-			if (event==NULL) {
-				error_msg("Lost tag=0x%02x", i);
-			}
-		}
-		if ((oldest_event!=NULL) && ((oldest_tag!=last_tag) ||
-		    (oldest_state!=oldest_event->state))) {
-			oldest_state = oldest_event->state;
-			last_tag = oldest_tag;
-			switch(oldest_state) {
-			case MEM_BUFFER:
-				strcpy(event_state, "BUFFER");
-				break;
-			case MEM_REQUEST:
-				strcpy(event_state, "REQUEST");
-				break;
-			case MEM_RECEIVED:
-				strcpy(event_state, "RECEIVED");
-				break;
-			case MEM_DONE:
-				strcpy(event_state, "DONE");
-				break;
-			default :
-				strcpy(event_state, "IDLE");
-			}
-			info_msg("Oldest event tag=0x%02x state=%s age=%d",
-				 oldest_tag, event_state, oldest_time);
-		}
-
 		// Send reset to AFU
 		if (reset==1) {
 			pthread_mutex_lock(&(psl->lock));
@@ -364,7 +304,6 @@ static void *_psl_loop(void *ptr)
 				}
 				warn_msg ("Dumping command tag=0x%02x",
 					  event->tag);
-				cmd->cmd_time[event->tag]=0;
 				if (event->data) {
 					free (event->data);
 				}

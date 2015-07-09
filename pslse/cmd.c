@@ -158,8 +158,6 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	memset(event->data, 0xFF, CACHELINE_BYTES);
 	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
 	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
-	assert(cmd->cmd_time[tag]==0);
-	cmd->cmd_time[tag]=1;
 
 	pthread_mutex_lock(&(cmd->lock));
 	head = &(cmd->list);
@@ -757,95 +755,116 @@ void handle_interrupt(struct cmd *cmd)
 
 void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 {
-	struct client *client;
-	uint64_t *addr;
-	uint8_t *buffer, *data, *parity, *parity_check;
-	uint64_t offset;
+	uint8_t *parity_check;
 	int rc;
+	struct cmd_event *event;
 
 	// Has struct been initialized?
-	if (cmd == NULL)
+	if ((cmd == NULL) || (cmd->buffer_read == NULL))
 		return;
 
 	pthread_mutex_lock(cmd->psl_lock);
 	pthread_mutex_lock(&(cmd->lock));
-	// Check if there is pending buffer read request
-	if ((cmd->client == NULL) || (cmd->buffer_read == NULL)) {
-		goto buffer_data_fail;
-	}
-	client = cmd->client[cmd->buffer_read->context];
-	if (client == NULL) {
-		cmd->buffer_read->resp = PSL_RESPONSE_AERROR;
-		cmd->buffer_read->state = MEM_DONE;
-info_msg("No client, removing buffer read tag=0x%02x", cmd->buffer_read->tag);
-		cmd->buffer_read = NULL;
-		goto buffer_data_fail;
-	}
-	if (client->mem_access != NULL) {
-		goto buffer_data_fail;
-	}
 
-	// Check if buffer read data has returned from AFU and if so
-	// then send to client for memory write
-	data = (uint8_t*)malloc(CACHELINE_BYTES);
-	parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
-	rc = psl_get_buffer_read_data(cmd->afu_event, data, parity);
-	if ((rc == PSL_SUCCESS) && (cmd->buffer_read != NULL) &&
-	    (client->mem_access == NULL)) {
+	// Check if buffer read data has returned from AFU
+	event = cmd->buffer_read;
+	rc = psl_get_buffer_read_data(cmd->afu_event, event->data,
+				      event->parity);
+	if (rc == PSL_SUCCESS) {
 		if (parity_enable) {
 			parity_check = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
-			generate_cl_parity(data, parity_check);
-			if (strncmp((char *) parity, (char *) parity_check,
+			generate_cl_parity(event->data, parity_check);
+			if (strncmp((char *) event->parity,
+				    (char *) parity_check,
 				    DWORDS_PER_CACHELINE/8)) {
 				error_msg("Buffer read parity error tag=0x%02x",
-					  cmd->buffer_read->tag);
+					  event->tag);
 			}
 			free(parity_check);
 		}
 
+		// Free buffer interface for another event
+		cmd->buffer_read = NULL;
+
 		// Randomly decide to not send data to client yet
-		if (!cmd->buffer_read->buffer_activity &&
-		    allow_buffer(cmd->parms)) {
-			cmd->buffer_read->state = MEM_IDLE;
-			cmd->buffer_read->buffer_activity = 1;
-info_msg("Removing psuedo buffer read tag=0x%02x", cmd->buffer_read->tag);
-			cmd->buffer_read = NULL;
+		if (!event->buffer_activity && allow_buffer(cmd->parms)) {
+			event->state = MEM_IDLE;
+			event->buffer_activity = 1;
+info_msg("Removing psuedo buffer read tag=0x%02x", event->tag);
 			goto buffer_data_done;
 		}
 
-		// Send data to client and clear cmd->buffer_read to allow
-		// the next buffer read to occur.  The request will now await
-		// confirmation from the client that the memory write was
-		// successful before generating a response.  The client
-		// response will cause a call to either handle_aerror() or
-		// handle_mem_return().
-		buffer = (uint8_t*)malloc(cmd->buffer_read->size+10);
-		offset = cmd->buffer_read->addr & ~CACHELINE_MASK;
-		buffer[0] = (uint8_t) PSLSE_MEMORY_WRITE;
-		buffer[1] = (uint8_t) cmd->buffer_read->size;
-		addr = (uint64_t*) &(buffer[2]);
-		*addr = htole64(cmd->buffer_read->addr);
-		memcpy(&(buffer[10]), &(data[offset]), cmd->buffer_read->size);
-		cmd->buffer_read->abort = &(client->abort);
-		if (put_bytes(client->fd, cmd->buffer_read->size+10, buffer,
-			      cmd->dbg_fp, cmd->dbg_id, client->context)<0) {
-			client_drop(client, PSL_IDLE_CYCLES);
-		}
-		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id,
-				 cmd->buffer_read->tag,
-				 cmd->buffer_read->context);
-		cmd->buffer_read->state = MEM_REQUEST;
-		client->mem_access = (void *) cmd->buffer_read;
-info_msg("Sending buffer data to application tag=0x%02x", cmd->buffer_read->tag);
-		cmd->buffer_read = NULL;
-		free(buffer);
+		event->state = MEM_RECEIVED;
 	}
 
 buffer_data_done:
-	free(parity);
-	free(data);
-buffer_data_fail:
 	pthread_mutex_unlock(&(cmd->lock));
+	pthread_mutex_unlock(cmd->psl_lock);
+}
+
+void handle_mem_write(struct cmd *cmd)
+{
+	struct cmd_event **head = &cmd->list;
+	struct cmd_event *event;
+	struct client *client;
+	uint64_t *addr;
+	uint8_t *buffer;
+	uint64_t offset;
+
+	// Send any ready write data to client immediately
+	pthread_mutex_lock(&(cmd->lock));
+	while (*head != NULL) {
+		if (((*head)->type == CMD_WRITE) &&
+		    ((*head)->state == MEM_RECEIVED))
+			break;
+		head = &((*head)->_next);
+	}
+	event = *head;
+	pthread_mutex_unlock(&(cmd->lock));
+
+	// Check if there is pending buffer read request
+	if ((event == NULL) || (cmd->client == NULL))
+		return;
+
+	// Check for valid client connected
+	client = cmd->client[event->context];
+	if (client == NULL) {
+		event->resp = PSL_RESPONSE_AERROR;
+		event->state = MEM_DONE;
+info_msg("No client, removing memory write tag=0x%02x", event->tag);
+		return;
+	}
+
+	// Check that memory request can be driven to client
+	pthread_mutex_lock(cmd->psl_lock);
+	if (client->mem_access != NULL) {
+		pthread_mutex_unlock(cmd->psl_lock);
+		return;
+	}
+
+	// Send data to client and clear event to allow
+	// the next buffer read to occur.  The request will now await
+	// confirmation from the client that the memory write was
+	// successful before generating a response.  The client
+	// response will cause a call to either handle_aerror() or
+	// handle_mem_return().
+	buffer = (uint8_t*)malloc(event->size+10);
+	offset = event->addr & ~CACHELINE_MASK;
+	buffer[0] = (uint8_t) PSLSE_MEMORY_WRITE;
+	buffer[1] = (uint8_t) event->size;
+	addr = (uint64_t*) &(buffer[2]);
+	*addr = htole64(event->addr);
+	memcpy(&(buffer[10]), &(event->data[offset]), event->size);
+	event->abort = &(client->abort);
+	if (put_bytes(client->fd, event->size+10, buffer, cmd->dbg_fp,
+		      cmd->dbg_id, client->context)<0) {
+		client_drop(client, PSL_IDLE_CYCLES);
+	}
+	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
+			 event->context);
+	event->state = MEM_REQUEST;
+	client->mem_access = (void *) event;
+info_msg("Sending buffer data to application tag=0x%02x", event->tag);
 	pthread_mutex_unlock(cmd->psl_lock);
 }
 
@@ -949,7 +968,6 @@ drive_resp:
 			_clear_flush(cmd, event);
 		}
 		*head = event->_next;
-		cmd->cmd_time[event->tag]=0;
 		free(event->data);
 		free(event->parity);
 		free(event);

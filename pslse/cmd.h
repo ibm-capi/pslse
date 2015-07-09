@@ -74,7 +74,6 @@ struct cmd {
 	pthread_mutex_t *psl_lock;
 	pthread_mutex_t lock;
 	FILE *dbg_fp;
-	int cmd_time[256];
 	uint8_t dbg_id;
 	uint64_t lock_addr;
 	uint64_t res_addr;
@@ -92,6 +91,8 @@ void handle_cmd(struct cmd* cmd, uint32_t parity_enabled, uint32_t latency);
 void handle_buffer_read(struct cmd *cmd);
 
 void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable);
+
+void handle_mem_write(struct cmd *cmd);
 
 void handle_buffer_write(struct cmd *cmd);
 
