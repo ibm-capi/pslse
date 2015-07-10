@@ -316,11 +316,6 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	// Send reset to AFU, if no other clients already connected
 	pthread_mutex_lock(&client_lock);
 	if (clients == 0) {
-		// Remove lingering job
-		if (psl->job->job != NULL) {
-			free (psl->job->job);
-			psl->job->job = NULL;
-		}
 	 	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
 	}
 

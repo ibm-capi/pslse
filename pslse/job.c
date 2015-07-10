@@ -55,7 +55,7 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	struct job_event **tail;
 	struct job_event *event;
 
-	// For resets, dump previous job if not completed
+	// For resets, dump previous job if not reset
 	pthread_mutex_lock(job->psl_lock);
 	while ((code==PSL_JOB_RESET) && (job->job!=NULL) &&
 	       (job->job->code!=PSL_JOB_RESET)) {
@@ -155,6 +155,8 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 			dbg_aux2 |= DBG_AUX2_DONE;
 			if (job->job != NULL) {
 				event = job->job;
+				if (event->code != PSL_JOB_RESET)
+					reset = 1;
 				job->job = event->_next;
 				free(event);
 				if (job->job != NULL)
@@ -163,10 +165,7 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 			else {
 				error_msg("Unexpected jdone=1 from AFU");
 			}
-			if (*(job->psl_state) != PSLSE_RESET) {
-				reset = 1;
-			}
-			else {
+			if (*(job->psl_state) == PSLSE_RESET) {
 				*(job->psl_state) = PSLSE_IDLE;
 			}
 		}
@@ -196,6 +195,7 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	}
 	pthread_mutex_unlock(job->psl_lock);
 
-	if (reset)
+	if (reset) {
 		add_job(job, PSL_JOB_RESET, 0L);
+	}
 }

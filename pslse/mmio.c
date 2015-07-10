@@ -254,7 +254,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 	}
 	if (get_bytes_silent(fd, 4, (uint8_t*) &flags, mmio->timeout,
 			     &(client->abort)) < 0) {
-		client->valid = -1;
+		client_drop(client, PSL_IDLE_CYCLES);
 		warn_msg("Socket failure with client context %d",
 			 client->context);
 		ack = PSLSE_MMIO_FAIL;
@@ -324,7 +324,7 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	
 write_fail:
 	// Socket connection is dead
-	client->valid = -1;
+	client_drop(client, PSL_IDLE_CYCLES);
 	return NULL;
 }
 
@@ -346,7 +346,7 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	
 read_fail:
 	// Socket connection is dead
-	client->valid = -1;
+	client_drop(client, PSL_IDLE_CYCLES);
 	return NULL;
 }
 

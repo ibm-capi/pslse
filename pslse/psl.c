@@ -100,7 +100,6 @@ static void _free(struct psl *psl, struct client* client)
 	mem_access = (struct cmd_event *) client->mem_access;
 	if (mem_access != NULL) {
 		if (mem_access->state != MEM_DONE) {
-info_msg("Dropping memory access on client disconnect tag=0x%02x", mem_access->tag);
 			mem_access->resp = PSL_RESPONSE_AERROR;
 			mem_access->state = MEM_DONE;
 		}
@@ -167,7 +166,6 @@ static void _handle_client(struct psl *psl, struct client *client)
 			if (client->mem_access != NULL) {
 				handle_aerror(psl->cmd, cmd);
 			}
-info_msg("Dropping memory access after failure tag=0x%02x", cmd->tag);
 			client->mem_access = NULL;
 			break;
 		case PSLSE_MEM_SUCCESS:
@@ -175,7 +173,6 @@ info_msg("Dropping memory access after failure tag=0x%02x", cmd->tag);
 				handle_mem_return(psl->cmd, cmd, client->fd,
 						  &(psl->lock));
 			}
-info_msg("Dropping memory access after success tag=0x%02x", cmd->tag);
 			client->mem_access = NULL;
 			break;
 		case PSLSE_MMIO_MAP:
@@ -285,12 +282,19 @@ static void *_psl_loop(void *ptr)
 			}
 			if (psl->client[i]->idle_cycles)
 				psl->client[i]->idle_cycles--;
-			if ((psl->client[i]->valid < -1) &&
-			    (client_cmd(psl->cmd, psl->client[i], 1))) {
-				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
+			if (psl->client[i]->valid < -1) {
+				if (client_cmd(psl->cmd, psl->client[i], 1)) {
+					psl->client[i]->idle_cycles =
+						PSL_IDLE_CYCLES;
+				}
+				else {
+					psl->client[i]->idle_cycles = 0;
+				}
 			}
 			else if (client_cmd(psl->cmd, psl->client[i], 0))
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
+			else if (psl->client[i]->valid < 0)
+				psl->client[i]->idle_cycles = 0;
 		}
 
 		// Send reset to AFU

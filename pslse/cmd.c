@@ -436,14 +436,14 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	if (rc != PSL_SUCCESS)
 		return;
 
-	fail = 0;
 	// Is AFU running?
 	if (*(cmd->psl_state) != PSLSE_RUNNING) {
 		warn_msg("Command without jrunning, tag=0x%02x", tag);
-		fail = 1;
+		return;
 	}
 
 	// Check parity
+	fail = 0;
 	if (parity_enabled) {
 		parity = generate_parity(address, ODD_PARITY);
 		if (parity != address_parity) {
@@ -639,7 +639,6 @@ void handle_buffer_read(struct cmd *cmd)
 		pthread_mutex_lock(cmd->psl_lock);
 		if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
 				    CACHELINE_BYTES) == PSL_SUCCESS) {
-info_msg("Adding buffer read tag=0x%02x", event->tag);
 			cmd->buffer_read = event;
 			debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id,
 					      event->tag);
@@ -790,7 +789,6 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 		if (!event->buffer_activity && allow_buffer(cmd->parms)) {
 			event->state = MEM_IDLE;
 			event->buffer_activity = 1;
-info_msg("Removing psuedo buffer read tag=0x%02x", event->tag);
 			goto buffer_data_done;
 		}
 
@@ -831,7 +829,6 @@ void handle_mem_write(struct cmd *cmd)
 	if (client == NULL) {
 		event->resp = PSL_RESPONSE_AERROR;
 		event->state = MEM_DONE;
-info_msg("No client, removing memory write tag=0x%02x", event->tag);
 		return;
 	}
 
@@ -864,7 +861,6 @@ info_msg("No client, removing memory write tag=0x%02x", event->tag);
 			 event->context);
 	event->state = MEM_REQUEST;
 	client->mem_access = (void *) event;
-info_msg("Sending buffer data to application tag=0x%02x", event->tag);
 	pthread_mutex_unlock(cmd->psl_lock);
 }
 
@@ -1000,8 +996,6 @@ int client_cmd(struct cmd *cmd, struct client *client, int flush)
 				event->resp = PSL_RESPONSE_AERROR;
 			}
 			event->state = MEM_DONE;
-info_msg("Tag 0x%02x is active", event->tag);
-_print_event(event);
 		}
 		pthread_mutex_unlock(&(cmd->lock));
 		event = event->_next;
