@@ -94,7 +94,6 @@ static void _free(struct psl *psl, struct client* client)
 	pthread_mutex_lock(&(psl->lock));
 	close(client->fd);
 	client->fd = -1;
-	client->idle_cycles = 0;
 	if (client->ip)
 		free(client->ip);
 	client->ip = NULL;
@@ -156,7 +155,10 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-			client_drop(client, PSL_IDLE_CYCLES);
+//			client_drop(client, PSL_IDLE_CYCLES);
+			client->idle_cycles = PSL_IDLE_CYCLES;
+			client->pending = 0;
+			client->valid = -1;
 			break;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
@@ -265,30 +267,29 @@ static void *_psl_loop(void *ptr)
 			if ((psl->client[i]->valid < 0) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
-				if (put_bytes(psl->client[i]->fd, 1, &ack,
+				put_bytes(psl->client[i]->fd, 1, &ack,
 					      psl->dbg_fp, psl->dbg_id,
-					      psl->client[i]->context)<0) {
-					client_drop(psl->client[i],
-						    PSL_IDLE_CYCLES);
-				}
+					      psl->client[i]->context);
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;
-				if (reset==0) {
+				if (reset==0)
 					reset = 1;
-				}
 				continue;
 			}
-			if (psl->state == PSLSE_RESET) {
+			if (psl->state == PSLSE_RESET)
 				continue;
-			}
 			if (psl->client[i]->valid > 0) {
 				reset = -1;
 				_handle_client(psl, psl->client[i]);
 			}
 			if (psl->client[i]->idle_cycles)
 				psl->client[i]->idle_cycles--;
-			if (client_cmd(psl->cmd, psl->client[i]))
+			if ((psl->client[i]->valid < -1) &&
+			    (client_cmd(psl->cmd, psl->client[i], 1))) {
+				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
+			}
+			else if (client_cmd(psl->cmd, psl->client[i], 0))
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
 		}
 

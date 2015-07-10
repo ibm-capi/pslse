@@ -26,6 +26,6 @@ void client_drop(struct client *client, int cycles)
 {
 	client->idle_cycles = cycles;
 	client->pending = 0;
-	client->valid = -1;
+	client->valid = -2;
 	client->mem_access = NULL;
 }

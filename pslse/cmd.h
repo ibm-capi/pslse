@@ -107,6 +107,6 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event);
 
 void handle_response(struct cmd *cmd);
 
-int client_cmd(struct cmd *cmd, struct client *client);
+int client_cmd(struct cmd *cmd, struct client *client, int flush);
 
 #endif /* _CMD_H_ */

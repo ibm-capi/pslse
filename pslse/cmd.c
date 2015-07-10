@@ -978,9 +978,11 @@ resp_fail:
 	pthread_mutex_unlock(cmd->psl_lock);
 }
 
-int client_cmd(struct cmd *cmd, struct client *client)
+int client_cmd(struct cmd *cmd, struct client *client, int flush)
 {
+	int rc = 0;
 	struct cmd_event *event = cmd->list;
+
 	while (event != NULL) {
 		if (event->context != client->context) {
 			event = event->_next;
@@ -990,16 +992,19 @@ int client_cmd(struct cmd *cmd, struct client *client)
 			return 1;
 		}
 		pthread_mutex_lock(&(cmd->lock));
-		if (event->state != MEM_DONE) {
+		rc = 1;
+		if (flush && (event->state != MEM_DONE)) {
 			if ((event->type == CMD_READ) ||
 			    (event->type == CMD_WRITE) ||
 			    (event->type == CMD_TOUCH)) {
 				event->resp = PSL_RESPONSE_AERROR;
 			}
 			event->state = MEM_DONE;
+info_msg("Tag 0x%02x is active", event->tag);
+_print_event(event);
 		}
 		pthread_mutex_unlock(&(cmd->lock));
 		event = event->_next;
 	}
-	return 0;
+	return rc;
 }
