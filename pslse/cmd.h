@@ -26,9 +26,6 @@
 #include "parms.h"
 #include "../common/psl_interface.h"
 
-#define ABORT_STRICT 0x0
-#define ABORT_PAGE   0x2
-
 enum cmd_type {
 	CMD_READ,
 	CMD_WRITE,

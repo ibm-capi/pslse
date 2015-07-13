@@ -349,73 +349,6 @@ static void _cmd_parity_error(const char *msg, uint64_t value, uint8_t parity)
 		  parity);
 }
 
-// Set flushing mode
-static void _set_flush(struct cmd *cmd, struct cmd_event *event)
-{
-	struct flush_page *current;
-	struct client *client;
-
-	client = cmd->client[event->context];
-
-	if (event->abt==ABORT_STRICT)
-		client->flushing_strict = 1;
-
-	if (event->abt==ABORT_PAGE) {
-		current = (struct flush_page*)
-				calloc(1, sizeof(struct flush_page));
-		current->addr = event->addr & client->page_mask;
-		current->_next = client->flushing_pages;
-		client->flushing_pages = current;
-	}
-}
-
-// Set flushing mode
-static void _clear_flush(struct cmd *cmd, struct cmd_event *event)
-{
-	struct flush_page **current;
-	struct flush_page *dead_man;
-	struct client *client;
-	uint64_t page;
-
-	client = cmd->client[event->context];
-
-	if (event->abt==ABORT_STRICT)
-		cmd->client[event->context]->flushing_strict = 0;
-
-	page = event->addr & client->page_mask;
-	current = &(client->flushing_pages);
-	while ((*current!=NULL) && (event->abt==ABORT_PAGE)) {
-		if ((*current)->addr==page) {
-			dead_man = *current;
-			*current = dead_man->_next;
-			free(dead_man);
-		}
-		else {
-			current = &((*current)->_next);
-		}
-	}
-}
-
-// Will command flush?
-static int _will_flush(struct client *client, uint64_t addr, uint64_t abt)
-{
-	struct flush_page *current;
-	uint64_t page;
-
-	if (client->flushing_strict && (abt==ABORT_STRICT))
-		return 1;
-
-	page = addr & client->page_mask;
-	current = client->flushing_pages;
-	while ((current!=NULL) && (abt==ABORT_PAGE)) {
-		if (current->addr==page)
-			return 1;
-		current = current->_next;
-	}
-
-	return 0;
-}
-
 // See if a command was sent by AFU and process if so
 void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 {
@@ -424,6 +357,9 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	uint32_t command, command_parity, tag, tag_parity, size, abort, handle;
 	uint8_t parity, fail;
 	int rc;
+
+	if (cmd==NULL)
+		return;
 
 	// Check for command from AFU
 	pthread_mutex_lock(cmd->psl_lock);
@@ -482,15 +418,14 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	cmd->credits--;
 
 	// No clients connected
-	if (cmd->client[handle] == NULL) {
+	if ((cmd->client==NULL) || (cmd->client[handle] == NULL)) {
 		_add_other(cmd, handle, tag, command, abort,
-			   PSL_RESPONSE_AERROR, 0);
+			   PSL_RESPONSE_FAILED, 0);
 		return;
 	}
 
 	// Client is flushing new commands
-	if (_will_flush(cmd->client[handle], address, abort) &&
-	    (command!=PSL_COMMAND_RESTART)) {
+	if (cmd->client[handle]->flushing && (command!=PSL_COMMAND_RESTART)) {
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FLUSHED, 0);
 		return;
@@ -520,6 +455,9 @@ void handle_buffer_write(struct cmd *cmd)
 	uint8_t buffer[10];
 	uint64_t *addr;
 
+	if ((cmd==NULL) || (cmd->client == NULL))
+		return;
+
 	// Randomly select a pending read (or none)
 	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
@@ -531,12 +469,19 @@ void handle_buffer_write(struct cmd *cmd)
 		event = event->_next;
 	}
 	pthread_mutex_unlock(&(cmd->lock));
-	if (event == NULL)
+
+	// Abort if client disconnected
+	if ((cmd == NULL) || (cmd->client==NULL)) {
+		event->state = MEM_DONE;
+		return;
+	}
+
+	if ((event == NULL) || (cmd->client[event->context] == NULL))
 		return;
 
 	client = cmd->client[event->context];
 	if ((client == NULL) && (event->state != MEM_RECEIVED)) {
-		event->resp = PSL_RESPONSE_AERROR;
+		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
@@ -553,7 +498,7 @@ void handle_buffer_write(struct cmd *cmd)
 		event->buffer_activity = 1;
 	}
 	else if ((event->state == MEM_IDLE) && (client->mem_access == NULL)) {
-		if (allow_paged(cmd->parms)) {
+		if (!client->flushing && allow_paged(cmd->parms)) {
 			// Randomly cause paged response
 			event->resp = PSL_RESPONSE_PAGED;
 			event->state = MEM_DONE;
@@ -605,8 +550,9 @@ void handle_buffer_write(struct cmd *cmd)
 void handle_buffer_read(struct cmd *cmd)
 {
 	struct cmd_event *event = cmd->list;
+	struct client *client;
 
-	if (cmd->buffer_read != NULL)
+	if ((cmd==NULL) || (cmd->buffer_read!=NULL) || (cmd->client==NULL))
 		return;
 
 	// Randomly select a pending write (or none)
@@ -620,13 +566,20 @@ void handle_buffer_read(struct cmd *cmd)
 		event = event->_next;
 	}
 	pthread_mutex_unlock(&(cmd->lock));
-	if (event == NULL) {
+
+	// Abort if client disconnected
+	if ((cmd == NULL) || (cmd->client==NULL)) {
+		event->state = MEM_DONE;
 		return;
 	}
 
+	if ((event == NULL) || (cmd->client[event->context] == NULL))
+		return;
+	client = cmd->client[event->context];
+
 	if (event->state == MEM_IDLE) {
 		// Randomly cause paged response
-		if (allow_paged(cmd->parms)) {
+		if (!client->flushing && allow_paged(cmd->parms)) {
 			event->resp = PSL_RESPONSE_PAGED;
 			event->state = MEM_DONE;
 			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -656,6 +609,9 @@ void handle_touch(struct cmd *cmd)
 	uint8_t buffer[10];
 	uint64_t *addr;
 
+	if ((cmd == NULL) || (cmd->client==NULL))
+		return;
+
 	// Randomly select a pending touch (or none)
 	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
@@ -670,25 +626,23 @@ void handle_touch(struct cmd *cmd)
 	if (event == NULL)
 		return;
 
-	client = cmd->client[event->context];
-
 	// Abort if client disconnected
-	if (client == NULL) {
+	if ((cmd == NULL) || (cmd->client==NULL)) {
 		event->state = MEM_DONE;
 		return;
 	}
+	client = cmd->client[event->context];
 
 	// Abort if another memory access to client already in progress
 	if(client->mem_access != NULL)
 		return;
 
 	// Randomly cause paged response
-	if (allow_paged(cmd->parms)) {
+	if (!client->flushing && allow_paged(cmd->parms)) {
 		event->resp = PSL_RESPONSE_PAGED;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
+				 event->context, event->resp); return;
 	}
 	// Send memory touch request to client
 	buffer[0] = (uint8_t) PSLSE_MEMORY_TOUCH;
@@ -827,7 +781,7 @@ void handle_mem_write(struct cmd *cmd)
 	// Check for valid client connected
 	client = cmd->client[event->context];
 	if (client == NULL) {
-		event->resp = PSL_RESPONSE_AERROR;
+		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 		return;
 	}
@@ -913,6 +867,7 @@ void handle_response(struct cmd *cmd)
 {
 	struct cmd_event **head;
 	struct cmd_event *event;
+	struct client *client;
 	int rc;
 
 	// Select a random pending response (or none)
@@ -946,23 +901,24 @@ drive_resp:
 		_print_event(event);
 		assert(event != cmd->buffer_read);
 	}
+	// Abort if client disconnected
+	if ((cmd == NULL) || (cmd->client==NULL)) {
+		event->state = MEM_DONE;
+		return;
+	}
+	client = cmd->client[event->context];
 	// Send response, remove command from list and free memory
 	if ((event->resp == PSL_RESPONSE_PAGED) ||
 	    (event->resp == PSL_RESPONSE_AERROR) ||
 	    (event->resp == PSL_RESPONSE_DERROR)) {
-		if ((cmd->client!=NULL) && (cmd->client[event->context]!=NULL))
-		{
-			_set_flush(cmd, event);
-		}
+		client->flushing = 1;
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		if (event->restart &&(cmd->client!=NULL) &&
-		    (cmd->client[event->context]!=NULL)) {
-			_clear_flush(cmd, event);
-		}
+		if (event->restart)
+			client->flushing = 0;
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);
@@ -993,7 +949,7 @@ int client_cmd(struct cmd *cmd, struct client *client, int flush)
 			if ((event->type == CMD_READ) ||
 			    (event->type == CMD_WRITE) ||
 			    (event->type == CMD_TOUCH)) {
-				event->resp = PSL_RESPONSE_AERROR;
+				event->resp = PSL_RESPONSE_FAILED;
 			}
 			event->state = MEM_DONE;
 		}

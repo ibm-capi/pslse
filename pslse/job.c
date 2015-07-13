@@ -161,9 +161,6 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 				if (job->job != NULL)
 					assert(job->job->_next!=job->job);
 			}
-			else {
-				error_msg("Unexpected jdone=1 from AFU");
-			}
 			if (*(job->psl_state) == PSLSE_RESET) {
 				*(job->psl_state) = PSLSE_IDLE;
 			}

@@ -100,7 +100,7 @@ static void _free(struct psl *psl, struct client* client)
 	mem_access = (struct cmd_event *) client->mem_access;
 	if (mem_access != NULL) {
 		if (mem_access->state != MEM_DONE) {
-			mem_access->resp = PSL_RESPONSE_AERROR;
+			mem_access->resp = PSL_RESPONSE_FAILED;
 			mem_access->state = MEM_DONE;
 		}
 	}
@@ -154,7 +154,6 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-//			client_drop(client, PSL_IDLE_CYCLES);
 			client->idle_cycles = PSL_IDLE_CYCLES;
 			client->pending = 0;
 			client->valid = -1;
@@ -204,17 +203,20 @@ static void *_psl_loop(void *ptr)
 {
 	struct psl *psl = (struct psl*)ptr;
 	struct cmd_event *event, *temp;
-	int events, i, stopped, reset;
+	int events, i, stopped, reset, idle;
 	uint8_t ack = PSLSE_DETACH;
 
 	stopped = 1;
+	idle = 1;
 	while (psl->state != PSLSE_DONE) {
 		// idle_cycles continues to generate clock cycles for some
 		// time after the AFU has gone idle.  Eventually clocks will
 		// not be presented to an idle AFU to keep simulation
 		// waveforms from getting huge with no activity cycles.
 		if (psl->state != PSLSE_IDLE) {
-			psl->idle_cycles = PSL_IDLE_CYCLES;
+			if (psl->idle_cycles < PSL_IDLE_CYCLES) {
+				psl->idle_cycles = PSL_IDLE_CYCLES;
+			}
 			if (stopped)
 				info_msg("Clocking %s", psl->name);
 			fflush(stdout);
@@ -241,8 +243,9 @@ static void *_psl_loop(void *ptr)
 			send_job(psl->job);
 			send_mmio(psl->mmio);
 
-			if ((psl->job->job==NULL) && (psl->mmio->list==NULL))
+			if ((psl->job->job==NULL) && (psl->mmio->list==NULL)) {
 				psl->idle_cycles--;
+			}
 		}
 		else {
 			if (!stopped)
@@ -258,6 +261,7 @@ static void *_psl_loop(void *ptr)
 
 		// Check for event from application
 		reset = 0;
+		idle = 0;
 		for (i = 0; i<psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
@@ -276,25 +280,22 @@ static void *_psl_loop(void *ptr)
 			}
 			if (psl->state == PSLSE_RESET)
 				continue;
-			if (psl->client[i]->valid > 0) {
+			if ((psl->client[i]->valid > 0) ||
+			    (psl->client[i]->valid == -1)) {
 				reset = -1;
 				_handle_client(psl, psl->client[i]);
 			}
-			if (psl->client[i]->idle_cycles)
+			if (psl->client[i]->idle_cycles) {
 				psl->client[i]->idle_cycles--;
-			if (psl->client[i]->valid < -1) {
-				if (client_cmd(psl->cmd, psl->client[i], 1)) {
-					psl->client[i]->idle_cycles =
-						PSL_IDLE_CYCLES;
-				}
-				else {
-					psl->client[i]->idle_cycles = 0;
-				}
 			}
-			else if (client_cmd(psl->cmd, psl->client[i], 0))
+			if ((psl->client[i]->valid < -1) &&
+			    (client_cmd(psl->cmd, psl->client[i], 1))) {
+				idle = 0;
+			}
+			else if (client_cmd(psl->cmd, psl->client[i], 0)) {
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
-			else if (psl->client[i]->valid < 0)
-				psl->client[i]->idle_cycles = 0;
+				idle = 0;
+			}
 		}
 
 		// Send reset to AFU

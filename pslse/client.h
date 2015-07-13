@@ -32,8 +32,7 @@ struct client {
 	int fd;
 	int context;
 	int abort;
-	int flushing_strict;
-	struct flush_page *flushing_pages;
+	int flushing;
 	uint16_t max_irqs;
 	char type;
 	uint64_t page_size;
