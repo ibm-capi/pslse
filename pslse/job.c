@@ -76,7 +76,6 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	event->state = PSLSE_IDLE;
 	*tail = event;
 	pthread_mutex_unlock(job->psl_lock);
-	assert(job->job->_next!=job->job);
 
 	// DEBUG
 	debug_job_add(job->dbg_fp, job->dbg_id, event->code);

@@ -203,7 +203,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 static void *_psl_loop(void *ptr)
 {
 	struct psl *psl = (struct psl*)ptr;
-	struct cmd_event *event;
+	struct cmd_event *event, *temp;
 	int events, i, stopped, reset;
 	uint8_t ack = PSLSE_DETACH;
 
@@ -301,8 +301,8 @@ static void *_psl_loop(void *ptr)
 		if (reset==1) {
 			pthread_mutex_lock(&(psl->lock));
 			psl->cmd->buffer_read = NULL;
-			for (event=psl->cmd->list; event!=NULL;
-			     event=event->_next) {
+			event = psl->cmd->list;
+			while (event != NULL) {
 				if (reset) {
 					warn_msg("Client dropped context before AFU completed");
 					reset = 0;
@@ -315,7 +315,9 @@ static void *_psl_loop(void *ptr)
 				if (event->parity) {
 					free (event->parity);
 				}
-				free(event);
+				temp = event;
+				event = event->_next;
+				free(temp);
 			}
 			psl->cmd->list = NULL;
 			pthread_mutex_unlock(&(psl->lock));

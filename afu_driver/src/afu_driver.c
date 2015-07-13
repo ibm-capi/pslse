@@ -19,9 +19,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "psl_interface.h"
-#include "string.h"
 #include "vpi_user.h"
 
 #define CLOCK_EDGE_DELAY 2
