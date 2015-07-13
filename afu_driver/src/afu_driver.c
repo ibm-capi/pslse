@@ -326,8 +326,8 @@ static void command () {
 		   handle);
 
 #ifdef DEBUG
-  info_message ("Command tag=0x%03x com=%02x ea=0x%016llx size=%d\n", tag, com,
-		addr, size);
+  info_message ("Command tag=0x%02x com=%03x ea=0x%016llx size=%d abt=%x\n",
+		tag, com, addr, size, abt);
 #endif /* #ifdef DEBUG */
 
   return;
