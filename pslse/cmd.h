@@ -57,6 +57,7 @@ struct cmd_event {
 	int *abort;
 	enum cmd_type type;
 	enum mem_state state;
+	enum client_state client_state;
 	struct cmd_event *_next;
 };
 
@@ -104,6 +105,6 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event);
 
 void handle_response(struct cmd *cmd);
 
-int client_cmd(struct cmd *cmd, struct client *client, int flush);
+int client_cmd(struct cmd *cmd, struct client *client);
 
 #endif /* _CMD_H_ */

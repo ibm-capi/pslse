@@ -254,7 +254,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 	}
 	if (get_bytes_silent(fd, 4, (uint8_t*) &flags, mmio->timeout,
 			     &(client->abort)) < 0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 		warn_msg("Socket failure with client context %d",
 			 client->context);
 		ack = PSLSE_MMIO_FAIL;
@@ -279,7 +279,7 @@ map_done:
 	pthread_mutex_lock(mmio->psl_lock);
 	if (put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context)
 	    <0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 	pthread_mutex_unlock(mmio->psl_lock);
 }
@@ -324,7 +324,7 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	
 write_fail:
 	// Socket connection is dead
-	client_drop(client, PSL_IDLE_CYCLES);
+	client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	return NULL;
 }
 
@@ -346,7 +346,7 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	
 read_fail:
 	// Socket connection is dead
-	client_drop(client, PSL_IDLE_CYCLES);
+	client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	return NULL;
 }
 
@@ -385,7 +385,7 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			memcpy(&(buffer[1]), &(event->data), 8);
 			if (put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
 				      client->context)<0) {
-				client_drop(client, PSL_IDLE_CYCLES);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 			}
 		}
 		else {
@@ -394,7 +394,7 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			memcpy(&(buffer[1]), &(event->data), 4);
 			if (put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
 				      client->context)<0) {
-				client_drop(client, PSL_IDLE_CYCLES);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 			}
 		}
 	}
@@ -404,7 +404,7 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 		buffer[0] = PSLSE_MMIO_ACK;
 		if (put_bytes(fd, 1, buffer, mmio->dbg_fp, mmio->dbg_id,
 			      client->context)<0) {
-			client_drop(client, PSL_IDLE_CYCLES);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 		}
 	}
 	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);

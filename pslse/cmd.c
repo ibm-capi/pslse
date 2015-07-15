@@ -159,6 +159,17 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
 	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
 
+	// Handle commands to disconnected client
+	if ((cmd->client == NULL) || (cmd->client[context] == NULL) ||
+	    (cmd->client[context]->state == CLIENT_DROPPED)) {
+		event->client_state = CLIENT_DROPPED;
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+	}
+	else {
+		event->client_state = cmd->client[context]->state;
+	}
+
 	pthread_mutex_lock(&(cmd->lock));
 	head = &(cmd->list);
 	while ((*head != NULL) && !allow_reorder(cmd->parms))
@@ -518,7 +529,7 @@ void handle_buffer_write(struct cmd *cmd)
 			event->abort = &(client->abort);
 			if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
 				      cmd->dbg_id, event->context)<0) {
-				client_drop(client, PSL_IDLE_CYCLES);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 			}
 			pthread_mutex_unlock(cmd->psl_lock);
 			event->state = MEM_REQUEST;
@@ -653,7 +664,7 @@ void handle_touch(struct cmd *cmd)
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
@@ -699,7 +710,7 @@ void handle_interrupt(struct cmd *cmd)
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
@@ -809,7 +820,7 @@ void handle_mem_write(struct cmd *cmd)
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, event->size+10, buffer, cmd->dbg_fp,
 		      cmd->dbg_id, client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
 			 event->context);
@@ -930,28 +941,30 @@ resp_fail:
 	pthread_mutex_unlock(cmd->psl_lock);
 }
 
-int client_cmd(struct cmd *cmd, struct client *client, int flush)
+int client_cmd(struct cmd *cmd, struct client *client)
 {
 	int rc = 0;
 	struct cmd_event *event = cmd->list;
 
 	while (event != NULL) {
-		if (event->context != client->context) {
+		if ((event->context != client->context) ||
+		    (event->client_state == CLIENT_FREE)) {
 			event = event->_next;
 			continue;
 		}
-		if (client->valid > 0) {
+		if (client->state == CLIENT_VALID) {
 			return 1;
 		}
 		pthread_mutex_lock(&(cmd->lock));
 		rc = 1;
-		if (flush && (event->state != MEM_DONE)) {
+		if ((client->state == CLIENT_DROPPED) &&
+		    (event->state != MEM_DONE)) {
+			event->state = MEM_DONE;
 			if ((event->type == CMD_READ) ||
 			    (event->type == CMD_WRITE) ||
 			    (event->type == CMD_TOUCH)) {
 				event->resp = PSL_RESPONSE_FAILED;
 			}
-			event->state = MEM_DONE;
 		}
 		pthread_mutex_unlock(&(cmd->lock));
 		event = event->_next;

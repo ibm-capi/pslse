@@ -132,7 +132,7 @@ static void _query(struct client* client, uint8_t id)
 	pthread_mutex_lock(&(psl->lock));
 	if (put_bytes(client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 	pthread_mutex_unlock(&(psl->lock));
 	free(buffer);
@@ -151,7 +151,7 @@ static void _max_irqs(struct client* client, uint8_t id)
 	pthread_mutex_lock(&(psl->lock));
 	if (get_bytes(client->fd, 2, buffer, psl->timeout, &(client->abort),
 		      psl->dbg_fp, psl->dbg_id, client->context) < 0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 		goto max_irq_done;
 		return;
 	}
@@ -170,7 +170,7 @@ static void _max_irqs(struct client* client, uint8_t id)
 	memcpy(&(buffer[1]), (char*) &value, 2);
 	if (put_bytes(client->fd, 3, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 max_irq_done:
 	pthread_mutex_unlock(&(psl->lock));
@@ -282,7 +282,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			++clients;
 		if ((context < 0) && (psl->client[i]== NULL)) {
 			client->context = context = i;
-			client->valid = 1;
+			client->state = CLIENT_VALID;
 			client->pending = 0;
 			psl->client[i] = client;
 		}
@@ -342,13 +342,13 @@ static void * _client_loop(void *ptr)
 			continue;
 		if ((rc < 0) || get_bytes(client->fd, 1, data, 10,
 					  &(client->abort), fp, -1, -1) < 0) {
-			client_drop(client, PSL_IDLE_CYCLES);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 			break;
 		}
 		if (data[0] == PSLSE_QUERY) {
 			if (get_bytes_silent(client->fd, 1, data, timeout,
 					 &(client->abort)) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 				break;
 			}
 			_query(client, data[0]);
@@ -357,7 +357,7 @@ static void * _client_loop(void *ptr)
 		if (data[0] == PSLSE_MAX_INT) {
 			if (get_bytes(client->fd, 2, data, timeout,
 					 &(client->abort), fp, -1, -1) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 				break;
 			}
 			_max_irqs(client, data[0]);
@@ -366,7 +366,7 @@ static void * _client_loop(void *ptr)
 		if (data[0] == PSLSE_OPEN) {
 			if (get_bytes_silent(client->fd, 2, data, timeout,
 					 &(client->abort)) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 				break;
 			}
 			_client_associate(client, data[0], (char) data[1]);
@@ -497,7 +497,7 @@ int main(int argc, char **argv)
 		client_ptr = &client_list;
 		while (*client_ptr != NULL) {
 			client = *client_ptr;
-			if ((client->pending == 0) && (client->valid== 0)) {
+			if ((client->pending == 0) && (client->state == CLIENT_NONE)) {
 				*client_ptr = client->_next;
 				if (client->_next != NULL)
 					client->_next->_prev = client->_prev;

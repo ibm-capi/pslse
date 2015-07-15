@@ -54,7 +54,7 @@ static void _attach(struct psl *psl, struct client* client)
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
 		warn_msg("Failed to get WED value from client");
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 		goto attach_done;
 	}
 	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
@@ -76,7 +76,7 @@ attach_done:
 	pthread_mutex_lock(&(psl->lock));
 	if (put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
 	pthread_mutex_unlock(&(psl->lock));
 }
@@ -108,7 +108,7 @@ static void _free(struct psl *psl, struct client* client)
 	client->mmio_access = NULL;
 	if (client->job)
 		client->job->state = PSLSE_DONE;
-	client->valid = 0;
+	client->state = CLIENT_NONE;
 	pthread_mutex_unlock(&(psl->lock));
 }
 
@@ -149,14 +149,12 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (get_bytes(client->fd, 1, buffer, psl->timeout,
 			      &(client->abort), psl->dbg_fp, psl->dbg_id,
 			      client->context) < 0) {
-			client_drop(client, PSL_IDLE_CYCLES);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 			return;
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-			client->idle_cycles = PSL_IDLE_CYCLES;
-			client->pending = 0;
-			client->valid = -1;
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_FREE);
 			break;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
@@ -265,7 +263,8 @@ static void *_psl_loop(void *ptr)
 		for (i = 0; i<psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			if ((psl->client[i]->valid < 0) &&
+			if (((psl->client[i]->state == CLIENT_DROPPED) ||
+                             (psl->client[i]->state == CLIENT_FREE)) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				pthread_mutex_lock(&(psl->lock));
 				put_bytes(psl->client[i]->fd, 1, &ack,
@@ -274,25 +273,16 @@ static void *_psl_loop(void *ptr)
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;
-				if (reset==0)
-					reset = 1;
+				reset = 1;
 				continue;
 			}
 			if (psl->state == PSLSE_RESET)
 				continue;
-			if ((psl->client[i]->valid > 0) ||
-			    (psl->client[i]->valid == -1)) {
-				reset = -1;
-				_handle_client(psl, psl->client[i]);
-			}
+			_handle_client(psl, psl->client[i]);
 			if (psl->client[i]->idle_cycles) {
 				psl->client[i]->idle_cycles--;
 			}
-			if ((psl->client[i]->valid < -1) &&
-			    (client_cmd(psl->cmd, psl->client[i], 1))) {
-				idle = 0;
-			}
-			else if (client_cmd(psl->cmd, psl->client[i], 0)) {
+			if (client_cmd(psl->cmd, psl->client[i])) {
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
 				idle = 0;
 			}

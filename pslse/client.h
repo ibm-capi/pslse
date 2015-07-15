@@ -24,15 +24,22 @@ struct flush_page {
 	struct flush_page *_next;
 };
 
+enum client_state {
+	CLIENT_NONE,
+	CLIENT_DROPPED,
+	CLIENT_FREE,
+	CLIENT_VALID
+};
+
 struct client {
 	struct job_event *job;
 	int pending;
-	int valid;
 	int idle_cycles;
 	int fd;
 	int context;
 	int abort;
 	int flushing;
+	enum client_state state;
 	uint16_t max_irqs;
 	char type;
 	uint64_t page_size;
@@ -48,6 +55,6 @@ struct client {
 	struct client *_next;
 };
 
-void client_drop(struct client *client, int cycles);
+void client_drop(struct client *client, int cycles, enum client_state state);
 
 #endif /* _CLIENT_H_ */

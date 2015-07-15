@@ -22,10 +22,11 @@
 
 #include "client.h"
 
-void client_drop(struct client *client, int cycles)
+void client_drop(struct client *client, int cycles, enum client_state state)
 {
 	client->idle_cycles = cycles;
 	client->pending = 0;
-	client->valid = -2;
-	client->mem_access = NULL;
+	client->state = state;
+	if (state==CLIENT_DROPPED)
+		client->mem_access = NULL;
 }
