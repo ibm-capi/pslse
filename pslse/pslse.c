@@ -320,10 +320,12 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	}
 
 	// Acknowledge to client
+	pthread_mutex_lock(&(psl->lock));
 	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context)<0) {
 		close (client->fd);
 		return -1;
 	}
+	pthread_mutex_unlock(&(psl->lock));
 	pthread_mutex_unlock(&client_lock);
 	debug_context_add(fp, psl->dbg_id, context);
 

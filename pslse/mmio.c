@@ -83,6 +83,7 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 	event->_next = NULL;
 
 	// Add to end of list
+	pthread_mutex_lock(mmio->psl_lock);
 	pthread_mutex_lock(&(mmio->lock));
 	list = &(mmio->list);
 	while (*list != NULL)
@@ -94,6 +95,7 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 		context = client->context;
 	debug_mmio_add(mmio->dbg_fp, mmio->dbg_id, context, rnw, dw, addr);
 	pthread_mutex_unlock(&(mmio->lock));
+	pthread_mutex_unlock(mmio->psl_lock);
 
 	return event;
 }
@@ -113,6 +115,17 @@ static struct mmio_event *_add_mmio(struct mmio *mmio, struct client *client,
 	return _add_event(mmio, client, rnw, dw, addr, 0, data);
 }
 
+static void _wait_for_done(struct mmio *mmio, enum pslse_state *state)
+{
+	pthread_mutex_lock(&(mmio->lock));
+	while (*state != PSLSE_DONE) {
+		pthread_mutex_unlock(&(mmio->lock));
+		ns_delay(4);
+		pthread_mutex_lock(&(mmio->lock));
+	}
+	pthread_mutex_unlock(&(mmio->lock));
+}
+
 // Read the entire AFU descriptor and keep a copy
 int read_descriptor(struct mmio *mmio)
 {
@@ -129,34 +142,34 @@ int read_descriptor(struct mmio *mmio)
 	event48 = _add_desc(mmio, 1, 1, 0x48 >> 2, 0L);
 
 	// Store data from reads
-	while (event00->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event00->state));
 	mmio->desc.req_prog_model = (uint16_t) event00->data;
 	mmio->desc.num_of_afu_CRs = (uint16_t) (event00->data >> 16);
 	mmio->desc.num_of_processes = (uint16_t) (event00->data >> 32);
 	mmio->desc.num_ints_per_process = (uint16_t) (event00->data >> 48);
 	free(event00);
 
-	while (event20->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event20->state));
 	mmio->desc.AFU_CR_len = event20->data;
 	free(event20);
 
-	while (event28->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event28->state));
 	mmio->desc.AFU_CR_offset = event28->data;
 	free(event28);
 
-	while (event30->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event30->state));
 	mmio->desc.PerProcessPSA = event30->data;
 	free(event30);
 
-	while (event38->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event38->state));
 	mmio->desc.PerProcessPSA_offset = event38->data;
 	free(event38);
 
-	while (event40->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event40->state));
 	mmio->desc.AFU_EB_len = event40->data;
 	free(event40);
 
-	while (event48->state != PSLSE_DONE) ns_delay(4);
+	_wait_for_done(mmio, &(event48->state));
 	mmio->desc.AFU_EB_offset = event48->data;
 	free(event48);
 
@@ -180,14 +193,20 @@ int read_descriptor(struct mmio *mmio)
 // Send pending MMIO event to AFU
 void send_mmio(struct mmio *mmio)
 {
-	struct mmio_event *event = mmio->list;
+	struct mmio_event *event;
+
+	pthread_mutex_lock(mmio->psl_lock);
+	pthread_mutex_lock(&(mmio->lock));
+	event = mmio->list;
 
 	// Don't send event
-	if ((event == NULL) || (event->state == PSLSE_PENDING))
+	if ((event == NULL) || (event->state == PSLSE_PENDING)) {
+		pthread_mutex_unlock(&(mmio->lock));
+		pthread_mutex_unlock(mmio->psl_lock);
 		return;
+	}
 
 	// Attempt to send mmio to AFU
-	pthread_mutex_lock(mmio->psl_lock);
 	if(event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
 				       event->desc) == PSL_SUCCESS) {
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
@@ -201,6 +220,7 @@ void send_mmio(struct mmio *mmio)
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
 	}
+	pthread_mutex_unlock(&(mmio->lock));
 	pthread_mutex_unlock(mmio->psl_lock);
 }
 
@@ -231,8 +251,8 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 			}
 			mmio->list->data = read_data;
 		}
-		mmio->list->state = PSLSE_DONE;
 		pthread_mutex_lock(&(mmio->lock));
+		mmio->list->state = PSLSE_DONE;
 		mmio->list = mmio->list->_next;
 		pthread_mutex_unlock(&(mmio->lock));
 		return;

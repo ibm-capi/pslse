@@ -143,7 +143,7 @@ int handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	int reset, reset_complete;
 
 	if (job == NULL)
-		return;
+		return 0;
 
 	dbg_aux2 = reset = reset_complete = 0;
 	pthread_mutex_lock(job->psl_lock);

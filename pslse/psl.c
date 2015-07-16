@@ -210,6 +210,7 @@ static void *_psl_loop(void *ptr)
 
 	stopped = 1;
 	idle = 1;
+	pthread_mutex_lock(&(psl->lock));
 	while (psl->state != PSLSE_DONE) {
 		// idle_cycles continues to generate clock cycles for some
 		// time after the AFU has gone idle.  Eventually clocks will
@@ -226,18 +227,17 @@ static void *_psl_loop(void *ptr)
 		}
 
 		if (psl->idle_cycles) {
-			pthread_mutex_lock(&(psl->lock));
 			// Clock AFU
 			psl_signal_afu_model(psl->afu_event);
 			// Check for events from AFU
 			events = psl_get_afu_events(psl->afu_event);
-			pthread_mutex_unlock(&(psl->lock));
 
 			// Error on socket
 			if (events < 0)
 				break;
 
 			// Handle events from AFU
+			pthread_mutex_unlock(&(psl->lock));
 			if (events > 0)
 				_handle_afu(psl);
 
@@ -245,16 +245,17 @@ static void *_psl_loop(void *ptr)
 			send_job(psl->job);
 			send_mmio(psl->mmio);
 
-			if ((psl->job->job==NULL) && (psl->mmio->list==NULL)) {
+			pthread_mutex_lock(&(psl->lock));
+			if ((psl->job->job==NULL) && (psl->mmio->list==NULL))
 				psl->idle_cycles--;
-			}
 		}
 		else {
 			if (!stopped)
 				info_msg("Stopping clocks to %s", psl->name);
-			fflush(stdout);
 			stopped = 1;
+			pthread_mutex_unlock(&(psl->lock));
 			ns_delay(1000000);
+			pthread_mutex_lock(&(psl->lock));
 		}
 
 		// Skip client section if AFU descriptor hasn't been read yet
@@ -270,19 +271,21 @@ static void *_psl_loop(void *ptr)
 			if (((psl->client[i]->state == CLIENT_DROPPED) ||
                              (psl->client[i]->state == CLIENT_FREE)) &&
 			    (psl->client[i]->idle_cycles == 0)) {
-				pthread_mutex_lock(&(psl->lock));
 				put_bytes(psl->client[i]->fd, 1, &ack,
 					      psl->dbg_fp, psl->dbg_id,
 					      psl->client[i]->context);
 				pthread_mutex_unlock(&(psl->lock));
 				_free(psl, psl->client[i]);
+				pthread_mutex_lock(&(psl->lock));
 				psl->client[i] = NULL;
 				reset = 1;
 				continue;
 			}
 			if (psl->state == PSLSE_RESET)
 				continue;
+			pthread_mutex_unlock(&(psl->lock));
 			_handle_client(psl, psl->client[i]);
+			pthread_mutex_lock(&(psl->lock));
 			if (psl->client[i]->idle_cycles) {
 				psl->client[i]->idle_cycles--;
 			}
@@ -294,7 +297,6 @@ static void *_psl_loop(void *ptr)
 
 		// Send reset to AFU
 		if (reset==1) {
-			pthread_mutex_lock(&(psl->lock));
 			psl->cmd->buffer_read = NULL;
 			event = psl->cmd->list;
 			while (event != NULL) {
@@ -317,8 +319,10 @@ static void *_psl_loop(void *ptr)
 			psl->cmd->list = NULL;
 			pthread_mutex_unlock(&(psl->lock));
 			add_job(psl->job, PSL_JOB_RESET, 0L);
+			pthread_mutex_lock(&(psl->lock));
 		}
 	}
+	pthread_mutex_unlock(&(psl->lock));
 
 	// Disconnect clients
 	for (i = 0; i< psl->max_clients; i++) {
@@ -425,7 +429,7 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	psl->afu_event = (struct AFU_EVENT *) malloc(sizeof(struct AFU_EVENT));
 	if (psl->afu_event == NULL) {
 		perror("malloc");
-		goto init_fail_lock;
+		goto init_fail_init;
 	}
 	info_msg("Attempting to connect AFU: %s @ %s:%d", psl->name,
 		  psl->host, psl->port);
@@ -433,7 +437,7 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	    PSL_SUCCESS) {
 		warn_msg("Unable to connect AFU: %s @ %s:%d", psl->name,
 			  psl->host, psl->port);
-		goto init_fail_lock;
+		goto init_fail_init;
 	}
 
 	// DEBUG
@@ -443,14 +447,14 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	if ((psl->job = job_init(psl->afu_event, &(psl->lock), &(psl->state),
 				 psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("job_init");
-		goto init_fail_lock;
+		goto init_fail_init;
 	}
 
 	// Initialize mmio handler
 	if ((psl->mmio = mmio_init(psl->afu_event, &(psl->lock), psl->timeout,
 				   psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("mmio_init");
-		goto init_fail_lock;
+		goto init_fail_init;
 	}
 
 	// Initialize cmd handler
@@ -458,16 +462,17 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 				 &(psl->state), &(psl->lock), psl->dbg_fp,
 				psl->dbg_id)) == NULL) {
 		perror("cmd_init");
-		goto init_fail_lock;
+		goto init_fail_init;
 	}
 
 	// Set credits for AFU
 	if (psl_aux1_change(psl->afu_event, psl->cmd->credits) != PSL_SUCCESS) {
 		warn_msg("Unable to set credits");
-		goto init_fail_lock;
+		goto init_fail_init;
 	}
 
 	// Start psl loop thread
+	pthread_mutex_lock(&(psl->lock));
 	if (pthread_create(&(psl->thread), NULL, _psl_loop, psl)) {
 		perror("pthread_create");
 		goto init_fail_lock;
@@ -485,16 +490,24 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	if (psl->_next != NULL)
 		psl->_next->_prev = psl;
 	*head = psl;
+	pthread_mutex_unlock(&(psl->lock));
 
 	// Send reset to AFU
 	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
-	while (psl->job->job == reset) ns_delay(4); /*infinite loop*/
+	pthread_mutex_lock(&(psl->lock));
+	while (psl->job->job == reset) { /*infinite loop*/
+		pthread_mutex_unlock(&(psl->lock));
+		ns_delay(4);
+		pthread_mutex_lock(&(psl->lock));
+	}
 
 	// Read AFU descriptor
 	psl->state = PSLSE_DESC;
+	pthread_mutex_unlock(&(psl->lock));
 	read_descriptor(psl->mmio);
 
 	// Finish PSL configuration
+	pthread_mutex_lock(&(psl->lock));
 	psl->state = PSLSE_IDLE;
 	if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
 	    PROG_MODEL_DEDICATED) {
@@ -513,10 +526,13 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	psl->client = (struct client**)calloc(psl->max_clients,
 					      sizeof(struct client*));
 	psl->cmd->client = psl->client;
+	pthread_mutex_unlock(&(psl->lock));
 
 	return location;
 
 init_fail_lock:
+	pthread_mutex_unlock(&(psl->lock));
+init_fail_init:
 	pthread_mutex_destroy(&(psl->lock));
 init_fail:
 	if (psl) {
