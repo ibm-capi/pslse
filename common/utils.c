@@ -165,8 +165,8 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 			if (bytes <= 0) {
 				if (errno!=EINTR) {
 					perror("recv");
-					error_msg("Socket disconnect on recv");
-					break;
+					warn_msg("Socket disconnect on recv");
+					return -1;
 				}
 				else
 					continue;
