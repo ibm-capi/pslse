@@ -54,8 +54,10 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
 		     pthread_mutex_t *lock, FILE *dbg_fp, uint8_t dbg_id)
 {
-	struct cmd *cmd = (struct cmd*) calloc(1, sizeof(struct cmd));
+	int i, j;
+	struct cmd *cmd;
 
+	cmd = (struct cmd*) calloc(1, sizeof(struct cmd));
 	if (!cmd) {
 		perror("malloc");
 		exit(-1);
@@ -68,9 +70,20 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 	cmd->psl_lock = lock;
 	pthread_mutex_init(&(cmd->lock), NULL);
 	cmd->credits = parms->credits;
+	cmd->page_entries.page_filter = ~((uint64_t) PAGE_MASK);
+	cmd->page_entries.entry_filter = 0;
+	for (i=0; i < LOG2_ENTRIES; i++) {
+		cmd->page_entries.entry_filter <<= 1;
+		cmd->page_entries.entry_filter += 1;
+	}
+	cmd->page_entries.entry_filter <<= PAGE_ADDR_BITS;
+	for (i=0; i < PAGE_ENTRIES; i++) {
+		for (j=0; j < PAGE_WAYS; j++) {
+			cmd->page_entries.valid[i][j] = 0;
+		}
+	}
 	cmd->dbg_fp = dbg_fp;
 	cmd->dbg_id = dbg_id;
-
 	return cmd;
 }
 
@@ -866,6 +879,81 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
 	event->state = MEM_RECEIVED;
 }
 
+// Calculate page address in cached index for translation
+static void _calc_index(struct cmd *cmd, uint64_t *addr, uint64_t *index)
+{
+	*addr &= cmd->page_entries.page_filter;
+	*index = *addr & cmd->page_entries.entry_filter;
+	*index >>= PAGE_ADDR_BITS;
+}
+
+// Update age of translation entries and create new entry if needed
+static void _update_age(struct cmd *cmd, uint64_t addr)
+{
+	uint64_t index;
+	int i, set, age, oldest, empty;
+
+	_calc_index(cmd, &addr, &index);
+	set = age = oldest = 0;
+	empty = PAGE_WAYS;
+	for (i=0; i<PAGE_WAYS; i++) {
+		if (cmd->page_entries.valid[index][i] &&
+		    (cmd->page_entries.entry[index][i]!=addr)) {
+			cmd->page_entries.age[index][i]++;
+			if (cmd->page_entries.age[index][i] > age) {
+				age = cmd->page_entries.age[index][i];
+				oldest = i;
+			}
+		}
+		if (!cmd->page_entries.valid[index][i] &&
+		    (empty==PAGE_WAYS)) {
+			empty = i;
+		}
+		if (cmd->page_entries.valid[index][i] &&
+		    (cmd->page_entries.entry[index][i]==addr)) {
+			cmd->page_entries.age[index][i] = 0;
+			set = 1;
+		}
+	}
+
+	// Entry found and updated
+	if (set)
+		return;
+
+	// Empty slot exists
+	if (empty<PAGE_WAYS) {
+		cmd->page_entries.entry[index][empty] = addr;
+		cmd->page_entries.valid[index][empty] = 1;
+		cmd->page_entries.age[index][empty] = 0;
+		return;
+	}
+
+	// Evict oldest entry and replace with new entry
+	cmd->page_entries.entry[index][oldest] = addr;
+	cmd->page_entries.valid[index][oldest] = 1;
+	cmd->page_entries.age[index][oldest] = 0;
+}
+
+// Determine if page translation is already cached
+static int _page_cached(struct cmd *cmd, uint64_t addr)
+{
+	uint64_t index;
+	int i, hit;
+
+	_calc_index(cmd, &addr, &index);
+	i = hit = 0;
+	while ((i<PAGE_WAYS) && cmd->page_entries.valid[index][i] &&
+	       (cmd->page_entries.entry[index][i]!=addr)) {
+		i++;
+	}
+
+	// Hit entry
+	if ((i<PAGE_WAYS) && cmd->page_entries.valid[index][i])
+		hit = 1;
+
+	return hit;
+}
+
 // Decide what to do with a client memory acknowledgement
 void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
 		       pthread_mutex_t *lock)
@@ -884,13 +972,16 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
 
 	// Randomly cause paged response
 	if (((event->type!=CMD_WRITE) || (event->state!=MEM_REQUEST)) &&
-	    (!client->flushing && allow_paged(cmd->parms))) {
+	    !client->flushing && !_page_cached(cmd, event->addr) &&
+	    allow_paged(cmd->parms)) {
 		event->resp = PSL_RESPONSE_PAGED;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
 		return;
 	}
+
+	_update_age(cmd, event->addr);
 
 	if (event->type==CMD_READ)
 		_handle_mem_read(cmd, event, fd, lock);

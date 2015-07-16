@@ -26,6 +26,14 @@
 #include "parms.h"
 #include "../common/psl_interface.h"
 
+#define TOTAL_PAGES_CACHED 64
+#define PAGE_WAYS 4
+#define LOG2_WAYS 2 // log2(PAGE_WAYS) = log2(4) = 2
+#define PAGE_ENTRIES (TOTAL_PAGES_CACHED / PAGE_WAYS)
+#define LOG2_ENTRIES 4 // log2(PAGE_ENTRIES) = log2(64/4) = log2(16) = 4
+#define PAGE_ADDR_BITS 12
+#define PAGE_MASK 0xFFF
+
 enum cmd_type {
 	CMD_READ,
 	CMD_WRITE,
@@ -42,6 +50,14 @@ enum mem_state {
 	MEM_REQUEST,
 	MEM_RECEIVED,
 	MEM_DONE
+};
+
+struct pages {
+	uint64_t entry[PAGE_ENTRIES][PAGE_WAYS];
+	uint64_t entry_filter;
+	uint64_t page_filter;
+	int age[PAGE_ENTRIES][PAGE_WAYS];
+	uint8_t valid[PAGE_ENTRIES][PAGE_WAYS];
 };
 
 struct cmd_event {
@@ -70,6 +86,7 @@ struct cmd {
 	struct mmio *mmio;
 	struct parms *parms;
 	struct client **client;
+	struct pages page_entries;
 	volatile enum pslse_state *psl_state;
 	pthread_mutex_t *psl_lock;
 	pthread_mutex_t lock;
