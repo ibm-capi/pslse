@@ -54,7 +54,9 @@ static void _attach(struct psl *psl, struct client* client)
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
 		warn_msg("Failed to get WED value from client");
+		pthread_mutex_lock(&(psl->lock));
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		pthread_mutex_unlock(&(psl->lock));
 		goto attach_done;
 	}
 	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
@@ -146,6 +148,10 @@ static void _handle_client(struct psl *psl, struct client *client)
 		client->mmio_access = handle_mmio_done(psl->mmio, client); 
 	}
 
+	// Client disconnected
+	if (client->state==CLIENT_DROPPED)
+		return;
+
 	// Check for event from application
 	cmd = (struct cmd_event*) client->mem_access;
 	mmio = NULL;
@@ -153,12 +159,17 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (get_bytes(client->fd, 1, buffer, psl->timeout,
 			      &(client->abort), psl->dbg_fp, psl->dbg_id,
 			      client->context) < 0) {
+			pthread_mutex_lock(&(psl->lock));
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+			pthread_mutex_unlock(&(psl->lock));
 			return;
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
+			info_msg("Client requesting reset");
+			pthread_mutex_lock(&(psl->lock));
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_FREE);
+			pthread_mutex_unlock(&(psl->lock));
 			break;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
@@ -318,6 +329,7 @@ static void *_psl_loop(void *ptr)
 			}
 			psl->cmd->list = NULL;
 			pthread_mutex_unlock(&(psl->lock));
+			info_msg("Sending reset to AFU");
 			add_job(psl->job, PSL_JOB_RESET, 0L);
 			pthread_mutex_lock(&(psl->lock));
 		}
