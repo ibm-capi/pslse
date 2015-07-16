@@ -36,6 +36,8 @@ enum cmd_type {
 
 enum mem_state {
 	MEM_IDLE,
+	MEM_TOUCH,
+	MEM_TOUCHED,
 	MEM_BUFFER,
 	MEM_REQUEST,
 	MEM_RECEIVED,

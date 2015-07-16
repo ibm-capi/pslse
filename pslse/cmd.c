@@ -30,10 +30,9 @@
  *
  *  Once an event is in the list then the event will be service in random order
  *  by the periodic calling by psl code of the functions: handle_interrupt(),
- *  handle_response(), handle_buffer_write(), handle_buffer_read(),
- *  handle_buffer_data() and handle_touch().  The state field is used to track
- *  the progress of each event until is fully completed and removed from the
- *  list completely.
+ *  handle_response(), handle_buffer_write(), handle_buffer_data() and
+ *  handle_touch().  The state field is used to track the progress of each
+ *  event until is fully completed and removed from the list completely.
  */
 
 #include <assert.h>
@@ -99,6 +98,12 @@ static void _print_event(struct cmd_event *event)
 	printf(" addr=0x%016"PRIx64, event->addr);
 	printf(" size=0x%x\n\t", event->size);
 	switch (event->state) {
+	case MEM_TOUCH:
+		printf("TOUCH");
+		break;
+	case MEM_TOUCHED:
+		printf("TOUCHED");
+		break;
 	case MEM_BUFFER:
 		printf("BUFFER");
 		break;
@@ -235,7 +240,7 @@ static void _add_write(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		       uint32_t size, uint8_t unlock)
 {
 	// Writes will be added to the list and will next be processed
-	// in the function handle_buffer_read()
+	// in the function handle_touch()
 	_add_cmd(cmd, handle, tag, command, abort, CMD_WRITE, addr, size,
 		 MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
 }
@@ -466,6 +471,7 @@ void handle_buffer_write(struct cmd *cmd)
 	uint8_t buffer[10];
 	uint64_t *addr;
 
+	// Make sure cmd structure is valid
 	if ((cmd==NULL) || (cmd->client == NULL))
 		return;
 
@@ -481,15 +487,11 @@ void handle_buffer_write(struct cmd *cmd)
 	}
 	pthread_mutex_unlock(&(cmd->lock));
 
+	// No valid event found
+	if (event == NULL)
+		return;
+
 	// Abort if client disconnected
-	if ((cmd == NULL) || (cmd->client==NULL)) {
-		event->state = MEM_DONE;
-		return;
-	}
-
-	if ((event == NULL) || (cmd->client[event->context] == NULL))
-		return;
-
 	client = cmd->client[event->context];
 	if ((client == NULL) && (event->state != MEM_RECEIVED)) {
 		event->resp = PSL_RESPONSE_FAILED;
@@ -498,50 +500,11 @@ void handle_buffer_write(struct cmd *cmd)
 				 event->context, event->resp);
 		return;
 	}
-	if ((event->state == MEM_IDLE) && !event->buffer_activity &&
-	    allow_buffer(cmd->parms)) {
-		// Buffer write with bogus data, but only once
-		debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		pthread_mutex_lock(cmd->psl_lock);
-		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
-				 CACHELINE_BYTES, event->data, event->parity);
-		pthread_mutex_unlock(cmd->psl_lock);
-		event->buffer_activity = 1;
-	}
-	else if ((event->state == MEM_IDLE) && (client->mem_access == NULL)) {
-		if (!client->flushing && allow_paged(cmd->parms)) {
-			// Randomly cause paged response
-			event->resp = PSL_RESPONSE_PAGED;
-			event->state = MEM_DONE;
-			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-					 event->context, event->resp);
-		}
-		else {
-			// Send read request to client, set client->mem_access
-			// to point to this event blocking any other memory
-			// accesses to client until data is returned by call
-			// to the _handle_mem_read() function.
-			buffer[0] = (uint8_t) PSLSE_MEMORY_READ;
-			buffer[1] = (uint8_t) event->size;
-			addr = (uint64_t*) &(buffer[2]);
-			*addr = htole64(event->addr);
-			pthread_mutex_lock(cmd->psl_lock);
-			event->abort = &(client->abort);
-			if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
-				      cmd->dbg_id, event->context)<0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
-			}
-			pthread_mutex_unlock(cmd->psl_lock);
-			event->state = MEM_REQUEST;
-			debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
-					 event->context);
-			client->mem_access = (void *) event;
-		}
-	}
+
+	// After the client returns data with a call to the function
+	// _handle_mem_read() issue buffer write with valid data and
+	// prepare for response.
 	if (event->state == MEM_RECEIVED) {
-		// After the client returns data with a call to the function
-		// _handle_mem_read() issue buffer write with valid data and
-		// prepare for response.
 		pthread_mutex_lock(cmd->psl_lock);
 		if (psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				     CACHELINE_BYTES, event->data,
@@ -555,6 +518,40 @@ void handle_buffer_write(struct cmd *cmd)
 		}
 		pthread_mutex_unlock(cmd->psl_lock);
 	}
+
+	if (event->state != MEM_IDLE)
+		return;
+
+	if (!event->buffer_activity && allow_buffer(cmd->parms)) {
+		// Buffer write with bogus data, but only once
+		debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id, event->tag);
+		pthread_mutex_lock(cmd->psl_lock);
+		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
+				 CACHELINE_BYTES, event->data, event->parity);
+		pthread_mutex_unlock(cmd->psl_lock);
+		event->buffer_activity = 1;
+	}
+	else if (client->mem_access == NULL) {
+		// Send read request to client, set client->mem_access
+		// to point to this event blocking any other memory
+		// accesses to client until data is returned by call
+		// to the _handle_mem_read() function.
+		buffer[0] = (uint8_t) PSLSE_MEMORY_READ;
+		buffer[1] = (uint8_t) event->size;
+		addr = (uint64_t*) &(buffer[2]);
+		*addr = htole64(event->addr);
+		pthread_mutex_lock(cmd->psl_lock);
+		event->abort = &(client->abort);
+		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
+			      cmd->dbg_id, event->context)<0) {
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		}
+		pthread_mutex_unlock(cmd->psl_lock);
+		event->state = MEM_REQUEST;
+		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context);
+		client->mem_access = (void *) event;
+	}
 }
 
 // Handle randomly selected pending write
@@ -563,14 +560,15 @@ void handle_buffer_read(struct cmd *cmd)
 	struct cmd_event *event = cmd->list;
 	struct client *client;
 
-	if ((cmd==NULL) || (cmd->buffer_read!=NULL) || (cmd->client==NULL))
+	// Check that cmd struct is valid buffer read is available
+	if ((cmd==NULL) || (cmd->client==NULL) || (cmd->buffer_read!=NULL))
 		return;
 
 	// Randomly select a pending write (or none)
 	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
 		if ((event->type == CMD_WRITE) &&
-		    (event->state != MEM_DONE) &&
+		    (event->state == MEM_TOUCHED) &&
 		    !allow_reorder(cmd->parms)) {
 			break;
 		}
@@ -578,38 +576,40 @@ void handle_buffer_read(struct cmd *cmd)
 	}
 	pthread_mutex_unlock(&(cmd->lock));
 
+	// No valid event found
+	if (event == NULL)
+		return;
+
 	// Abort if client disconnected
 	if ((cmd == NULL) || (cmd->client==NULL)) {
+		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
 
-	if ((event == NULL) || (cmd->client[event->context] == NULL))
-		return;
+	// Abort if client disconnected
 	client = cmd->client[event->context];
-
-	if (event->state == MEM_IDLE) {
-		// Randomly cause paged response
-		if (!client->flushing && allow_paged(cmd->parms)) {
-			event->resp = PSL_RESPONSE_PAGED;
-			event->state = MEM_DONE;
-			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-					 event->context, event->resp);
-			return;
-		}
-		// Send buffer read request to AFU.  Setting cmd->buffer_read
-		// will block any more buffer read requests until buffer read
-		// data is returned and handled in handle_buffer_data().
-		pthread_mutex_lock(cmd->psl_lock);
-		if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
-				    CACHELINE_BYTES) == PSL_SUCCESS) {
-			cmd->buffer_read = event;
-			debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id,
-					      event->tag);
-			event->state = MEM_BUFFER;
-		}
-		pthread_mutex_unlock(cmd->psl_lock);
+	if (client == NULL) {
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+		return;
 	}
+
+	// Send buffer read request to AFU.  Setting cmd->buffer_read
+	// will block any more buffer read requests until buffer read
+	// data is returned and handled in handle_buffer_data().
+	pthread_mutex_lock(cmd->psl_lock);
+	if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
+			    CACHELINE_BYTES) == PSL_SUCCESS) {
+		cmd->buffer_read = event;
+		debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id, event->tag);
+		event->state = MEM_BUFFER;
+	}
+	pthread_mutex_unlock(cmd->psl_lock);
 }
 
 // Handle randomly selected memory touch
@@ -620,41 +620,48 @@ void handle_touch(struct cmd *cmd)
 	uint8_t buffer[10];
 	uint64_t *addr;
 
+	// Make sure cmd structure is valid
 	if ((cmd == NULL) || (cmd->client==NULL))
 		return;
 
 	// Randomly select a pending touch (or none)
 	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
-		if ((event->type == CMD_TOUCH) &&
-		    (event->state != MEM_DONE) &&
-		    !allow_reorder(cmd->parms)) {
+		if (((event->type==CMD_TOUCH) || (event->type==CMD_WRITE)) &&
+		     (event->state==MEM_IDLE) && !allow_reorder(cmd->parms)) {
 			break;
 		}
 		event = event->_next;
 	}
 	pthread_mutex_unlock(&(cmd->lock));
+
+	// No valid event found
 	if (event == NULL)
 		return;
 
 	// Abort if client disconnected
 	if ((cmd == NULL) || (cmd->client==NULL)) {
+		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
-	client = cmd->client[event->context];
 
-	// Abort if another memory access to client already in progress
+	// Abort if client disconnected
+	client = cmd->client[event->context];
+	if (client == NULL) {
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+		return;
+	}
+
+	// Check that memory request can be driven to client
 	if(client->mem_access != NULL)
 		return;
 
-	// Randomly cause paged response
-	if (!client->flushing && allow_paged(cmd->parms)) {
-		event->resp = PSL_RESPONSE_PAGED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp); return;
-	}
 	// Send memory touch request to client
 	buffer[0] = (uint8_t) PSLSE_MEMORY_TOUCH;
 	buffer[1] = (uint8_t) event->size;
@@ -666,10 +673,10 @@ void handle_touch(struct cmd *cmd)
 		      event->context)<0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
+	event->state = MEM_TOUCH;
+	client->mem_access = (void *) event;
 	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
-	event->state = MEM_REQUEST;
-	client->mem_access = (void *) event;
 }
 
 // Send pending interrupt to client as soon as possible
@@ -694,7 +701,7 @@ void handle_interrupt(struct cmd *cmd)
 	if (event == NULL)
 		return;
 
-	// Send interrupt to client
+	// Abort if client disconnected
 	client = cmd->client[event->context];
 	if (client == NULL) {
 		event->resp = PSL_RESPONSE_FAILED;
@@ -703,6 +710,8 @@ void handle_interrupt(struct cmd *cmd)
 				 event->context, event->resp);
 		return;
 	}
+
+	// Send interrupt to client
 	buffer[0] = PSLSE_INTERRUPT;
 	irq = htole16(cmd->irq);
 	memcpy(&(buffer[1]), &irq, 2);
@@ -752,7 +761,7 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 
 		// Randomly decide to not send data to client yet
 		if (!event->buffer_activity && allow_buffer(cmd->parms)) {
-			event->state = MEM_IDLE;
+			event->state = MEM_TOUCHED;
 			event->buffer_activity = 1;
 			goto buffer_data_done;
 		}
@@ -774,6 +783,10 @@ void handle_mem_write(struct cmd *cmd)
 	uint8_t *buffer;
 	uint64_t offset;
 
+	// Make sure cmd structure is valid
+	if ((cmd == NULL) || (cmd->client==NULL))
+		return;
+
 	// Send any ready write data to client immediately
 	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
@@ -789,21 +802,21 @@ void handle_mem_write(struct cmd *cmd)
 	if ((event == NULL) || (cmd->client == NULL))
 		return;
 
-	// Check for valid client connected
+	// Abort if client disconnected
 	client = cmd->client[event->context];
 	if (client == NULL) {
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
 		return;
 	}
 
 	// Check that memory request can be driven to client
-	pthread_mutex_lock(cmd->psl_lock);
-	if (client->mem_access != NULL) {
-		pthread_mutex_unlock(cmd->psl_lock);
+	if (client->mem_access != NULL)
 		return;
-	}
 
+	pthread_mutex_lock(cmd->psl_lock);
 	// Send data to client and clear event to allow
 	// the next buffer read to occur.  The request will now await
 	// confirmation from the client that the memory write was
@@ -857,9 +870,35 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
 void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
 		       pthread_mutex_t *lock)
 {
+	struct client *client;
+
+	// Abort if client disconnected
+	client = cmd->client[event->context];
+	if (client == NULL) {
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+		return;
+	}
+
+	// Randomly cause paged response
+	if (((event->type!=CMD_WRITE) || (event->state!=MEM_REQUEST)) &&
+	    (!client->flushing && allow_paged(cmd->parms))) {
+		event->resp = PSL_RESPONSE_PAGED;
+		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+		return;
+	}
+
 	if (event->type==CMD_READ)
 		_handle_mem_read(cmd, event, fd, lock);
-	else
+	else if (event->type==CMD_TOUCH)
+		event->state = MEM_DONE;
+	else if (event->state==MEM_TOUCH)	// Touch before write
+		event->state = MEM_TOUCHED;
+	else					// Write after touch
 		event->state = MEM_DONE;
 	debug_cmd_return(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 }
@@ -914,10 +953,21 @@ drive_resp:
 	}
 	// Abort if client disconnected
 	if ((cmd == NULL) || (cmd->client==NULL)) {
+		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 		return;
 	}
+
+	// Check for valid client connected
 	client = cmd->client[event->context];
+	if (client == NULL) {
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+		return;
+	}
+
 	// Send response, remove command from list and free memory
 	if ((event->resp == PSL_RESPONSE_PAGED) ||
 	    (event->resp == PSL_RESPONSE_AERROR) ||
