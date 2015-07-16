@@ -115,9 +115,13 @@ static void _free(struct psl *psl, struct client* client)
 // Handle events from AFU
 static void _handle_afu(struct psl *psl)
 {
-	handle_aux2(psl->job, &(psl->parity_enabled), &(psl->latency));
+	int reset_done;
+	reset_done = handle_aux2(psl->job, &(psl->parity_enabled),
+				 &(psl->latency));
 	handle_mmio_ack(psl->mmio, psl->parity_enabled);
 	if (psl->cmd != NULL) {
+		if (reset_done)
+			psl->cmd->credits = psl->cmd->parms->credits;
 		handle_response(psl->cmd);
 		handle_buffer_write(psl->cmd);
 		handle_buffer_read(psl->cmd);

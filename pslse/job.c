@@ -128,7 +128,7 @@ send_done:
 }
 
 // See if AFU changed any of the aux2 signals and handle accordingly
-void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
+int handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 {
 	struct job_event *event;
 	uint32_t job_running;
@@ -139,12 +139,13 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	uint32_t tb_request;
 	uint32_t par_enable;
 	uint32_t read_latency;
-	uint8_t dbg_aux2 = 0;
-	int reset = 0;
+	uint8_t dbg_aux2;
+	int reset, reset_complete;
 
 	if (job == NULL)
 		return;
 
+	dbg_aux2 = reset = reset_complete = 0;
 	pthread_mutex_lock(job->psl_lock);
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
@@ -154,7 +155,9 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 			dbg_aux2 |= DBG_AUX2_DONE;
 			if (job->job != NULL) {
 				event = job->job;
-				if (event->code != PSL_JOB_RESET)
+				if (event->code == PSL_JOB_RESET)
+					reset_complete = 1;
+				else
 					reset = 1;
 				job->job = event->_next;
 				free(event);
@@ -191,7 +194,8 @@ void handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	}
 	pthread_mutex_unlock(job->psl_lock);
 
-	if (reset) {
+	if (reset)
 		add_job(job, PSL_JOB_RESET, 0L);
-	}
+
+	return reset_complete;
 }
