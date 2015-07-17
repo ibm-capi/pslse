@@ -17,7 +17,6 @@
 #ifndef _JOB_H_
 #define _JOB_H_
 
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -34,14 +33,13 @@ struct job_event {
 struct job {
 	struct AFU_EVENT *afu_event;
 	struct job_event *job;
-	pthread_mutex_t *psl_lock;
 	volatile enum pslse_state *psl_state;
 	uint32_t read_latency;
 	FILE *dbg_fp;
 	uint8_t dbg_id;
 };
 
-struct job *job_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
+struct job *job_init(struct AFU_EVENT *afu_event,
 		     volatile enum pslse_state *psl_state, FILE *dbg_fp,
 		     uint8_t dbg_id);
 

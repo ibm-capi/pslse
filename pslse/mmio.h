@@ -70,18 +70,16 @@ struct mmio {
 	struct AFU_EVENT *afu_event;
 	struct afu_descriptor desc;
 	struct mmio_event *list;
-	pthread_mutex_t *psl_lock;
-	pthread_mutex_t lock;
 	FILE *dbg_fp;
 	uint8_t dbg_id;
 	uint32_t flags;
 	int timeout;
 };
 
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		       int timeout, FILE *dbg_fp, uint8_t dbg_id);
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE *dbg_fp,
+		       uint8_t dbg_id);
 
-int read_descriptor(struct mmio *mmio);
+int read_descriptor(struct mmio *mmio, pthread_mutex_t *lock);
 
 struct mmio_event *add_mmio(struct mmio *mmio, uint32_t rnw, uint32_t dw,
 			    uint32_t addr, uint64_t data);

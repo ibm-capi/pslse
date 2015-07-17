@@ -45,8 +45,8 @@
 #include "mmio.h"
 
 // Initialize MMIO tracking structure
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
-		       int timeout, FILE *dbg_fp, uint8_t dbg_id)
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE *dbg_fp,
+		       uint8_t dbg_id)
 {
 	struct mmio *mmio = (struct mmio*) calloc(1, sizeof(struct mmio));
 	if (!mmio)
@@ -55,8 +55,6 @@ struct mmio *mmio_init(struct AFU_EVENT *afu_event, pthread_mutex_t *psl_lock,
 	mmio->list = NULL;
 	mmio->dbg_fp = dbg_fp;
 	mmio->dbg_id = dbg_id;
-	mmio->psl_lock = psl_lock;
-	pthread_mutex_init(&(mmio->lock), NULL);
 	mmio->timeout = timeout;
 	return mmio;
 }
@@ -83,8 +81,6 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 	event->_next = NULL;
 
 	// Add to end of list
-	pthread_mutex_lock(mmio->psl_lock);
-	pthread_mutex_lock(&(mmio->lock));
 	list = &(mmio->list);
 	while (*list != NULL)
 		list = &((*list)->_next);
@@ -94,8 +90,6 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 	else
 		context = client->context;
 	debug_mmio_add(mmio->dbg_fp, mmio->dbg_id, context, rnw, dw, addr);
-	pthread_mutex_unlock(&(mmio->lock));
-	pthread_mutex_unlock(mmio->psl_lock);
 
 	return event;
 }
@@ -115,19 +109,15 @@ static struct mmio_event *_add_mmio(struct mmio *mmio, struct client *client,
 	return _add_event(mmio, client, rnw, dw, addr, 0, data);
 }
 
-static void _wait_for_done(struct mmio *mmio, enum pslse_state *state)
+static void _wait_for_done(struct mmio *mmio, enum pslse_state *state,
+			   pthread_mutex_t *lock)
 {
-	pthread_mutex_lock(&(mmio->lock));
-	while (*state != PSLSE_DONE) {
-		pthread_mutex_unlock(&(mmio->lock));
-		ns_delay(4);
-		pthread_mutex_lock(&(mmio->lock));
-	}
-	pthread_mutex_unlock(&(mmio->lock));
+	while (*state != PSLSE_DONE)	/* infinite loop */
+		lock_delay(lock);
 }
 
 // Read the entire AFU descriptor and keep a copy
-int read_descriptor(struct mmio *mmio)
+int read_descriptor(struct mmio *mmio, pthread_mutex_t *lock)
 {
 	struct mmio_event *event00, *event20, *event28, *event30, *event38,
 			  *event40, *event48;
@@ -142,34 +132,34 @@ int read_descriptor(struct mmio *mmio)
 	event48 = _add_desc(mmio, 1, 1, 0x48 >> 2, 0L);
 
 	// Store data from reads
-	_wait_for_done(mmio, &(event00->state));
+	_wait_for_done(mmio, &(event00->state), lock);
 	mmio->desc.req_prog_model = (uint16_t) event00->data;
 	mmio->desc.num_of_afu_CRs = (uint16_t) (event00->data >> 16);
 	mmio->desc.num_of_processes = (uint16_t) (event00->data >> 32);
 	mmio->desc.num_ints_per_process = (uint16_t) (event00->data >> 48);
 	free(event00);
 
-	_wait_for_done(mmio, &(event20->state));
+	_wait_for_done(mmio, &(event20->state), lock);
 	mmio->desc.AFU_CR_len = event20->data;
 	free(event20);
 
-	_wait_for_done(mmio, &(event28->state));
+	_wait_for_done(mmio, &(event28->state), lock);
 	mmio->desc.AFU_CR_offset = event28->data;
 	free(event28);
 
-	_wait_for_done(mmio, &(event30->state));
+	_wait_for_done(mmio, &(event30->state), lock);
 	mmio->desc.PerProcessPSA = event30->data;
 	free(event30);
 
-	_wait_for_done(mmio, &(event38->state));
+	_wait_for_done(mmio, &(event38->state), lock);
 	mmio->desc.PerProcessPSA_offset = event38->data;
 	free(event38);
 
-	_wait_for_done(mmio, &(event40->state));
+	_wait_for_done(mmio, &(event40->state), lock);
 	mmio->desc.AFU_EB_len = event40->data;
 	free(event40);
 
-	_wait_for_done(mmio, &(event48->state));
+	_wait_for_done(mmio, &(event48->state), lock);
 	mmio->desc.AFU_EB_offset = event48->data;
 	free(event48);
 
@@ -195,16 +185,11 @@ void send_mmio(struct mmio *mmio)
 {
 	struct mmio_event *event;
 
-	pthread_mutex_lock(mmio->psl_lock);
-	pthread_mutex_lock(&(mmio->lock));
 	event = mmio->list;
 
-	// Don't send event
-	if ((event == NULL) || (event->state == PSLSE_PENDING)) {
-		pthread_mutex_unlock(&(mmio->lock));
-		pthread_mutex_unlock(mmio->psl_lock);
+	// Check for valid event
+	if ((event == NULL) || (event->state == PSLSE_PENDING))
 		return;
-	}
 
 	// Attempt to send mmio to AFU
 	if(event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
@@ -220,8 +205,6 @@ void send_mmio(struct mmio *mmio)
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
 	}
-	pthread_mutex_unlock(&(mmio->lock));
-	pthread_mutex_unlock(mmio->psl_lock);
 }
 
 // Handle MMIO ack if returned by AFU
@@ -232,10 +215,8 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 	uint32_t read_data_parity;
 	int rc;
 
-	pthread_mutex_lock(mmio->psl_lock);
 	rc = psl_get_mmio_acknowledge(mmio->afu_event, &read_data,
 				      &read_data_parity);
-	pthread_mutex_unlock(mmio->psl_lock);
 	if (rc == PSL_SUCCESS) {
 		debug_mmio_ack(mmio->dbg_fp, mmio->dbg_id);
 		if(!mmio->list || (mmio->list->state != PSLSE_PENDING)) {
@@ -251,11 +232,8 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 			}
 			mmio->list->data = read_data;
 		}
-		pthread_mutex_lock(&(mmio->lock));
 		mmio->list->state = PSLSE_DONE;
 		mmio->list = mmio->list->_next;
-		pthread_mutex_unlock(&(mmio->lock));
-		return;
 	}
 }
 
@@ -296,12 +274,10 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 
 map_done:
 	// Send acknowledge to client
-	pthread_mutex_lock(mmio->psl_lock);
 	if (put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context)
 	    <0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
-	pthread_mutex_unlock(mmio->psl_lock);
 }
 
 // Add mmio write event of register at offset to list
@@ -396,7 +372,6 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 	if (event->state != PSLSE_DONE)
 		return event;
 
-	pthread_mutex_lock(mmio->psl_lock);
 	if (event->rnw) {
 		// Return acknowledge with read data
 		if (event->dw) {
@@ -429,8 +404,6 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 	}
 	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);
 	free(event);
-	pthread_mutex_unlock(mmio->psl_lock);
-
 	free(buffer);
 
 	return NULL;

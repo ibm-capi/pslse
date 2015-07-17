@@ -102,6 +102,14 @@ void ns_delay(long ns)
 	nanosleep(&ts, &ts);
 }
 
+// Delay to allow another thread to have mutex lock
+void lock_delay(pthread_mutex_t *lock)
+{
+	pthread_mutex_unlock(lock);
+	ns_delay(100000);
+	pthread_mutex_lock(lock);
+}
+
 // Is there incoming data on socket?
 int bytes_ready(int fd, int *abort)
 {

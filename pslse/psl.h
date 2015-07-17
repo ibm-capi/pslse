@@ -31,7 +31,7 @@
 struct psl {
 	struct AFU_EVENT *afu_event;
 	pthread_t thread;
-	pthread_mutex_t lock;
+	pthread_mutex_t *lock;
 	FILE *dbg_fp;
 	struct client **client;
 	struct cmd *cmd;
@@ -55,6 +55,6 @@ struct psl {
 };
 
 uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
-		  int port, FILE *dbg_fp);
+		  int port, pthread_mutex_t *lock, FILE *dbg_fp);
 
 #endif /* _PSL_H_ */

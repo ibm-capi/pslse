@@ -52,7 +52,7 @@
 // Initialize cmd structure for tracking AFU command activity
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     pthread_mutex_t *lock, FILE *dbg_fp, uint8_t dbg_id)
+		     FILE *dbg_fp, uint8_t dbg_id)
 {
 	int i, j;
 	struct cmd *cmd;
@@ -67,8 +67,6 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 	cmd->mmio = mmio;
 	cmd->parms = parms;
 	cmd->psl_state = state;
-	cmd->psl_lock = lock;
-	pthread_mutex_init(&(cmd->lock), NULL);
 	cmd->credits = parms->credits;
 	cmd->page_entries.page_filter = ~((uint64_t) PAGE_MASK);
 	cmd->page_entries.entry_filter = 0;
@@ -188,14 +186,12 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 		event->client_state = cmd->client[context]->state;
 	}
 
-	pthread_mutex_lock(&(cmd->lock));
 	head = &(cmd->list);
 	while ((*head != NULL) && !allow_reorder(cmd->parms))
 		head = &((*head)->_next);
 	event->_next = *head;
 	*head = event;
 	debug_cmd_add(cmd->dbg_fp, cmd->dbg_id, tag, context, command);
-	pthread_mutex_unlock(&(cmd->lock));
 }
 
 // Format and add interrupt to command list
@@ -291,19 +287,15 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 	// Cacheline lock
 	case PSL_COMMAND_LOCK:
-		pthread_mutex_lock(&(cmd->lock));
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
-		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
 		_add_touch(cmd, handle, tag, command, abort, addr, 0);
 		break;
 	// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
-		pthread_mutex_lock(&(cmd->lock));
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
-		pthread_mutex_unlock(&(cmd->lock));
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
 	case PSL_COMMAND_READ_CL_RES:	/*fall through*/
@@ -391,11 +383,9 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 		return;
 
 	// Check for command from AFU
-	pthread_mutex_lock(cmd->psl_lock);
 	rc = psl_get_command(cmd->afu_event, &command, &command_parity, &tag,
 			     &tag_parity, &address, &address_parity, &size,
 			     &abort, &handle);
-	pthread_mutex_unlock(cmd->psl_lock);
 
 	// No command ready
 	if (rc != PSL_SUCCESS)
@@ -489,7 +479,6 @@ void handle_buffer_write(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending read (or none)
-	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
 		if ((event->type == CMD_READ) &&
 		    (event->state != MEM_DONE) &&
@@ -498,7 +487,6 @@ void handle_buffer_write(struct cmd *cmd)
 		}
 		event = event->_next;
 	}
-	pthread_mutex_unlock(&(cmd->lock));
 
 	// No valid event found
 	if (event == NULL)
@@ -518,7 +506,6 @@ void handle_buffer_write(struct cmd *cmd)
 	// _handle_mem_read() issue buffer write with valid data and
 	// prepare for response.
 	if (event->state == MEM_RECEIVED) {
-		pthread_mutex_lock(cmd->psl_lock);
 		if (psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				     CACHELINE_BYTES, event->data,
 				     event->parity) == PSL_SUCCESS) {
@@ -529,7 +516,6 @@ void handle_buffer_write(struct cmd *cmd)
 			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 					 event->context, event->resp);
 		}
-		pthread_mutex_unlock(cmd->psl_lock);
 	}
 
 	if (event->state != MEM_IDLE)
@@ -538,10 +524,8 @@ void handle_buffer_write(struct cmd *cmd)
 	if (!event->buffer_activity && allow_buffer(cmd->parms)) {
 		// Buffer write with bogus data, but only once
 		debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		pthread_mutex_lock(cmd->psl_lock);
 		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				 CACHELINE_BYTES, event->data, event->parity);
-		pthread_mutex_unlock(cmd->psl_lock);
 		event->buffer_activity = 1;
 	}
 	else if (client->mem_access == NULL) {
@@ -553,13 +537,11 @@ void handle_buffer_write(struct cmd *cmd)
 		buffer[1] = (uint8_t) event->size;
 		addr = (uint64_t*) &(buffer[2]);
 		*addr = htole64(event->addr);
-		pthread_mutex_lock(cmd->psl_lock);
 		event->abort = &(client->abort);
 		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
 			      cmd->dbg_id, event->context)<0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 		}
-		pthread_mutex_unlock(cmd->psl_lock);
 		event->state = MEM_REQUEST;
 		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context);
@@ -578,7 +560,6 @@ void handle_buffer_read(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending write (or none)
-	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
 		if ((event->type == CMD_WRITE) &&
 		    (event->state == MEM_TOUCHED) &&
@@ -587,7 +568,6 @@ void handle_buffer_read(struct cmd *cmd)
 		}
 		event = event->_next;
 	}
-	pthread_mutex_unlock(&(cmd->lock));
 
 	// No valid event found
 	if (event == NULL)
@@ -615,14 +595,12 @@ void handle_buffer_read(struct cmd *cmd)
 	// Send buffer read request to AFU.  Setting cmd->buffer_read
 	// will block any more buffer read requests until buffer read
 	// data is returned and handled in handle_buffer_data().
-	pthread_mutex_lock(cmd->psl_lock);
 	if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
 			    CACHELINE_BYTES) == PSL_SUCCESS) {
 		cmd->buffer_read = event;
 		debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		event->state = MEM_BUFFER;
 	}
-	pthread_mutex_unlock(cmd->psl_lock);
 }
 
 // Handle randomly selected memory touch
@@ -638,7 +616,6 @@ void handle_touch(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending touch (or none)
-	pthread_mutex_lock(&(cmd->lock));
 	while (event != NULL) {
 		if (((event->type==CMD_TOUCH) || (event->type==CMD_WRITE)) &&
 		     (event->state==MEM_IDLE) && !allow_reorder(cmd->parms)) {
@@ -646,7 +623,6 @@ void handle_touch(struct cmd *cmd)
 		}
 		event = event->_next;
 	}
-	pthread_mutex_unlock(&(cmd->lock));
 
 	// No valid event found
 	if (event == NULL)
@@ -680,7 +656,6 @@ void handle_touch(struct cmd *cmd)
 	buffer[1] = (uint8_t) event->size;
 	addr = (uint64_t*) &(buffer[2]);
 	*addr = htole64(event->addr & CACHELINE_MASK);
-	pthread_mutex_lock(cmd->psl_lock);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context)<0) {
@@ -688,7 +663,6 @@ void handle_touch(struct cmd *cmd)
 	}
 	event->state = MEM_TOUCH;
 	client->mem_access = (void *) event;
-	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 }
 
@@ -702,14 +676,12 @@ void handle_interrupt(struct cmd *cmd)
 	uint8_t buffer[3];
 
 	// Send any interrupts to client immediately
-	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
 		if ((*head)->type == CMD_INTERRUPT)
 			break;
 		head = &((*head)->_next);
 	}
 	event = *head;
-	pthread_mutex_unlock(&(cmd->lock));
 
 	if (event == NULL)
 		return;
@@ -728,13 +700,11 @@ void handle_interrupt(struct cmd *cmd)
 	buffer[0] = PSLSE_INTERRUPT;
 	irq = htole16(cmd->irq);
 	memcpy(&(buffer[1]), &irq, 2);
-	pthread_mutex_lock(cmd->psl_lock);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context)<0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
 	}
-	pthread_mutex_unlock(cmd->psl_lock);
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_DONE;
 }
@@ -748,9 +718,6 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 	// Has struct been initialized?
 	if ((cmd == NULL) || (cmd->buffer_read == NULL))
 		return;
-
-	pthread_mutex_lock(cmd->psl_lock);
-	pthread_mutex_lock(&(cmd->lock));
 
 	// Check if buffer read data has returned from AFU
 	event = cmd->buffer_read;
@@ -776,15 +743,12 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 		if (!event->buffer_activity && allow_buffer(cmd->parms)) {
 			event->state = MEM_TOUCHED;
 			event->buffer_activity = 1;
-			goto buffer_data_done;
+			return;
 		}
 
 		event->state = MEM_RECEIVED;
 	}
 
-buffer_data_done:
-	pthread_mutex_unlock(&(cmd->lock));
-	pthread_mutex_unlock(cmd->psl_lock);
 }
 
 void handle_mem_write(struct cmd *cmd)
@@ -801,7 +765,6 @@ void handle_mem_write(struct cmd *cmd)
 		return;
 
 	// Send any ready write data to client immediately
-	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
 		if (((*head)->type == CMD_WRITE) &&
 		    ((*head)->state == MEM_RECEIVED))
@@ -809,7 +772,6 @@ void handle_mem_write(struct cmd *cmd)
 		head = &((*head)->_next);
 	}
 	event = *head;
-	pthread_mutex_unlock(&(cmd->lock));
 
 	// Check if there is pending buffer read request
 	if ((event == NULL) || (cmd->client == NULL))
@@ -829,7 +791,6 @@ void handle_mem_write(struct cmd *cmd)
 	if (client->mem_access != NULL)
 		return;
 
-	pthread_mutex_lock(cmd->psl_lock);
 	// Send data to client and clear event to allow
 	// the next buffer read to occur.  The request will now await
 	// confirmation from the client that the memory write was
@@ -852,28 +813,23 @@ void handle_mem_write(struct cmd *cmd)
 			 event->context);
 	event->state = MEM_REQUEST;
 	client->mem_access = (void *) event;
-	pthread_mutex_unlock(cmd->psl_lock);
 }
 
 // Handle data returning from client for memory read
-static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd,
-			    pthread_mutex_t *lock)
+static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 {
 	uint8_t data[MAX_LINE_CHARS];
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
 
 	// Client is returning data from memory read
-	pthread_mutex_lock(lock);
 	if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
 			     event->abort) < 0) {
 		event->resp = PSL_RESPONSE_DERROR;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
-		pthread_mutex_unlock(lock);
 		return;
 	}
-	pthread_mutex_unlock(lock);
 	memcpy((void *) &(event->data[offset]), (void *) &data, event->size);
 	generate_cl_parity(event->data, event->parity);
 	event->state = MEM_RECEIVED;
@@ -955,8 +911,7 @@ static int _page_cached(struct cmd *cmd, uint64_t addr)
 }
 
 // Decide what to do with a client memory acknowledgement
-void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
-		       pthread_mutex_t *lock)
+void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 {
 	struct client *client;
 
@@ -984,7 +939,7 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
 	_update_age(cmd, event->addr);
 
 	if (event->type==CMD_READ)
-		_handle_mem_read(cmd, event, fd, lock);
+		_handle_mem_read(cmd, event, fd);
 	else if (event->type==CMD_TOUCH)
 		event->state = MEM_DONE;
 	else if (event->state==MEM_TOUCH)	// Touch before write
@@ -1012,9 +967,7 @@ void handle_response(struct cmd *cmd)
 	int rc;
 
 	// Select a random pending response (or none)
-	pthread_mutex_lock(cmd->psl_lock);
 	head = &cmd->list;
-	pthread_mutex_lock(&(cmd->lock));
 	while (*head != NULL) {
 		// Fast track error responses
 		if (((*head)->resp == PSL_RESPONSE_PAGED) ||
@@ -1033,7 +986,7 @@ void handle_response(struct cmd *cmd)
 	event = *head;
 	if ((event == NULL) ||
 	    ((event->type==CMD_WRITE) && !allow_resp(cmd->parms))) {
-		goto resp_fail;
+		return;
 	}
 
 drive_resp:
@@ -1077,9 +1030,6 @@ drive_resp:
 		free(event);
 		cmd->credits++;
 	}
-resp_fail:
-	pthread_mutex_unlock(&(cmd->lock));
-	pthread_mutex_unlock(cmd->psl_lock);
 }
 
 int client_cmd(struct cmd *cmd, struct client *client)
@@ -1096,7 +1046,6 @@ int client_cmd(struct cmd *cmd, struct client *client)
 		if (client->state == CLIENT_VALID) {
 			return 1;
 		}
-		pthread_mutex_lock(&(cmd->lock));
 		rc = 1;
 		if ((client->state == CLIENT_DROPPED) &&
 		    (event->state != MEM_DONE)) {
@@ -1107,7 +1056,6 @@ int client_cmd(struct cmd *cmd, struct client *client)
 				event->resp = PSL_RESPONSE_FAILED;
 			}
 		}
-		pthread_mutex_unlock(&(cmd->lock));
 		event = event->_next;
 	}
 	return rc;

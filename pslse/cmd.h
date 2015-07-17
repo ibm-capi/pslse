@@ -17,7 +17,6 @@
 #ifndef _CMD_H_
 #define _CMD_H_
 
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -88,8 +87,6 @@ struct cmd {
 	struct client **client;
 	struct pages page_entries;
 	volatile enum pslse_state *psl_state;
-	pthread_mutex_t *psl_lock;
-	pthread_mutex_t lock;
 	FILE *dbg_fp;
 	uint8_t dbg_id;
 	uint64_t lock_addr;
@@ -101,7 +98,7 @@ struct cmd {
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     pthread_mutex_t *lock, FILE *dbg_fp, uint8_t dbg_id);
+		     FILE *dbg_fp, uint8_t dbg_id);
 
 void handle_cmd(struct cmd* cmd, uint32_t parity_enabled, uint32_t latency);
 
@@ -117,8 +114,7 @@ void handle_touch(struct cmd *cmd);
 
 void handle_interrupt(struct cmd *cmd);
 
-void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd,
-		       pthread_mutex_t *lock);
+void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd);
 
 void handle_aerror(struct cmd *cmd, struct cmd_event *event);
 

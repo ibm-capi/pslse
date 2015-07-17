@@ -29,7 +29,7 @@
 
 // Parse file to find hostname and ports for AFU simulator(s)
 uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
-			 FILE *dbg_fp) {
+			 pthread_mutex_t *lock, FILE *dbg_fp) {
 	FILE *fp;
 	struct psl *psl;
 	char *hostdata, *comment, *afu_id, *host, *port_str;
@@ -86,7 +86,7 @@ uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
 
 		// Initialize PSL
 		if ((location = psl_init(head, parms, afu_id, host, port,
-					 dbg_fp)) == 0) {
+					 lock, dbg_fp)) == 0) {
 			continue;
 		}
 		afu_map |= location;

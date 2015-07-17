@@ -17,6 +17,7 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -84,6 +85,9 @@ void info_msg(const char *format, ...);
 
 // Delay for up to ns nanoseconds
 void ns_delay(long ns);
+
+// Delay to allow another thread to have mutex lock
+void lock_delay(pthread_mutex_t *lock);
 
 // Is there incoming data on socket?
 int bytes_ready(int fd, int *abort);
