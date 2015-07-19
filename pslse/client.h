@@ -26,8 +26,6 @@ struct flush_page {
 
 enum client_state {
 	CLIENT_NONE,
-	CLIENT_DROPPED,
-	CLIENT_FREE,
 	CLIENT_VALID
 };
 

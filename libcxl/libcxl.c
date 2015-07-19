@@ -610,7 +610,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		goto connect_fail;
 	}
-	if (get_bytes_silent(*fd, 1 + sizeof(uint16_t), buffer, 0, 0) < 0) {
+	if (get_bytes_silent(*fd, 1, buffer, 0, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close(*fd);
 		*fd = -1;
@@ -622,7 +622,13 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		*fd = -1;
 		goto connect_fail;
 	}
-	memcpy((char *)afu_map, (char *)&(buffer[1]), 2);
+	if (get_bytes_silent(*fd, sizeof(uint16_t), buffer, 0, 0) < 0) {
+		warn_msg("cxl_afu_open_dev:afu_map");
+		close(*fd);
+		*fd = -1;
+		goto connect_fail;
+	}
+	memcpy((char *)afu_map, (char *) buffer, 2);
 	*afu_map = (long)le16toh(*afu_map);
 	return 0;
 

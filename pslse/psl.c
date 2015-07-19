@@ -54,7 +54,7 @@ static void _attach(struct psl *psl, struct client* client)
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
 		warn_msg("Failed to get WED value from client");
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		goto attach_done;
 	}
 	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
@@ -75,7 +75,7 @@ static void _attach(struct psl *psl, struct client* client)
 attach_done:
 	if (put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 }
 
@@ -143,7 +143,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	}
 
 	// Client disconnected
-	if (client->state==CLIENT_DROPPED)
+	if (client->state==CLIENT_NONE)
 		return;
 
 	// Check for event from application
@@ -153,13 +153,13 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (get_bytes(client->fd, 1, buffer, psl->timeout,
 			      &(client->abort), psl->dbg_fp, psl->dbg_id,
 			      client->context) < 0) {
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 			return;
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
 			info_msg("Client requesting reset");
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_FREE);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 			break;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
@@ -194,7 +194,8 @@ static void _handle_client(struct psl *psl, struct client *client)
 		if (mmio)
 			client->mmio_access = (void*) mmio;
 
-		client->idle_cycles = PSL_IDLE_CYCLES;
+		if (client->state==CLIENT_VALID)
+			client->idle_cycles = PSL_IDLE_CYCLES;
 	}
 }
 
@@ -215,9 +216,7 @@ static void *_psl_loop(void *ptr)
 		// not be presented to an idle AFU to keep simulation
 		// waveforms from getting huge with no activity cycles.
 		if (psl->state != PSLSE_IDLE) {
-			if (psl->idle_cycles < PSL_IDLE_CYCLES) {
-				psl->idle_cycles = PSL_IDLE_CYCLES;
-			}
+			psl->idle_cycles = PSL_IDLE_CYCLES;
 			if (stopped)
 				info_msg("Clocking %s", psl->name);
 			fflush(stdout);
@@ -242,7 +241,7 @@ static void *_psl_loop(void *ptr)
 			send_job(psl->job);
 			send_mmio(psl->mmio);
 
-			if ((psl->job->job==NULL) && (psl->mmio->list==NULL))
+			if (psl->mmio->list==NULL)
 				psl->idle_cycles--;
 		}
 		else {
@@ -264,8 +263,7 @@ static void *_psl_loop(void *ptr)
 		for (i = 0; i<psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			if (((psl->client[i]->state == CLIENT_DROPPED) ||
-                             (psl->client[i]->state == CLIENT_FREE)) &&
+			if ((psl->client[i]->state == CLIENT_NONE) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				put_bytes(psl->client[i]->fd, 1, &ack,
 					      psl->dbg_fp, psl->dbg_id,

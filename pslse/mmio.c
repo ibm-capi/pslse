@@ -252,7 +252,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 	}
 	if (get_bytes_silent(fd, 4, (uint8_t*) &flags, mmio->timeout,
 			     &(client->abort)) < 0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		warn_msg("Socket failure with client context %d",
 			 client->context);
 		ack = PSLSE_MMIO_FAIL;
@@ -276,7 +276,7 @@ map_done:
 	// Send acknowledge to client
 	if (put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context)
 	    <0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 }
 
@@ -320,7 +320,7 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	
 write_fail:
 	// Socket connection is dead
-	client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	return NULL;
 }
 
@@ -342,7 +342,7 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	
 read_fail:
 	// Socket connection is dead
-	client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	return NULL;
 }
 
@@ -350,6 +350,17 @@ read_fail:
 struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 			       int rnw, int dw)
 {
+	uint8_t ack;
+
+	// Only allow MMIO access when client is valid
+	if (client->state!=CLIENT_VALID) {
+		ack = PSLSE_MMIO_FAIL;
+		if (put_bytes(client->fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id,
+			      client->context)<0) {
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		}
+		return NULL;
+	}
 	if (rnw)
 		return _handle_mmio_read(mmio, client, dw);
 	else
@@ -380,7 +391,8 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			memcpy(&(buffer[1]), &(event->data), 8);
 			if (put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
 				      client->context)<0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+				client_drop(client, PSL_IDLE_CYCLES,
+					    CLIENT_NONE);
 			}
 		}
 		else {
@@ -389,7 +401,8 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 			memcpy(&(buffer[1]), &(event->data), 4);
 			if (put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
 				      client->context)<0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+				client_drop(client, PSL_IDLE_CYCLES,
+					    CLIENT_NONE);
 			}
 		}
 	}
@@ -399,7 +412,7 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 		buffer[0] = PSLSE_MMIO_ACK;
 		if (put_bytes(fd, 1, buffer, mmio->dbg_fp, mmio->dbg_id,
 			      client->context)<0) {
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 	}
 	debug_mmio_return(mmio->dbg_fp, mmio->dbg_id, client->context);

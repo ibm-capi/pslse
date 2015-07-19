@@ -131,7 +131,7 @@ static void _query(struct client* client, uint8_t id)
 	       sizeof(client->max_irqs));
 	if (put_bytes(client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	free(buffer);
 }
@@ -148,7 +148,7 @@ static void _max_irqs(struct client* client, uint8_t id)
 	psl = _find_psl(id, &major, &minor);
 	if (get_bytes(client->fd, 2, buffer, psl->timeout, &(client->abort),
 		      psl->dbg_fp, psl->dbg_id, client->context) < 0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		return;
 	}
 	memcpy ((char*) &client->max_irqs, (char*) buffer, sizeof(uint16_t));
@@ -166,7 +166,7 @@ static void _max_irqs(struct client* client, uint8_t id)
 	memcpy(&(buffer[1]), (char*) &value, 2);
 	if (put_bytes(client->fd, 3, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 }
 
@@ -335,13 +335,13 @@ static void * _client_loop(void *ptr)
 		}
 		if ((rc < 0) || get_bytes(client->fd, 1, data, 10,
 					  &(client->abort), fp, -1, -1) < 0) {
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 			break;
 		}
 		if (data[0] == PSLSE_QUERY) {
 			if (get_bytes_silent(client->fd, 1, data, timeout,
 					 &(client->abort)) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 				break;
 			}
 			_query(client, data[0]);
@@ -351,7 +351,7 @@ static void * _client_loop(void *ptr)
 		if (data[0] == PSLSE_MAX_INT) {
 			if (get_bytes(client->fd, 2, data, timeout,
 					 &(client->abort), fp, -1, -1) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 				break;
 			}
 			_max_irqs(client, data[0]);
@@ -361,7 +361,7 @@ static void * _client_loop(void *ptr)
 		if (data[0] == PSLSE_OPEN) {
 			if (get_bytes_silent(client->fd, 2, data, timeout,
 					 &(client->abort)) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+				client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 				break;
 			}
 			_client_associate(client, data[0], (char) data[1]);

@@ -27,6 +27,5 @@ void client_drop(struct client *client, int cycles, enum client_state state)
 	client->idle_cycles = cycles;
 	client->pending = 0;
 	client->state = state;
-	if (state==CLIENT_DROPPED)
-		client->mem_access = NULL;
+	client->mem_access = NULL;
 }

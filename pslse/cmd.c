@@ -88,6 +88,13 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 static void _print_event(struct cmd_event *event)
 {
 	printf("Command event: ");
+	switch (event->state) {
+	case CLIENT_VALID:
+		printf("VALID ");
+		break;
+	default:
+		printf("NONE ");
+	}
 	switch (event->type) {
 	case CMD_READ:
 		printf("READ");
@@ -177,8 +184,8 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 
 	// Handle commands to disconnected client
 	if ((cmd->client == NULL) || (cmd->client[context] == NULL) ||
-	    (cmd->client[context]->state == CLIENT_DROPPED)) {
-		event->client_state = CLIENT_DROPPED;
+	    (cmd->client[context]->state == CLIENT_NONE)) {
+		event->client_state = CLIENT_NONE;
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 	}
@@ -479,7 +486,7 @@ void handle_buffer_write(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending read (or none)
-	while (event != NULL) {
+	while ((event != NULL) && (event->client_state==CLIENT_VALID)) {
 		if ((event->type == CMD_READ) &&
 		    (event->state != MEM_DONE) &&
 		    !allow_reorder(cmd->parms)) {
@@ -540,7 +547,7 @@ void handle_buffer_write(struct cmd *cmd)
 		event->abort = &(client->abort);
 		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
 			      cmd->dbg_id, event->context)<0) {
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 		event->state = MEM_REQUEST;
 		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -560,7 +567,7 @@ void handle_buffer_read(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending write (or none)
-	while (event != NULL) {
+	while ((event != NULL) && (event->client_state==CLIENT_VALID)) {
 		if ((event->type == CMD_WRITE) &&
 		    (event->state == MEM_TOUCHED) &&
 		    !allow_reorder(cmd->parms)) {
@@ -616,7 +623,7 @@ void handle_touch(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending touch (or none)
-	while (event != NULL) {
+	while ((event != NULL) && (event->client_state==CLIENT_VALID)) {
 		if (((event->type==CMD_TOUCH) || (event->type==CMD_WRITE)) &&
 		     (event->state==MEM_IDLE) && !allow_reorder(cmd->parms)) {
 			break;
@@ -659,7 +666,7 @@ void handle_touch(struct cmd *cmd)
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	event->state = MEM_TOUCH;
 	client->mem_access = (void *) event;
@@ -703,7 +710,7 @@ void handle_interrupt(struct cmd *cmd)
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_DONE;
@@ -807,7 +814,7 @@ void handle_mem_write(struct cmd *cmd)
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, event->size+10, buffer, cmd->dbg_fp,
 		      cmd->dbg_id, client->context)<0) {
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_DROPPED);
+		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
 			 event->context);
@@ -1038,23 +1045,26 @@ int client_cmd(struct cmd *cmd, struct client *client)
 	struct cmd_event *event = cmd->list;
 
 	while (event != NULL) {
-		if ((event->context != client->context) ||
-		    (event->client_state == CLIENT_FREE)) {
+		if (event->context != client->context) {
+			// Event is not for this client
 			event = event->_next;
 			continue;
 		}
-		if (client->state == CLIENT_VALID) {
-			return 1;
-		}
-		rc = 1;
-		if ((client->state == CLIENT_DROPPED) &&
+		if ((client->state == CLIENT_NONE) &&
 		    (event->state != MEM_DONE)) {
+			// Client dropped, terminate event
 			event->state = MEM_DONE;
 			if ((event->type == CMD_READ) ||
 			    (event->type == CMD_WRITE) ||
 			    (event->type == CMD_TOUCH)) {
 				event->resp = PSL_RESPONSE_FAILED;
 			}
+			event = event->_next;
+			continue;
+		}
+		if (client->state == CLIENT_VALID) {
+			// Event is for client in valid state
+			return 1;
 		}
 		event = event->_next;
 	}
