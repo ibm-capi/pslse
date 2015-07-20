@@ -139,7 +139,7 @@ static void _print_event(struct cmd_event *event)
 		printf("IDLE");
 	}
 	printf(" Resp=0x%x Unlock=%d Restart=%d\n", event->resp,
-	       event->unlock, event->restart);
+	       event->unlock, (event->command==PSL_COMMAND_RESTART));
 }
 
 // Update all pending responses at once to new state
@@ -179,13 +179,14 @@ static struct client *_get_client(struct cmd *cmd, struct cmd_event *event)
 static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 		     uint32_t command, uint32_t abort, enum cmd_type type,
 		     uint64_t addr, uint32_t size, enum mem_state state,
-		     uint32_t resp, uint8_t unlock, uint8_t restart)
+		     uint32_t resp, uint8_t unlock)
 {
 	struct cmd_event **head;
 	struct cmd_event *event;
 
 	event = (struct cmd_event*) calloc(1, sizeof(struct cmd_event));
 	event->context = context;
+	event->command = command;
 	event->tag = tag;
 	event->abt = abort;
 	event->type = type;
@@ -194,7 +195,6 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	event->state = state;
 	event->resp = resp;
 	event->unlock = unlock;
-	event->restart = restart;
 	event->data = (uint8_t*)malloc(CACHELINE_BYTES);
 	memset(event->data, 0xFF, CACHELINE_BYTES);
 	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
@@ -230,7 +230,7 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		cmd->irq = irq;
 int_done:
 	_add_cmd(cmd, handle, tag, command, abort, type, (uint64_t) irq, 0,
-		 MEM_DONE, resp, 0, 0);
+		 MEM_DONE, resp, 0);
 }
 
 // Format and add memory touch to command list
@@ -239,7 +239,7 @@ static void _add_touch(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		       uint8_t unlock)
 {
 	_add_cmd(cmd, handle, tag, command, abort, CMD_TOUCH, addr,
-		 CACHELINE_BYTES, MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
+		 CACHELINE_BYTES, MEM_IDLE, PSL_RESPONSE_DONE, unlock);
 }
 
 // Format and add unlock to command list
@@ -247,7 +247,7 @@ static void _add_unlock(struct cmd *cmd, uint32_t handle, uint32_t tag,
 			uint32_t command, uint32_t abort)
 {
 	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
-		 PSL_RESPONSE_DONE, 0, 0);
+		 PSL_RESPONSE_DONE, 0);
 }
 
 // Format and add memory read to command list
@@ -258,7 +258,7 @@ static void _add_read(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	// Reads will be added to the list and will next be processed
 	// in the function handle_buffer_write()
 	_add_cmd(cmd, handle, tag, command, abort, CMD_READ, addr, size,
-		 MEM_IDLE, PSL_RESPONSE_DONE, 0, 0);
+		 MEM_IDLE, PSL_RESPONSE_DONE, 0);
 }
 
 // Format and add memory write to command list
@@ -269,16 +269,15 @@ static void _add_write(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	// Writes will be added to the list and will next be processed
 	// in the function handle_touch()
 	_add_cmd(cmd, handle, tag, command, abort, CMD_WRITE, addr, size,
-		 MEM_IDLE, PSL_RESPONSE_DONE, unlock, 0);
+		 MEM_IDLE, PSL_RESPONSE_DONE, unlock);
 }
 
 // Format and add misc. command to list
 static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint32_t abort, uint32_t resp,
-		       uint8_t restart)
+		       uint32_t command, uint32_t abort, uint32_t resp)
 {
 	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
-		 resp, 0, restart);
+		 resp, 0);
 }
 
 // Determine what type of command to add to list
@@ -290,7 +289,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	uint8_t unlock = 0;
 	if (handle >= cmd->mmio->desc.num_of_processes) {
 		_add_other(cmd, handle, tag, command, abort,
-			   PSL_RESPONSE_CONTEXT, 0);
+			   PSL_RESPONSE_CONTEXT);
 		return;
 	}
 	switch (command) {
@@ -300,8 +299,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 	// Restart
 	case PSL_COMMAND_RESTART:
-		_add_other(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE,
-			   1);
+		_add_other(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE);
 		break;
 	// Cacheline lock
 	case PSL_COMMAND_LOCK:
@@ -354,14 +352,14 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_EVICT_I:
 		if (cmd->locked && cmd->res_addr) {
 			_add_other(cmd, handle, tag, command, abort,
-				   PSL_RESPONSE_NRES, 0);
+				   PSL_RESPONSE_NRES);
 			break;
 		}
 	case PSL_COMMAND_PUSH_I:	/*fall through*/
 	case PSL_COMMAND_PUSH_S:	/*fall through*/
 		if (cmd->locked) {
 			_add_other(cmd, handle, tag, command, abort,
-				   PSL_RESPONSE_NLOCK, 0);
+				   PSL_RESPONSE_NLOCK);
 			break;
 		}
 	case PSL_COMMAND_TOUCH_I:
@@ -440,7 +438,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	// Add failed command
 	if (fail) {
 		_add_other(cmd, handle, tag, command, abort,
-			   PSL_RESPONSE_FAILED, 0);
+			   PSL_RESPONSE_FAILED);
 		return;
 	}
 
@@ -448,7 +446,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	if (!cmd->credits) {
 		warn_msg("AFU issued command without any credits");
 		_add_other(cmd, handle, tag, command, abort,
-			   PSL_RESPONSE_FAILED, 0);
+			   PSL_RESPONSE_FAILED);
 		return;
 	}
 
@@ -457,7 +455,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	// No clients connected
 	if ((cmd->client==NULL) || (cmd->client[handle] == NULL)) {
 		_add_other(cmd, handle, tag, command, abort,
-			   PSL_RESPONSE_FAILED, 0);
+			   PSL_RESPONSE_FAILED);
 		return;
 	}
 
@@ -465,7 +463,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	if ((cmd->client[handle]->flushing==FLUSH_FLUSHING) &&
             (command!=PSL_COMMAND_RESTART)) {
 		_add_other(cmd, handle, tag, command, abort,
-			   PSL_RESPONSE_FLUSHED, 0);
+			   PSL_RESPONSE_FLUSHED);
 		return;
 	}
 
@@ -965,7 +963,7 @@ drive_resp:
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		if (event->restart)
+		if (event->command==PSL_COMMAND_RESTART)
 			client->flushing = FLUSH_NONE;
 		*head = event->_next;
 		free(event->data);

@@ -62,12 +62,12 @@ struct pages {
 struct cmd_event {
 	uint64_t addr;
 	uint32_t context;
+	uint32_t command;
 	uint32_t tag;
 	uint32_t abt;
 	uint32_t size;
 	uint32_t resp;
 	uint8_t unlock;
-	uint8_t restart;
 	uint8_t buffer_activity;
 	uint8_t *data;
 	uint8_t *parity;

@@ -151,7 +151,6 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-			info_msg("Client requesting reset");
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 			break;
 		case PSLSE_ATTACH:
