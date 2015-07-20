@@ -260,20 +260,14 @@ static void _pslse_attach(struct cxl_afu_h *afu)
 {
 	uint8_t *buffer;
 	uint64_t *wed_ptr;
-	uint64_t *page_ptr;
-	uint64_t page_size;
 	int size, offset;
 
-	size = 1 + 2 * sizeof(uint64_t);
+	size = 1 + sizeof(uint64_t);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_ATTACH;
 	offset = 1;
 	wed_ptr = (uint64_t *) & (buffer[offset]);
 	*wed_ptr = htole64(afu->attach.wed);
-	offset += sizeof(uint64_t);
-	page_size = (uint64_t) getpagesize();
-	page_ptr = (uint64_t *) & (buffer[offset]);
-	*page_ptr = htole64(page_size);
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
 		close(afu->fd);

@@ -87,7 +87,7 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 
 static void _print_event(struct cmd_event *event)
 {
-	printf("Command event: ");
+	printf("Command event: client=");
 	switch (event->state) {
 	case CLIENT_VALID:
 		printf("VALID ");
@@ -113,8 +113,9 @@ static void _print_event(struct cmd_event *event)
 	}
 	printf(" tag=%02x", event->tag);
 	printf(" context=%d", event->context);
-	printf(" addr=0x%016"PRIx64, event->addr);
-	printf(" size=0x%x\n\t", event->size);
+	printf(" addr=0x%016"PRIx64"\n\t", event->addr);
+	printf(" size=0x%x", event->size);
+	printf(" state=");
 	switch (event->state) {
 	case MEM_TOUCH:
 		printf("TOUCH");
@@ -157,6 +158,23 @@ static void _update_pending_resps(struct cmd *cmd, uint32_t resp)
 	}
 }
 
+static struct client *_get_client(struct cmd *cmd, struct cmd_event *event)
+{
+	// Event not valid
+	if (event == NULL)
+		return NULL;
+
+	// Abort if client disconnected
+	if ((cmd == NULL) || (cmd->client==NULL) ||
+            (cmd->client[event->context]==NULL)) {
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
+		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+	}
+	return cmd->client[event->context];
+}
+
 // Add new command to list
 static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 		     uint32_t command, uint32_t abort, enum cmd_type type,
@@ -182,16 +200,9 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
 	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
 
-	// Handle commands to disconnected client
-	if ((cmd->client == NULL) || (cmd->client[context] == NULL) ||
-	    (cmd->client[context]->state == CLIENT_NONE)) {
-		event->client_state = CLIENT_NONE;
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-	}
-	else {
-		event->client_state = cmd->client[context]->state;
-	}
+	// Test for client disconnect
+	if (_get_client(cmd, event)==NULL)
+		return;
 
 	head = &(cmd->list);
 	while ((*head != NULL) && !allow_reorder(cmd->parms))
@@ -451,7 +462,8 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	}
 
 	// Client is flushing new commands
-	if (cmd->client[handle]->flushing && (command!=PSL_COMMAND_RESTART)) {
+	if ((cmd->client[handle]->flushing==FLUSH_FLUSHING) &&
+            (command!=PSL_COMMAND_RESTART)) {
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FLUSHED, 0);
 		return;
@@ -486,28 +498,19 @@ void handle_buffer_write(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending read (or none)
-	while ((event != NULL) && (event->client_state==CLIENT_VALID)) {
+	while (event != NULL) {
 		if ((event->type == CMD_READ) &&
 		    (event->state != MEM_DONE) &&
-		    !allow_reorder(cmd->parms)) {
+		    ((event->client_state!=CLIENT_VALID) ||
+		     !allow_reorder(cmd->parms))) {
 			break;
 		}
 		event = event->_next;
 	}
 
-	// No valid event found
-	if (event == NULL)
+	// Test for client disconnect
+	if ((client = _get_client(cmd, event))==NULL)
 		return;
-
-	// Abort if client disconnected
-	client = cmd->client[event->context];
-	if ((client == NULL) && (event->state != MEM_RECEIVED)) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
-	}
 
 	// After the client returns data with a call to the function
 	// _handle_mem_read() issue buffer write with valid data and
@@ -560,44 +563,25 @@ void handle_buffer_write(struct cmd *cmd)
 void handle_buffer_read(struct cmd *cmd)
 {
 	struct cmd_event *event = cmd->list;
-	struct client *client;
 
 	// Check that cmd struct is valid buffer read is available
-	if ((cmd==NULL) || (cmd->client==NULL) || (cmd->buffer_read!=NULL))
+	if ((cmd==NULL) || (cmd->buffer_read!=NULL))
 		return;
 
 	// Randomly select a pending write (or none)
-	while ((event != NULL) && (event->client_state==CLIENT_VALID)) {
+	while (event != NULL) {
 		if ((event->type == CMD_WRITE) &&
 		    (event->state == MEM_TOUCHED) &&
-		    !allow_reorder(cmd->parms)) {
+		    ((event->client_state!=CLIENT_VALID) ||
+		     !allow_reorder(cmd->parms))) {
 			break;
 		}
 		event = event->_next;
 	}
 
-	// No valid event found
-	if (event == NULL)
+	// Test for client disconnect
+	if (_get_client(cmd, event)==NULL)
 		return;
-
-	// Abort if client disconnected
-	if ((cmd == NULL) || (cmd->client==NULL)) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
-	}
-
-	// Abort if client disconnected
-	client = cmd->client[event->context];
-	if (client == NULL) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
-	}
 
 	// Send buffer read request to AFU.  Setting cmd->buffer_read
 	// will block any more buffer read requests until buffer read
@@ -623,36 +607,19 @@ void handle_touch(struct cmd *cmd)
 		return;
 
 	// Randomly select a pending touch (or none)
-	while ((event != NULL) && (event->client_state==CLIENT_VALID)) {
+	while (event != NULL) {
 		if (((event->type==CMD_TOUCH) || (event->type==CMD_WRITE)) &&
-		     (event->state==MEM_IDLE) && !allow_reorder(cmd->parms)) {
+		     (event->state==MEM_IDLE) &&
+		     ((event->client_state!=CLIENT_VALID) ||
+                      !allow_reorder(cmd->parms))) {
 			break;
 		}
 		event = event->_next;
 	}
 
-	// No valid event found
-	if (event == NULL)
+	// Test for client disconnect
+	if ((client = _get_client(cmd, event))==NULL)
 		return;
-
-	// Abort if client disconnected
-	if ((cmd == NULL) || (cmd->client==NULL)) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
-	}
-
-	// Abort if client disconnected
-	client = cmd->client[event->context];
-	if (client == NULL) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
-	}
 
 	// Check that memory request can be driven to client
 	if(client->mem_access != NULL)
@@ -690,18 +657,9 @@ void handle_interrupt(struct cmd *cmd)
 	}
 	event = *head;
 
-	if (event == NULL)
+	// Test for client disconnect
+	if ((client = _get_client(cmd, event))==NULL)
 		return;
-
-	// Abort if client disconnected
-	client = cmd->client[event->context];
-	if (client == NULL) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
-		return;
-	}
 
 	// Send interrupt to client
 	buffer[0] = PSLSE_INTERRUPT;
@@ -780,19 +738,12 @@ void handle_mem_write(struct cmd *cmd)
 	}
 	event = *head;
 
-	// Check if there is pending buffer read request
-	if ((event == NULL) || (cmd->client == NULL))
+	if (event == NULL)
 		return;
 
-	// Abort if client disconnected
-	client = cmd->client[event->context];
-	if (client == NULL) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
+	// Test for client disconnect
+	if ((client = _get_client(cmd, event))==NULL)
 		return;
-	}
 
 	// Check that memory request can be driven to client
 	if (client->mem_access != NULL)
@@ -922,22 +873,17 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 {
 	struct client *client;
 
-	// Abort if client disconnected
-	client = cmd->client[event->context];
-	if (client == NULL) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
+	// Test for client disconnect
+	if ((client = _get_client(cmd, event))==NULL)
 		return;
-	}
 
 	// Randomly cause paged response
 	if (((event->type!=CMD_WRITE) || (event->state!=MEM_REQUEST)) &&
-	    !client->flushing && !_page_cached(cmd, event->addr) &&
+	    (client->flushing==FLUSH_NONE) && !_page_cached(cmd, event->addr) &&
 	    allow_paged(cmd->parms)) {
 		event->resp = PSL_RESPONSE_PAGED;
 		event->state = MEM_DONE;
+		client->flushing = FLUSH_PAGED;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
 		return;
@@ -990,9 +936,11 @@ void handle_response(struct cmd *cmd)
 		}
 		head = &((*head)->_next);
 	}
+
+	// Randomly decide not to drive response yet
 	event = *head;
 	if ((event == NULL) ||
-	    ((event->type==CMD_WRITE) && !allow_resp(cmd->parms))) {
+	    ((event->client_state==CLIENT_VALID) && !allow_resp(cmd->parms))) {
 		return;
 	}
 
@@ -1002,35 +950,23 @@ drive_resp:
 		_print_event(event);
 		assert(event != cmd->buffer_read);
 	}
-	// Abort if client disconnected
-	if ((cmd == NULL) || (cmd->client==NULL)) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		return;
-	}
 
-	// Check for valid client connected
-	client = cmd->client[event->context];
-	if (client == NULL) {
-		event->resp = PSL_RESPONSE_FAILED;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context, event->resp);
+	// Test for client disconnect
+	if ((client = _get_client(cmd, event))==NULL)
 		return;
-	}
 
 	// Send response, remove command from list and free memory
 	if ((event->resp == PSL_RESPONSE_PAGED) ||
 	    (event->resp == PSL_RESPONSE_AERROR) ||
 	    (event->resp == PSL_RESPONSE_DERROR)) {
-		client->flushing = 1;
+		client->flushing = FLUSH_FLUSHING;
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if (event->restart)
-			client->flushing = 0;
+			client->flushing = FLUSH_NONE;
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);

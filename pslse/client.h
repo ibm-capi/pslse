@@ -19,14 +19,15 @@
 #include <pthread.h>
 #include <stdint.h>
 
-struct flush_page {
-	uint64_t addr;
-	struct flush_page *_next;
-};
-
 enum client_state {
 	CLIENT_NONE,
 	CLIENT_VALID
+};
+
+enum flush_state {
+	FLUSH_NONE,
+	FLUSH_PAGED,
+	FLUSH_FLUSHING	
 };
 
 struct client {
@@ -36,13 +37,10 @@ struct client {
 	int fd;
 	int context;
 	int abort;
-	int flushing;
+	enum flush_state flushing;
 	enum client_state state;
 	uint16_t max_irqs;
 	char type;
-	uint64_t page_size;
-	uint64_t page_mask;
-	uint64_t fault_page;
 	uint32_t mmio_offset;
 	uint32_t mmio_size;
 	void *mem_access;

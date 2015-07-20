@@ -44,13 +44,12 @@ static void _attach(struct psl *psl, struct client* client)
 	uint8_t ack;
 	uint8_t buffer[MAX_LINE_CHARS];
 	size_t size;
-	int offset;
 
 	// FIXME: This only works for dedicate mode
 
 	// Get wed value from application
 	ack = PSLSE_DETACH;
-	size = 2*sizeof(uint64_t);
+	size = sizeof(uint64_t);
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
 		warn_msg("Failed to get WED value from client");
@@ -59,12 +58,6 @@ static void _attach(struct psl *psl, struct client* client)
 	}
 	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
 	wed = le64toh(wed);
-	offset = sizeof(uint64_t);
-	memcpy((char*) &(client->page_size), (char*) &(buffer[offset]),
-	       sizeof(uint64_t));
-	client->page_size = le64toh(client->page_size);
-	client->page_mask = client->page_size-1;
-	client->page_mask = ~client->page_mask;
 
 	// Send start to AFU
 	if (add_job(psl->job, PSL_JOB_START, wed) != NULL) {
