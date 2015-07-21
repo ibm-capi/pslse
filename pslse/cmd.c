@@ -879,6 +879,8 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 	if (((event->type!=CMD_WRITE) || (event->state!=MEM_REQUEST)) &&
 	    (client->flushing==FLUSH_NONE) && !_page_cached(cmd, event->addr) &&
 	    allow_paged(cmd->parms)) {
+		if (event->type==CMD_READ)
+			_handle_mem_read(cmd, event, fd);
 		event->resp = PSL_RESPONSE_PAGED;
 		event->state = MEM_DONE;
 		client->flushing = FLUSH_PAGED;
