@@ -230,7 +230,7 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		cmd->irq = irq;
 int_done:
 	_add_cmd(cmd, handle, tag, command, abort, type, (uint64_t) irq, 0,
-		 MEM_DONE, resp, 0);
+		 MEM_IDLE, resp, 0);
 }
 
 // Format and add memory touch to command list
@@ -649,7 +649,8 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send any interrupts to client immediately
 	while (*head != NULL) {
-		if ((*head)->type == CMD_INTERRUPT)
+		if (((*head)->type == CMD_INTERRUPT) &&
+		    ((*head)->state==MEM_IDLE))
 			break;
 		head = &((*head)->_next);
 	}
