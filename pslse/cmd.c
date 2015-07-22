@@ -160,13 +160,12 @@ static void _update_pending_resps(struct cmd *cmd, uint32_t resp)
 
 static struct client *_get_client(struct cmd *cmd, struct cmd_event *event)
 {
-	// Event not valid
-	if (event == NULL)
+	// Make sure cmd and client are still valid
+	if ((cmd == NULL) || (cmd->client==NULL))
 		return NULL;
 
 	// Abort if client disconnected
-	if ((cmd == NULL) || (cmd->client==NULL) ||
-            (cmd->client[event->context]==NULL)) {
+	if (cmd->client[event->context]==NULL) {
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -183,6 +182,9 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 {
 	struct cmd_event **head;
 	struct cmd_event *event;
+
+	if (cmd==NULL)
+		return;
 
 	event = (struct cmd_event*) calloc(1, sizeof(struct cmd_event));
 	event->context = context;
@@ -201,8 +203,12 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
 
 	// Test for client disconnect
-	if (_get_client(cmd, event)==NULL)
+	if (_get_client(cmd, event)==NULL) {
+		free(event->parity);
+		free(event->data);
+		free(event);
 		return;
+	}
 
 	head = &(cmd->list);
 	while ((*head != NULL) && !allow_reorder(cmd->parms))
@@ -486,16 +492,17 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 // buffer write with valid data after it has been received from client.
 void handle_buffer_write(struct cmd *cmd)
 {
-	struct cmd_event *event = cmd->list;
+	struct cmd_event *event;
 	struct client *client;
 	uint8_t buffer[10];
 	uint64_t *addr;
 
 	// Make sure cmd structure is valid
-	if ((cmd==NULL) || (cmd->client == NULL))
+	if (cmd==NULL)
 		return;
 
 	// Randomly select a pending read (or none)
+	event = cmd->list;
 	while (event != NULL) {
 		if ((event->type == CMD_READ) &&
 		    (event->state != MEM_DONE) &&
@@ -507,7 +514,7 @@ void handle_buffer_write(struct cmd *cmd)
 	}
 
 	// Test for client disconnect
-	if ((client = _get_client(cmd, event))==NULL)
+	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
 		return;
 
 	// After the client returns data with a call to the function
@@ -560,13 +567,14 @@ void handle_buffer_write(struct cmd *cmd)
 // Handle randomly selected pending write
 void handle_buffer_read(struct cmd *cmd)
 {
-	struct cmd_event *event = cmd->list;
+	struct cmd_event *event;
 
 	// Check that cmd struct is valid buffer read is available
 	if ((cmd==NULL) || (cmd->buffer_read!=NULL))
 		return;
 
 	// Randomly select a pending write (or none)
+	event = cmd->list;
 	while (event != NULL) {
 		if ((event->type == CMD_WRITE) &&
 		    (event->state == MEM_TOUCHED) &&
@@ -578,7 +586,7 @@ void handle_buffer_read(struct cmd *cmd)
 	}
 
 	// Test for client disconnect
-	if (_get_client(cmd, event)==NULL)
+	if ((event==NULL) || (_get_client(cmd, event)==NULL))
 		return;
 
 	// Send buffer read request to AFU.  Setting cmd->buffer_read
@@ -595,16 +603,17 @@ void handle_buffer_read(struct cmd *cmd)
 // Handle randomly selected memory touch
 void handle_touch(struct cmd *cmd)
 {
-	struct cmd_event *event = cmd->list;
+	struct cmd_event *event;
 	struct client *client;
 	uint8_t buffer[10];
 	uint64_t *addr;
 
 	// Make sure cmd structure is valid
-	if ((cmd == NULL) || (cmd->client==NULL))
+	if (cmd == NULL)
 		return;
 
 	// Randomly select a pending touch (or none)
+	event = cmd->list;
 	while (event != NULL) {
 		if (((event->type==CMD_TOUCH) || (event->type==CMD_WRITE)) &&
 		     (event->state==MEM_IDLE) &&
@@ -616,7 +625,7 @@ void handle_touch(struct cmd *cmd)
 	}
 
 	// Test for client disconnect
-	if ((client = _get_client(cmd, event))==NULL)
+	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
 		return;
 
 	// Check that memory request can be driven to client
@@ -641,13 +650,18 @@ void handle_touch(struct cmd *cmd)
 // Send pending interrupt to client as soon as possible
 void handle_interrupt(struct cmd *cmd)
 {
-	struct cmd_event **head = &cmd->list;
+	struct cmd_event **head;
 	struct cmd_event *event;
 	struct client *client;
 	uint16_t irq;
 	uint8_t buffer[3];
 
+	// Make sure cmd structure is valid
+	if (cmd == NULL)
+		return;
+
 	// Send any interrupts to client immediately
+	head = &cmd->list;
 	while (*head != NULL) {
 		if (((*head)->type == CMD_INTERRUPT) &&
 		    ((*head)->state==MEM_IDLE))
@@ -657,7 +671,7 @@ void handle_interrupt(struct cmd *cmd)
 	event = *head;
 
 	// Test for client disconnect
-	if ((client = _get_client(cmd, event))==NULL)
+	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
 		return;
 
 	// Send interrupt to client
@@ -717,7 +731,7 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 
 void handle_mem_write(struct cmd *cmd)
 {
-	struct cmd_event **head = &cmd->list;
+	struct cmd_event **head;
 	struct cmd_event *event;
 	struct client *client;
 	uint64_t *addr;
@@ -725,10 +739,11 @@ void handle_mem_write(struct cmd *cmd)
 	uint64_t offset;
 
 	// Make sure cmd structure is valid
-	if ((cmd == NULL) || (cmd->client==NULL))
+	if (cmd == NULL)
 		return;
 
 	// Send any ready write data to client immediately
+	head = &cmd->list;
 	while (*head != NULL) {
 		if (((*head)->type == CMD_WRITE) &&
 		    ((*head)->state == MEM_RECEIVED))
@@ -737,11 +752,8 @@ void handle_mem_write(struct cmd *cmd)
 	}
 	event = *head;
 
-	if (event == NULL)
-		return;
-
 	// Test for client disconnect
-	if ((client = _get_client(cmd, event))==NULL)
+	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
 		return;
 
 	// Check that memory request can be driven to client
@@ -873,7 +885,7 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 	struct client *client;
 
 	// Test for client disconnect
-	if ((client = _get_client(cmd, event))==NULL)
+	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
 		return;
 
 	// Randomly cause paged response
@@ -953,7 +965,7 @@ drive_resp:
 	}
 
 	// Test for client disconnect
-	if ((client = _get_client(cmd, event))==NULL)
+	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
 		return;
 
 	// Send response, remove command from list and free memory

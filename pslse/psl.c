@@ -344,8 +344,8 @@ static void *_psl_loop(void *ptr)
 		free(psl->name);
 	if (*(psl->head) == psl)
 		*(psl->head) = psl->_next;
-	free(psl);
 	pthread_mutex_unlock(psl->lock);
+	free(psl);
 	pthread_exit(NULL);
 }
 
@@ -511,6 +511,6 @@ init_fail:
 			free(psl->name);
 		free(psl);
 	}
-	pthread_mutex_unlock(psl->lock);
+	pthread_mutex_unlock(lock);
 	return 0;
 }
