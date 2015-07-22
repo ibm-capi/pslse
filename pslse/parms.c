@@ -25,31 +25,37 @@
 
 #define DEFAULT_CREDITS 64
 
+// Randomly decide based on percent chance
 static inline int percent_chance(unsigned int chance)
 {
 	return ((rand() % 100) < chance);
 }
 
+// Randomly decide to allow response to AFU
 int allow_resp(struct parms* parms)
 {
 	return percent_chance(parms->resp_percent);
 }
 
+// Randomly decide to allow PAGED response
 int allow_paged(struct parms* parms)
 {
 	return percent_chance(parms->paged_percent);
 }
 
+// Randomly decide to allow command to be handled out of order
 int allow_reorder(struct parms* parms)
 {
 	return percent_chance(parms->reorder_percent);
 }
 
+// Randomly decide to allow bogus buffer activity
 int allow_buffer(struct parms* parms)
 {
 	return percent_chance(parms->buffer_percent);
 }
 
+// Decide a single random percentage value from a percentage range
 static void percent_parm(char *value, unsigned int *parm)
 {
 	unsigned min, max;
@@ -70,6 +76,7 @@ static void percent_parm(char *value, unsigned int *parm)
 	}
 }
 
+// Open and parse parms file
 struct parms* parse_parms(char *filename, FILE *dbg_fp)
 {
 	struct parms* parms;
@@ -92,6 +99,7 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 	parms->reorder_percent = 20;
 	parms->buffer_percent = 50;
 
+	// Open file and parse contents
 	fp = fopen(filename, "r");
 	if (fp == NULL) {
 		perror("fopen");
@@ -185,9 +193,12 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 			continue;
 		}
 	}
+
+	// Close file and set seed
 	fclose(fp);
 	srand(parms->seed);
 
+	// Print out parm settings
 	info_msg("PSLSE parm values:");
 	printf("\tSeed     = %d\n", parms->seed);
 	if (parms->credits!=DEFAULT_CREDITS)
@@ -201,7 +212,8 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 	printf("\tReorder  = %d%%\n", parms->reorder_percent);
 	printf("\tBuffer   = %d%%\n", parms->buffer_percent);
 
-	parms->timeout *= 1000; // Store as milliseconds;
+	// Adjust timeout to milliseconds
+	parms->timeout *= 1000;
 
 	return parms;
 }

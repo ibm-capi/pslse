@@ -38,6 +38,7 @@ struct job *job_init(struct AFU_EVENT *afu_event,
 {
 	struct job *job;
 
+	// Initialize job struct
 	job = (struct job*) calloc(1, sizeof(struct job));
 	if (!job)
 		return job;
@@ -62,10 +63,12 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 		free(event);
 	}
 
+	// Find the end of the list
 	tail = &(job->job);
 	while (*tail != NULL)
 		tail = &((*tail)->_next);
 
+	// Create new job event and add to end of list
 	event = (struct job_event *) calloc(1, sizeof(struct job_event));
 	if (!event)
 		return event;
@@ -134,15 +137,18 @@ int handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 	if (job == NULL)
 		return 0;
 
+	// See if AFU is driving AUX2 signal changes
 	dbg_aux2 = reset = reset_complete = 0;
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
 				&tb_request, &par_enable, &read_latency) ==
 	    PSL_SUCCESS) {
+		// Handle job_done
 		if (job_done) {
 			dbg_aux2 |= DBG_AUX2_DONE;
 			if (job->job != NULL) {
 				event = job->job;
+				// Is job_done for reset or start?
 				if (event->code == PSL_JOB_RESET)
 					reset_complete = 1;
 				else
@@ -156,6 +162,7 @@ int handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 				*(job->psl_state) = PSLSE_IDLE;
 			}
 		}
+		// Handle job_running
 		if (job_running) {
 			*(job->psl_state) = PSLSE_RUNNING;
 			dbg_aux2 |= DBG_AUX2_RUNNING;

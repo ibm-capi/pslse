@@ -29,14 +29,19 @@ struct parms {
 	unsigned int buffer_percent;
 };
 
+// Randomly decide to allow response to AFU
 int allow_resp(struct parms* parms);
 
+// Randomly decide to allow PAGED response
 int allow_paged(struct parms* parms);
 
+// Randomly decide to allow command to be handled out of order
 int allow_reorder(struct parms* parms);
 
+// Randomly decide to allow bogus buffer activity
 int allow_buffer(struct parms* parms);
 
+// Open and parse parms file
 struct parms *parse_parms(char *filename, FILE *dbg_fp);
 
 #endif /* _PARMS_H_ */

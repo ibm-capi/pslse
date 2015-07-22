@@ -317,7 +317,7 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	}
 	event = _add_mmio(mmio, client, 0, dw, offset/4, data);
 	return event;
-	
+
 write_fail:
 	// Socket connection is dead
 	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
@@ -339,7 +339,7 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	offset = le32toh(offset);
 	event = _add_mmio(mmio, client, 1, dw, offset/4, 0);
 	return event;
-	
+
 read_fail:
 	// Socket connection is dead
 	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
