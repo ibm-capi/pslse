@@ -38,7 +38,6 @@
 #define CXL_MMIO_HOST_ENDIAN 0x3
 #define CXL_MMIO_ENDIAN_MASK 0x3
 
-
 struct mmio_event {
 	uint32_t rnw;
 	uint32_t dw;
@@ -76,10 +75,10 @@ struct mmio {
 	int timeout;
 };
 
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE *dbg_fp,
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE * dbg_fp,
 		       uint8_t dbg_id);
 
-int read_descriptor(struct mmio *mmio, pthread_mutex_t *lock);
+int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock);
 
 struct mmio_event *add_mmio(struct mmio *mmio, uint32_t rnw, uint32_t dw,
 			    uint32_t addr, uint64_t data);
@@ -93,6 +92,6 @@ void handle_mmio_map(struct mmio *mmio, struct client *client);
 struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 			       int rnw, int dw);
 
-struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client);
+struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client);
 
-#endif /* _MMIO_H_ */
+#endif				/* _MMIO_H_ */

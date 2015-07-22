@@ -45,10 +45,10 @@
 #include "mmio.h"
 
 // Initialize MMIO tracking structure
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE *dbg_fp,
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE * dbg_fp,
 		       uint8_t dbg_id)
 {
-	struct mmio *mmio = (struct mmio*) calloc(1, sizeof(struct mmio));
+	struct mmio *mmio = (struct mmio *)calloc(1, sizeof(struct mmio));
 	if (!mmio)
 		return mmio;
 	mmio->afu_event = afu_event;
@@ -69,7 +69,7 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 	uint16_t context;
 
 	// Add new event in IDLE state
-	event = (struct mmio_event *) malloc(sizeof(struct mmio_event));
+	event = (struct mmio_event *)malloc(sizeof(struct mmio_event));
 	if (!event)
 		return event;
 	event->rnw = rnw;
@@ -110,17 +110,17 @@ static struct mmio_event *_add_mmio(struct mmio *mmio, struct client *client,
 }
 
 static void _wait_for_done(struct mmio *mmio, enum pslse_state *state,
-			   pthread_mutex_t *lock)
+			   pthread_mutex_t * lock)
 {
 	while (*state != PSLSE_DONE)	/* infinite loop */
 		lock_delay(lock);
 }
 
 // Read the entire AFU descriptor and keep a copy
-int read_descriptor(struct mmio *mmio, pthread_mutex_t *lock)
+int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 {
 	struct mmio_event *event00, *event20, *event28, *event30, *event38,
-			  *event40, *event48;
+	    *event40, *event48;
 
 	// Queue mmio reads
 	event00 = _add_desc(mmio, 1, 1, 0x00 >> 2, 0L);
@@ -169,7 +169,6 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t *lock)
 		errno = ENODEV;
 		return -1;
 	}
-
 	// Verify req_prog_model
 	if ((mmio->desc.req_prog_model & 0x7fffl) != 0x0010l) {
 		error_msg("AFU descriptor: Unsupported req_prog_model");
@@ -192,15 +191,15 @@ void send_mmio(struct mmio *mmio)
 		return;
 
 	// Attempt to send mmio to AFU
-	if(event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
-				       event->desc) == PSL_SUCCESS) {
+	if (event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
+					event->desc) == PSL_SUCCESS) {
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
 	}
-	if(!event->rnw && psl_mmio_write(mmio->afu_event, event->dw,
-					 event->addr, event->data, event->desc)
-			  == PSL_SUCCESS) {
+	if (!event->rnw && psl_mmio_write(mmio->afu_event, event->dw,
+					  event->addr, event->data, event->desc)
+	    == PSL_SUCCESS) {
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
@@ -219,7 +218,7 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 				      &read_data_parity);
 	if (rc == PSL_SUCCESS) {
 		debug_mmio_ack(mmio->dbg_fp, mmio->dbg_id);
-		if(!mmio->list || (mmio->list->state != PSLSE_PENDING)) {
+		if (!mmio->list || (mmio->list->state != PSLSE_PENDING)) {
 			error_msg("Unexpected MMIO ack from AFU");
 			return;
 		}
@@ -227,8 +226,9 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 		if (mmio->list->rnw) {
 			if (parity_enabled) {
 				parity = generate_parity(read_data, ODD_PARITY);
-				if(read_data_parity != parity)
-					error_msg("Parity error on MMIO read data");
+				if (read_data_parity != parity)
+					error_msg
+					    ("Parity error on MMIO read data");
 			}
 			mmio->list->data = read_data;
 		}
@@ -250,7 +250,7 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		ack = PSLSE_MMIO_FAIL;
 		goto map_done;
 	}
-	if (get_bytes_silent(fd, 4, (uint8_t*) &flags, mmio->timeout,
+	if (get_bytes_silent(fd, 4, (uint8_t *) & flags, mmio->timeout,
 			     &(client->abort)) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		warn_msg("Socket failure with client context %d",
@@ -258,12 +258,10 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		ack = PSLSE_MMIO_FAIL;
 		goto map_done;
 	}
-
 	// Check flags value and set
 	if (!mmio->flags) {
 		mmio->flags = le32toh(flags);
-	}
-	else if (mmio->flags != le32toh(flags)) {
+	} else if (mmio->flags != le32toh(flags)) {
 		warn_msg("Set conflicting mmio endianess for AFU");
 		ack = PSLSE_MMIO_FAIL;
 	}
@@ -272,10 +270,10 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 		debug_mmio_map(mmio->dbg_fp, mmio->dbg_id, client->context);
 	}
 
-map_done:
+ map_done:
 	// Send acknowledge to client
 	if (put_bytes(fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id, client->context)
-	    <0) {
+	    < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 }
@@ -291,21 +289,20 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 	uint64_t data;
 	int fd = client->fd;
 
-	if (get_bytes_silent(fd, 4, (uint8_t*) &offset, mmio->timeout,
+	if (get_bytes_silent(fd, 4, (uint8_t *) & offset, mmio->timeout,
 			     &(client->abort)) < 0) {
 		goto write_fail;
 	}
 	offset = le32toh(offset);
 	if (dw) {
-		if (get_bytes_silent(fd, 8, (uint8_t*) &data64, mmio->timeout,
+		if (get_bytes_silent(fd, 8, (uint8_t *) & data64, mmio->timeout,
 				     &(client->abort)) < 0) {
 			goto write_fail;
 		}
 		// Convert data from client from little endian to host
 		data = le64toh(data64);
-	}
-	else {
-		if (get_bytes_silent(fd, 4, (uint8_t*) &data32, mmio->timeout,
+	} else {
+		if (get_bytes_silent(fd, 4, (uint8_t *) & data32, mmio->timeout,
 				     &(client->abort)) < 0) {
 			goto write_fail;
 		}
@@ -315,10 +312,10 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 		data <<= 32;
 		data |= (uint64_t) data32;
 	}
-	event = _add_mmio(mmio, client, 0, dw, offset/4, data);
+	event = _add_mmio(mmio, client, 0, dw, offset / 4, data);
 	return event;
 
-write_fail:
+ write_fail:
 	// Socket connection is dead
 	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	return NULL;
@@ -332,15 +329,15 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	uint32_t offset;
 	int fd = client->fd;
 
-	if (get_bytes_silent(fd, 4, (uint8_t*) &offset, mmio->timeout,
+	if (get_bytes_silent(fd, 4, (uint8_t *) & offset, mmio->timeout,
 			     &(client->abort)) < 0) {
 		goto read_fail;
 	}
 	offset = le32toh(offset);
-	event = _add_mmio(mmio, client, 1, dw, offset/4, 0);
+	event = _add_mmio(mmio, client, 1, dw, offset / 4, 0);
 	return event;
 
-read_fail:
+ read_fail:
 	// Socket connection is dead
 	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	return NULL;
@@ -353,10 +350,10 @@ struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 	uint8_t ack;
 
 	// Only allow MMIO access when client is valid
-	if (client->state!=CLIENT_VALID) {
+	if (client->state != CLIENT_VALID) {
 		ack = PSLSE_MMIO_FAIL;
 		if (put_bytes(client->fd, 1, &ack, mmio->dbg_fp, mmio->dbg_id,
-			      client->context)<0) {
+			      client->context) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 		return NULL;
@@ -368,14 +365,14 @@ struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 }
 
 // Handle MMIO done
-struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
+struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client)
 {
 	struct mmio_event *event;
 	uint8_t *buffer;
 	int fd = client->fd;
 
 	// Is there an MMIO event pending?
-	event = (struct mmio_event*) client->mmio_access;
+	event = (struct mmio_event *)client->mmio_access;
 	if (event == NULL)
 		return NULL;
 
@@ -386,32 +383,30 @@ struct mmio_event *handle_mmio_done(struct mmio* mmio, struct client *client)
 	if (event->rnw) {
 		// Return acknowledge with read data
 		if (event->dw) {
-			buffer = (uint8_t*)malloc(9);
+			buffer = (uint8_t *) malloc(9);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 8);
 			if (put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
-				      client->context)<0) {
+				      client->context) < 0) {
 				client_drop(client, PSL_IDLE_CYCLES,
 					    CLIENT_NONE);
 			}
-		}
-		else {
-			buffer = (uint8_t*)malloc(5);
+		} else {
+			buffer = (uint8_t *) malloc(5);
 			buffer[0] = PSLSE_MMIO_ACK;
 			memcpy(&(buffer[1]), &(event->data), 4);
 			if (put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
-				      client->context)<0) {
+				      client->context) < 0) {
 				client_drop(client, PSL_IDLE_CYCLES,
 					    CLIENT_NONE);
 			}
 		}
-	}
-	else {
+	} else {
 		// Return acknowledge for write
-		buffer = (uint8_t*)malloc(1);
+		buffer = (uint8_t *) malloc(1);
 		buffer[0] = PSLSE_MMIO_ACK;
 		if (put_bytes(fd, 1, buffer, mmio->dbg_fp, mmio->dbg_id,
-			      client->context)<0) {
+			      client->context) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 	}

@@ -103,7 +103,7 @@ void ns_delay(long ns)
 }
 
 // Delay to allow another thread to have mutex lock
-void lock_delay(pthread_mutex_t *lock)
+void lock_delay(pthread_mutex_t * lock)
 {
 	pthread_mutex_unlock(lock);
 	ns_delay(100000);
@@ -133,7 +133,7 @@ int bytes_ready(int fd, int *abort)
 }
 
 // Get bytes from socket
-int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
+int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 {
 	struct timespec start, now;
 	double milliseconds;
@@ -151,15 +151,13 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 			perror("clock_gettime");
 			break;
 		}
-		milliseconds = (double) (now.tv_sec - start.tv_sec) *
-			       (double) 1000L +
-			       (double) (now.tv_nsec - start.tv_nsec) /
-			       (double) (1000000L);
-		if ((timeout > 0) && (((int) milliseconds) > timeout)) {
+		milliseconds = (double)(now.tv_sec - start.tv_sec) *
+		    (double)1000L +
+		    (double)(now.tv_nsec - start.tv_nsec) / (double)(1000000L);
+		if ((timeout > 0) && (((int)milliseconds) > timeout)) {
 			warn_msg("Socket timeout");
-			break; 
+			break;
 		}
-
 		// Check for socket activity
 		rc = bytes_ready(fd, abort);
 		if (rc == 0)
@@ -169,14 +167,14 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 			break;
 		}
 
-		if ((bytes = recv(fd, data, size, MSG_PEEK|MSG_DONTWAIT))==0) {
+		if ((bytes =
+		     recv(fd, data, size, MSG_PEEK | MSG_DONTWAIT)) == 0) {
 			if (bytes <= 0) {
-				if (errno!=EINTR) {
+				if (errno != EINTR) {
 					perror("recv");
 					warn_msg("Socket disconnect on recv");
 					return -1;
-				}
-				else
+				} else
 					continue;
 			}
 		}
@@ -189,7 +187,7 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 	while (data && (bytes < size)) {
 		count = recv(fd, &(data[bytes]), size, 0);
 		if (count <= 0) {
-			if (errno!=EINTR)
+			if (errno != EINTR)
 				break;
 			else
 				continue;
@@ -201,14 +199,14 @@ int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort)
 	for (count = 0; count < bytes; count++)
 		DPRINTF("%02x", data[count]);
 	DPRINTF("\n");
-#endif /* DEBUG */
+#endif				/* DEBUG */
 
 	return 0;
 }
 
 // Get bytes from socket with debug output
-int get_bytes(int fd, int size, uint8_t *data, int timeout, int *abort,
-	      FILE *dbg_fp, uint8_t dbg_id, uint16_t context)
+int get_bytes(int fd, int size, uint8_t * data, int timeout, int *abort,
+	      FILE * dbg_fp, uint8_t dbg_id, uint16_t context)
 {
 	int rc;
 
@@ -219,14 +217,14 @@ int get_bytes(int fd, int size, uint8_t *data, int timeout, int *abort,
 }
 
 // Put bytes on socket
-int put_bytes_silent(int fd, int size, uint8_t *data)
+int put_bytes_silent(int fd, int size, uint8_t * data)
 {
 	int count, bytes;
 
 #if DEBUG
 	int i;
 	DPRINTF("Socket out:0x");
-#endif /* DEBUG */
+#endif				/* DEBUG */
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = write(fd, &(data[bytes]), size);
@@ -239,7 +237,7 @@ int put_bytes_silent(int fd, int size, uint8_t *data)
 #if DEBUG
 		for (i = 0; i < count + bytes; i++)
 			DPRINTF("%02x", data[i]);
-#endif /* DEBUG */
+#endif				/* DEBUG */
 		bytes += count;
 	}
 	DPRINTF("\n");
@@ -248,7 +246,7 @@ int put_bytes_silent(int fd, int size, uint8_t *data)
 }
 
 // Put bytes on socket with debug output;
-int put_bytes(int fd, int size, uint8_t *data, FILE *dbg_fp, uint8_t dbg_id,
+int put_bytes(int fd, int size, uint8_t * data, FILE * dbg_fp, uint8_t dbg_id,
 	      uint16_t context)
 {
 	int bytes;

@@ -54,7 +54,7 @@ struct psl {
 	int timeout;
 };
 
-uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
-		  int port, pthread_mutex_t *lock, FILE *dbg_fp);
+uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
+		  int port, pthread_mutex_t * lock, FILE * dbg_fp);
 
-#endif /* _PSL_H_ */
+#endif				/* _PSL_H_ */

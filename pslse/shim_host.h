@@ -24,7 +24,7 @@
 #include "parms.h"
 #include "psl.h"
 
-uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
-			 pthread_mutex_t *lock, FILE *dbg_fp);
+uint16_t parse_host_data(struct psl ** head, struct parms * parms,
+			 char *filename, pthread_mutex_t * lock, FILE * dbg_fp);
 
-#endif /* _SHIM_HOST_H_ */
+#endif				/* _SHIM_HOST_H_ */

@@ -27,9 +27,9 @@
 
 #define TOTAL_PAGES_CACHED 64
 #define PAGE_WAYS 4
-#define LOG2_WAYS 2 // log2(PAGE_WAYS) = log2(4) = 2
+#define LOG2_WAYS 2		// log2(PAGE_WAYS) = log2(4) = 2
 #define PAGE_ENTRIES (TOTAL_PAGES_CACHED / PAGE_WAYS)
-#define LOG2_ENTRIES 4 // log2(PAGE_ENTRIES) = log2(64/4) = log2(16) = 4
+#define LOG2_ENTRIES 4		// log2(PAGE_ENTRIES) = log2(64/4) = log2(16) = 4
 #define PAGE_ADDR_BITS 12
 #define PAGE_MASK 0xFFF
 
@@ -98,9 +98,9 @@ struct cmd {
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     FILE *dbg_fp, uint8_t dbg_id);
+		     FILE * dbg_fp, uint8_t dbg_id);
 
-void handle_cmd(struct cmd* cmd, uint32_t parity_enabled, uint32_t latency);
+void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency);
 
 void handle_buffer_read(struct cmd *cmd);
 
@@ -122,4 +122,4 @@ void handle_response(struct cmd *cmd);
 
 int client_cmd(struct cmd *cmd, struct client *client);
 
-#endif /* _CMD_H_ */
+#endif				/* _CMD_H_ */

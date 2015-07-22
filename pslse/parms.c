@@ -32,25 +32,25 @@ static inline int percent_chance(unsigned int chance)
 }
 
 // Randomly decide to allow response to AFU
-int allow_resp(struct parms* parms)
+int allow_resp(struct parms *parms)
 {
 	return percent_chance(parms->resp_percent);
 }
 
 // Randomly decide to allow PAGED response
-int allow_paged(struct parms* parms)
+int allow_paged(struct parms *parms)
 {
 	return percent_chance(parms->paged_percent);
 }
 
 // Randomly decide to allow command to be handled out of order
-int allow_reorder(struct parms* parms)
+int allow_reorder(struct parms *parms)
 {
 	return percent_chance(parms->reorder_percent);
 }
 
 // Randomly decide to allow bogus buffer activity
-int allow_buffer(struct parms* parms)
+int allow_buffer(struct parms *parms)
 {
 	return percent_chance(parms->buffer_percent);
 }
@@ -77,23 +77,23 @@ static void percent_parm(char *value, unsigned int *parm)
 }
 
 // Open and parse parms file
-struct parms* parse_parms(char *filename, FILE *dbg_fp)
+struct parms *parse_parms(char *filename, FILE * dbg_fp)
 {
-	struct parms* parms;
+	struct parms *parms;
 	char parm[MAX_LINE_CHARS];
 	char *value;
 	FILE *fp;
 	unsigned int data;
 
 	// Allocate memory for struct
-	parms = (struct parms*) malloc(sizeof(struct parms));
+	parms = (struct parms *)malloc(sizeof(struct parms));
 	if (parms == NULL)
 		return NULL;
 
 	// Set default parameter values
 	parms->timeout = 10;
 	parms->credits = DEFAULT_CREDITS;
-	parms->seed = (unsigned int) time(NULL);
+	parms->seed = (unsigned int)time(NULL);
 	parms->resp_percent = 20;
 	parms->paged_percent = 5;
 	parms->reorder_percent = 20;
@@ -144,8 +144,7 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 			debug_parm(dbg_fp, DBG_PARM_SEED, parms->seed);
 		} else if (!(strcmp(parm, "TIMEOUT"))) {
 			parms->timeout = atoi(value);
-			debug_parm(dbg_fp, DBG_PARM_TIMEOUT,
-				   parms->timeout);
+			debug_parm(dbg_fp, DBG_PARM_TIMEOUT, parms->timeout);
 		} else if (!(strcmp(parm, "CREDITS"))) {
 			data = atoi(value);
 			if ((data > DEFAULT_CREDITS) || (data <= 0))
@@ -153,8 +152,7 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 					 DEFAULT_CREDITS);
 			else
 				parms->credits = data;
-			debug_parm(dbg_fp, DBG_PARM_CREDITS,
-				   parms->credits);
+			debug_parm(dbg_fp, DBG_PARM_CREDITS, parms->credits);
 		} else if (!(strcmp(parm, "RESPONSE_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data > 100) || (data <= 0))
@@ -201,7 +199,7 @@ struct parms* parse_parms(char *filename, FILE *dbg_fp)
 	// Print out parm settings
 	info_msg("PSLSE parm values:");
 	printf("\tSeed     = %d\n", parms->seed);
-	if (parms->credits!=DEFAULT_CREDITS)
+	if (parms->credits != DEFAULT_CREDITS)
 		printf("\tCredits  = %d\n", parms->credits);
 	if (parms->timeout)
 		printf("\tTimeout  = %d seconds\n", parms->timeout);

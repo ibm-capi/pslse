@@ -58,8 +58,8 @@
 
 #define PSL_MAX_IRQS 2037
 
-struct psl* psl_list;
-struct client* client_list;
+struct psl *psl_list;
+struct client *client_list;
 pthread_mutex_t lock;
 uint16_t afu_map;
 int timeout;
@@ -69,7 +69,7 @@ FILE *fp;
 static void _INThandler(int sig)
 {
 	pthread_t thread;
-	struct psl* psl;
+	struct psl *psl;
 	int i;
 
 	// Flush debug output
@@ -79,7 +79,7 @@ static void _INThandler(int sig)
 	psl = psl_list;
 	while (psl != NULL) {
 		info_msg("Shutting down connection to %s\n", psl->name);
-		for (i = 0; i<psl->max_clients; i++) {
+		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] != NULL)
 				psl->client[i]->abort = 1;
 		}
@@ -91,9 +91,9 @@ static void _INThandler(int sig)
 }
 
 // Find PSL for specific AFU id
-static struct psl* _find_psl(uint8_t id, uint8_t *major, uint8_t *minor)
+static struct psl *_find_psl(uint8_t id, uint8_t * major, uint8_t * minor)
 {
-	struct psl* psl;
+	struct psl *psl;
 
 	*major = id >> 4;
 	*minor = id & 0x3;
@@ -107,39 +107,38 @@ static struct psl* _find_psl(uint8_t id, uint8_t *major, uint8_t *minor)
 }
 
 // Query AFU descriptor data
-static void _query(struct client* client, uint8_t id)
+static void _query(struct client *client, uint8_t id)
 {
-	struct psl *psl; 
+	struct psl *psl;
 	uint8_t *buffer;
 	uint8_t major, minor;
 	int size, offset;
 
 	psl = _find_psl(id, &major, &minor);
 	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process) +
-	       sizeof(client->max_irqs);
-	buffer = (uint8_t*)malloc(size);
+	    sizeof(client->max_irqs);
+	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_QUERY;
 	offset = 1;
 	memcpy(&(buffer[offset]),
-	       (char*) &(psl->mmio->desc.num_ints_per_process),
+	       (char *)&(psl->mmio->desc.num_ints_per_process),
 	       sizeof(psl->mmio->desc.num_ints_per_process));
 	offset += sizeof(psl->mmio->desc.num_ints_per_process);
 	if (client->max_irqs == 0)
-		client->max_irqs = 2037/psl->mmio->desc.num_of_processes;
+		client->max_irqs = 2037 / psl->mmio->desc.num_of_processes;
 	memcpy(&(buffer[offset]),
-	       (char*) &(client->max_irqs),
-	       sizeof(client->max_irqs));
+	       (char *)&(client->max_irqs), sizeof(client->max_irqs));
 	if (put_bytes(client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
-		      client->context)<0) {
+		      client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	free(buffer);
 }
 
 // Increase the maximum number of interrupts
-static void _max_irqs(struct client* client, uint8_t id)
+static void _max_irqs(struct client *client, uint8_t id)
 {
-	struct psl *psl; 
+	struct psl *psl;
 	uint8_t buffer[MAX_LINE_CHARS];
 	uint8_t major, minor;
 	uint16_t value;
@@ -151,25 +150,24 @@ static void _max_irqs(struct client* client, uint8_t id)
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		return;
 	}
-	memcpy ((char*) &client->max_irqs, (char*) buffer, sizeof(uint16_t));
+	memcpy((char *)&client->max_irqs, (char *)buffer, sizeof(uint16_t));
 	client->max_irqs = le16toh(client->max_irqs);
 
 	// Limit to legal value
 	if (client->max_irqs < psl->mmio->desc.num_ints_per_process)
 		client->max_irqs = psl->mmio->desc.num_ints_per_process;
-	if (client->max_irqs > 2037/psl->mmio->desc.num_of_processes)
-		client->max_irqs = 2037/psl->mmio->desc.num_of_processes;
+	if (client->max_irqs > 2037 / psl->mmio->desc.num_of_processes)
+		client->max_irqs = 2037 / psl->mmio->desc.num_of_processes;
 
 	// Return set value
 	buffer[0] = PSLSE_MAX_INT;
 	value = htole16(client->max_irqs);
-	memcpy(&(buffer[1]), (char*) &value, 2);
+	memcpy(&(buffer[1]), (char *)&value, 2);
 	if (put_bytes(client->fd, 3, buffer, psl->dbg_fp, psl->dbg_id,
-		      client->context)<0) {
+		      client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 }
-
 
 // Handshake with client and attach to PSL
 static struct client *_client_connect(int fd, char *ip)
@@ -184,11 +182,11 @@ static struct client *_client_connect(int fd, char *ip)
 	ack[0] = PSLSE_DETACH;
 	memset(buffer, '\0', MAX_LINE_CHARS);
 	rc = get_bytes(fd, 5, buffer, timeout, 0, fp, -1, -1);
-	if ((rc < 0) || (strcmp((char *) buffer, "PSLSE"))) {
+	if ((rc < 0) || (strcmp((char *)buffer, "PSLSE"))) {
 		info_msg("Connecting application is not PSLSE client\n");
 		info_msg("Expected: \"PSLSE\" Got: \"%s\"", buffer);
 		put_bytes(fd, 1, ack, fp, -1, -1);
-		close (fd);
+		close(fd);
 		return NULL;
 	}
 	rc = get_bytes_silent(fd, 2, buffer, timeout, 0);
@@ -196,12 +194,11 @@ static struct client *_client_connect(int fd, char *ip)
 	    ((uint8_t) buffer[1] != PSLSE_VERSION_MINOR)) {
 		info_msg("Client is wrong version\n");
 		put_bytes(fd, 1, ack, fp, -1, -1);
-		close (fd);
+		close(fd);
 		return NULL;
 	}
-
 	// Initialize client struct
-	client = (struct client *) calloc(1, sizeof(struct client));
+	client = (struct client *)calloc(1, sizeof(struct client));
 	client->fd = fd;
 	client->ip = ip;
 	client->pending = 1;
@@ -212,7 +209,7 @@ static struct client *_client_connect(int fd, char *ip)
 	ack[0] = PSLSE_CONNECT;
 	map = htole16(afu_map);
 	memcpy(&(ack[1]), &map, sizeof(map));
-	if (put_bytes(fd, 3, ack, fp, -1, -1)<0) {
+	if (put_bytes(fd, 3, ack, fp, -1, -1) < 0) {
 		free(client);
 		return NULL;
 	}
@@ -224,7 +221,7 @@ static struct client *_client_connect(int fd, char *ip)
 // Associate client to PSL
 static int _client_associate(struct client *client, uint8_t id, char afu_type)
 {
-	struct psl* psl;
+	struct psl *psl;
 	struct job_event *reset;
 	uint32_t mmio_offset, mmio_size;
 	uint8_t major, minor;
@@ -237,18 +234,18 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	if (!psl) {
 		info_msg("Did not find valid PSL for afu%d.%d\n", major, minor);
 		put_bytes(client->fd, 1, &(rc[0]), fp, -1, -1);
-		close (client->fd);
+		close(client->fd);
 		return -1;
 	}
-
 	// Check AFU type is valid for connection
-	switch(afu_type) {
+	switch (afu_type) {
 	case 'd':
 		if (!(psl->mmio->desc.req_prog_model & PROG_MODEL_DEDICATED)) {
-			warn_msg("afu%d.%d is does not support dedicated mode\n"
-				 ,major ,minor);
+			warn_msg
+			    ("afu%d.%d is does not support dedicated mode\n",
+			     major, minor);
 			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-			close (client->fd);
+			close(client->fd);
 			return -1;
 		}
 		break;
@@ -258,7 +255,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			warn_msg("afu%d.%d is does not support directed mode\n",
 				 major, minor);
 			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-			close (client->fd);
+			close(client->fd);
 			return -1;
 		}
 		break;
@@ -272,10 +269,10 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	assert(psl->max_clients > 0);
 	clients = 0;
 	context = -1;
-	for(i = 0; i < psl->max_clients; i++) {
-		if (psl->client[i]!= NULL)
+	for (i = 0; i < psl->max_clients; i++) {
+		if (psl->client[i] != NULL)
 			++clients;
-		if ((context < 0) && (psl->client[i]== NULL)) {
+		if ((context < 0) && (psl->client[i] == NULL)) {
 			client->context = context = i;
 			client->state = CLIENT_VALID;
 			client->pending = 0;
@@ -285,10 +282,9 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	if (context < 0) {
 		info_msg("No room for new client on afu%d.%d\n", major, minor);
 		put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-		close (client->fd);
+		close(client->fd);
 		return -1;
 	}
-
 	// Attach to PSL
 	rc[0] = PSLSE_OPEN;
 	rc[1] = context;
@@ -298,23 +294,21 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		mmio_size *= FOUR_K;
 		mmio_offset = psl->mmio->desc.PerProcessPSA_offset;
 		mmio_offset += mmio_size * i;
-	}
-	else {
+	} else {
 		mmio_size = MMIO_FULL_RANGE;
 	}
 	client->mmio_size = mmio_size;
 	client->mmio_offset = mmio_offset;
-	client->max_irqs = PSL_MAX_IRQS/psl->mmio->desc.num_of_processes;
+	client->max_irqs = PSL_MAX_IRQS / psl->mmio->desc.num_of_processes;
 	client->type = afu_type;
 
 	// Send reset to AFU, if no other clients already connected
 	if (clients == 0) {
-	 	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
+		reset = add_job(psl->job, PSL_JOB_RESET, 0L);
 	}
-
 	// Acknowledge to client
-	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context)<0) {
-		close (client->fd);
+	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context) < 0) {
+		close(client->fd);
 		return -1;
 	}
 	debug_context_add(fp, psl->dbg_id, context);
@@ -322,9 +316,9 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	return 0;
 }
 
-static void * _client_loop(void *ptr)
+static void *_client_loop(void *ptr)
 {
-	struct client *client = (struct client*)ptr;
+	struct client *client = (struct client *)ptr;
 	uint8_t data[2];
 	int rc;
 
@@ -342,8 +336,9 @@ static void * _client_loop(void *ptr)
 		}
 		if (data[0] == PSLSE_QUERY) {
 			if (get_bytes_silent(client->fd, 1, data, timeout,
-					 &(client->abort)) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+					     &(client->abort)) < 0) {
+				client_drop(client, PSL_IDLE_CYCLES,
+					    CLIENT_NONE);
 				break;
 			}
 			_query(client, data[0]);
@@ -352,8 +347,9 @@ static void * _client_loop(void *ptr)
 		}
 		if (data[0] == PSLSE_MAX_INT) {
 			if (get_bytes(client->fd, 2, data, timeout,
-					 &(client->abort), fp, -1, -1) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+				      &(client->abort), fp, -1, -1) < 0) {
+				client_drop(client, PSL_IDLE_CYCLES,
+					    CLIENT_NONE);
 				break;
 			}
 			_max_irqs(client, data[0]);
@@ -362,11 +358,12 @@ static void * _client_loop(void *ptr)
 		}
 		if (data[0] == PSLSE_OPEN) {
 			if (get_bytes_silent(client->fd, 2, data, timeout,
-					 &(client->abort)) < 0) {
-				client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+					     &(client->abort)) < 0) {
+				client_drop(client, PSL_IDLE_CYCLES,
+					    CLIENT_NONE);
 				break;
 			}
-			_client_associate(client, data[0], (char) data[1]);
+			_client_associate(client, data[0], (char)data[1]);
 			break;
 		}
 		client->pending = 0;
@@ -397,7 +394,7 @@ static int _start_server()
 		serv_addr.sin_port = htons(port);
 		if (bind(listen_fd, (struct sockaddr *)&serv_addr,
 			 sizeof(serv_addr)) < 0) {
-			if (errno!=EADDRINUSE) {
+			if (errno != EADDRINUSE) {
 				perror("bind");
 				return -1;
 			}
@@ -410,8 +407,8 @@ static int _start_server()
 		}
 		bound = 1;
 	}
-	listen(listen_fd, 4); // FIXME: constant 4
-	hostname[MAX_LINE_CHARS-1] = '\0';
+	listen(listen_fd, 4);	// FIXME: constant 4
+	hostname[MAX_LINE_CHARS - 1] = '\0';
 	gethostname(hostname, 1023);
 	info_msg("Started PSLSE server, listening on %s:%d", hostname, port);
 
@@ -444,7 +441,6 @@ int main(int argc, char **argv)
 		perror("pthread_sigmask");
 		return -1;
 	}
-
 	// Catch SIGINT for graceful termination
 	action.sa_handler = _INThandler;
 	sigemptyset(&(action.sa_mask));
@@ -474,14 +470,12 @@ int main(int argc, char **argv)
 		error_msg("Unable to connect to any simulators");
 		return -1;
 	}
-
 	// Start server
 	if ((listen_fd = _start_server()) < 0) {
 		free(parms);
 		fclose(fp);
 		return -1;
 	}
-
 	// Watch for client connections
 	while (psl_list != NULL) {
 		// Wait for next client to connect
@@ -494,14 +488,15 @@ int main(int argc, char **argv)
 			lock_delay(&lock);
 			continue;
 		}
-		ip = (char *)malloc(INET_ADDRSTRLEN+1);
+		ip = (char *)malloc(INET_ADDRSTRLEN + 1);
 		inet_ntop(AF_INET, &(client_addr.sin_addr.s_addr), ip,
 			  INET_ADDRSTRLEN);
 		// Clean up disconnected clients
 		client_ptr = &client_list;
 		while (*client_ptr != NULL) {
 			client = *client_ptr;
-			if ((client->pending == 0) && (client->state == CLIENT_NONE)) {
+			if ((client->pending == 0)
+			    && (client->state == CLIENT_NONE)) {
 				*client_ptr = client->_next;
 				if (client->_next != NULL)
 					client->_next->_prev = client->_prev;

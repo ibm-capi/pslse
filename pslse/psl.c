@@ -38,7 +38,7 @@
 #include "../common/psl_interface.h"
 
 // Attach to AFU
-static void _attach(struct psl *psl, struct client* client)
+static void _attach(struct psl *psl, struct client *client)
 {
 	uint64_t wed;
 	uint8_t ack;
@@ -56,7 +56,7 @@ static void _attach(struct psl *psl, struct client* client)
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		goto attach_done;
 	}
-	memcpy((char*) &wed, (char*) buffer, sizeof(uint64_t));
+	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
 	wed = le64toh(wed);
 
 	// Send start to AFU
@@ -65,20 +65,20 @@ static void _attach(struct psl *psl, struct client* client)
 		ack = PSLSE_ATTACH;
 	}
 
-attach_done:
+ attach_done:
 	if (put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
-		      client->context)<0) {
+		      client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 }
 
 // Client release from AFU
-static void _free(struct psl *psl, struct client* client)
+static void _free(struct psl *psl, struct client *client)
 {
 	struct cmd_event *mem_access;
 
 	// DEBUG
-        debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
+	debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
 
 	info_msg("%s client disconnect from %s context %d", client->ip,
 		 psl->name, client->context);
@@ -87,7 +87,7 @@ static void _free(struct psl *psl, struct client* client)
 	if (client->ip)
 		free(client->ip);
 	client->ip = NULL;
-	mem_access = (struct cmd_event *) client->mem_access;
+	mem_access = (struct cmd_event *)client->mem_access;
 	if (mem_access != NULL) {
 		if (mem_access->state != MEM_DONE) {
 			mem_access->resp = PSL_RESPONSE_FAILED;
@@ -132,15 +132,14 @@ static void _handle_client(struct psl *psl, struct client *client)
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
 		client->idle_cycles = PSL_IDLE_CYCLES;
-		client->mmio_access = handle_mmio_done(psl->mmio, client); 
+		client->mmio_access = handle_mmio_done(psl->mmio, client);
 	}
-
 	// Client disconnected
-	if (client->state==CLIENT_NONE)
+	if (client->state == CLIENT_NONE)
 		return;
 
 	// Check for event from application
-	cmd = (struct cmd_event*) client->mem_access;
+	cmd = (struct cmd_event *)client->mem_access;
 	mmio = NULL;
 	if (bytes_ready(client->fd, &(client->abort))) {
 		if (get_bytes(client->fd, 1, buffer, psl->timeout,
@@ -171,12 +170,12 @@ static void _handle_client(struct psl *psl, struct client *client)
 			break;
 		case PSLSE_MMIO_WRITE64:
 			dw = 1;
-		case PSLSE_MMIO_WRITE32:	/*fall through*/
+		case PSLSE_MMIO_WRITE32:	/*fall through */
 			mmio = handle_mmio(psl->mmio, client, 0, dw);
 			break;
 		case PSLSE_MMIO_READ64:
 			dw = 1;
-		case PSLSE_MMIO_READ32:		/*fall through*/
+		case PSLSE_MMIO_READ32:	/*fall through */
 			mmio = handle_mmio(psl->mmio, client, 1, dw);
 			break;
 		default:
@@ -184,9 +183,9 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 
 		if (mmio)
-			client->mmio_access = (void*) mmio;
+			client->mmio_access = (void *)mmio;
 
-		if (client->state==CLIENT_VALID)
+		if (client->state == CLIENT_VALID)
 			client->idle_cycles = PSL_IDLE_CYCLES;
 	}
 }
@@ -194,7 +193,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 // PSL thread loop
 static void *_psl_loop(void *ptr)
 {
-	struct psl *psl = (struct psl*)ptr;
+	struct psl *psl = (struct psl *)ptr;
 	struct cmd_event *event, *temp;
 	int events, i, stopped, reset, idle;
 	uint8_t ack = PSLSE_DETACH;
@@ -233,10 +232,9 @@ static void *_psl_loop(void *ptr)
 			send_job(psl->job);
 			send_mmio(psl->mmio);
 
-			if (psl->mmio->list==NULL)
+			if (psl->mmio->list == NULL)
 				psl->idle_cycles--;
-		}
-		else {
+		} else {
 			if (!stopped)
 				info_msg("Stopping clocks to %s", psl->name);
 			stopped = 1;
@@ -248,18 +246,17 @@ static void *_psl_loop(void *ptr)
 			lock_delay(psl->lock);
 			continue;
 		}
-
 		// Check for event from application
 		reset = 0;
 		idle = 0;
-		for (i = 0; i<psl->max_clients; i++) {
+		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
 			if ((psl->client[i]->state == CLIENT_NONE) &&
 			    (psl->client[i]->idle_cycles == 0)) {
 				put_bytes(psl->client[i]->fd, 1, &ack,
-					      psl->dbg_fp, psl->dbg_id,
-					      psl->client[i]->context);
+					  psl->dbg_fp, psl->dbg_id,
+					  psl->client[i]->context);
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;
 				reset = 1;
@@ -278,21 +275,22 @@ static void *_psl_loop(void *ptr)
 		}
 
 		// Send reset to AFU
-		if (reset==1) {
+		if (reset == 1) {
 			psl->cmd->buffer_read = NULL;
 			event = psl->cmd->list;
 			while (event != NULL) {
 				if (reset) {
-					warn_msg("Client dropped context before AFU completed");
+					warn_msg
+					    ("Client dropped context before AFU completed");
 					reset = 0;
 				}
-				warn_msg ("Dumping command tag=0x%02x",
-					  event->tag);
+				warn_msg("Dumping command tag=0x%02x",
+					 event->tag);
 				if (event->data) {
-					free (event->data);
+					free(event->data);
 				}
 				if (event->parity) {
-					free (event->parity);
+					free(event->parity);
 				}
 				temp = event;
 				event = event->_next;
@@ -307,7 +305,7 @@ static void *_psl_loop(void *ptr)
 	}
 
 	// Disconnect clients
-	for (i = 0; i< psl->max_clients; i++) {
+	for (i = 0; i < psl->max_clients; i++) {
 		if ((psl->client != NULL) && (psl->client[i] != NULL)) {
 			// FIXME: Send warning to clients first?
 			info_msg("Disconnected %s context %d\n", psl->name,
@@ -354,15 +352,15 @@ static void *_psl_loop(void *ptr)
 // The return value is encode int a 16-bit value divided into 4 for each
 // possible adapter.  Then the 4 bits in each adapter represent the 4 possible
 // AFUs on an adapter.  For example: afu0.0 is 0x8000 and afu3.0 is 0x0008.
-uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
-		  int port, pthread_mutex_t *lock, FILE *dbg_fp)
+uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
+		  int port, pthread_mutex_t * lock, FILE * dbg_fp)
 {
 	struct psl *psl;
 	struct job_event *reset;
 	uint16_t location;
 
 	location = 0x8000;
-	if ((psl = (struct psl*) calloc(1, sizeof(struct psl))) == NULL) {
+	if ((psl = (struct psl *)calloc(1, sizeof(struct psl))) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl");
 		goto init_fail;
@@ -380,20 +378,20 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		warn_msg("Invalid afu minor: %c", id[5]);
 		goto init_fail;
 	}
-        psl->dbg_fp = dbg_fp;
+	psl->dbg_fp = dbg_fp;
 	psl->major = id[3] - '0';
 	psl->minor = id[5] - '0';
 	psl->dbg_id = psl->major << 4;
 	psl->dbg_id |= psl->minor;
 	location >>= (4 * psl->major);
 	location >>= psl->minor;
-	if ((psl->name = (char *) malloc(strlen(id)+1)) == NULL) {
+	if ((psl->name = (char *)malloc(strlen(id) + 1)) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl->name");
 		goto init_fail;
 	}
 	strcpy(psl->name, id);
-	if ((psl->host = (char *) malloc(strlen(host)+1)) == NULL) {
+	if ((psl->host = (char *)malloc(strlen(host) + 1)) == NULL) {
 		perror("malloc");
 		error_msg("Unable to allocation memory for psl->host");
 		goto init_fail;
@@ -405,20 +403,19 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 	psl->lock = lock;
 
 	// Connect to AFU
-	psl->afu_event = (struct AFU_EVENT *) malloc(sizeof(struct AFU_EVENT));
+	psl->afu_event = (struct AFU_EVENT *)malloc(sizeof(struct AFU_EVENT));
 	if (psl->afu_event == NULL) {
 		perror("malloc");
 		goto init_fail;
 	}
 	info_msg("Attempting to connect AFU: %s @ %s:%d", psl->name,
-		  psl->host, psl->port);
+		 psl->host, psl->port);
 	if (psl_init_afu_event(psl->afu_event, psl->host, psl->port) !=
 	    PSL_SUCCESS) {
 		warn_msg("Unable to connect AFU: %s @ %s:%d", psl->name,
-			  psl->host, psl->port);
+			 psl->host, psl->port);
 		goto init_fail;
 	}
-
 	// DEBUG
 	debug_afu_connect(psl->dbg_fp, psl->dbg_id);
 
@@ -428,40 +425,35 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		perror("job_init");
 		goto init_fail;
 	}
-
 	// Initialize mmio handler
 	if ((psl->mmio = mmio_init(psl->afu_event, psl->timeout, psl->dbg_fp,
 				   psl->dbg_id)) == NULL) {
 		perror("mmio_init");
 		goto init_fail;
 	}
-
 	// Initialize cmd handler
 	if ((psl->cmd = cmd_init(psl->afu_event, parms, psl->mmio,
-				 &(psl->state), psl->dbg_fp,psl->dbg_id))
-	     == NULL) {
+				 &(psl->state), psl->dbg_fp, psl->dbg_id))
+	    == NULL) {
 		perror("cmd_init");
 		goto init_fail;
 	}
-
 	// Set credits for AFU
 	if (psl_aux1_change(psl->afu_event, psl->cmd->credits) != PSL_SUCCESS) {
 		warn_msg("Unable to set credits");
 		goto init_fail;
 	}
-
 	// Start psl loop thread
 	if (pthread_create(&(psl->thread), NULL, _psl_loop, psl)) {
 		perror("pthread_create");
 		goto init_fail;
 	}
-
 	// Add psl to list
-	while ((*head != NULL) && ((*head)->major<psl->major)) {
+	while ((*head != NULL) && ((*head)->major < psl->major)) {
 		head = &((*head)->_next);
 	}
-	while ((*head != NULL) && ((*head)->major==psl->major) &&
-               ((*head)->minor<psl->minor)) {
+	while ((*head != NULL) && ((*head)->major == psl->major) &&
+	       ((*head)->minor < psl->minor)) {
 		head = &((*head)->_next);
 	}
 	psl->_next = *head;
@@ -471,7 +463,7 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 
 	// Send reset to AFU
 	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
-	while (psl->job->job == reset) { /*infinite loop*/
+	while (psl->job->job == reset) {	/*infinite loop */
 		lock_delay(psl->lock);
 	}
 
@@ -481,13 +473,11 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 
 	// Finish PSL configuration
 	psl->state = PSLSE_IDLE;
-	if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
-	    PROG_MODEL_DEDICATED) {
+	if ((psl->mmio->desc.req_prog_model & 0x7fffl) == PROG_MODEL_DEDICATED) {
 		// Dedicated AFU
 		psl->max_clients = 1;
 	}
-	if ((psl->mmio->desc.req_prog_model & 0x7fffl) ==
-	    PROG_MODEL_DIRECTED) {
+	if ((psl->mmio->desc.req_prog_model & 0x7fffl) == PROG_MODEL_DIRECTED) {
 		// Dedicated AFU
 		psl->max_clients = psl->mmio->desc.num_of_processes;
 	}
@@ -495,13 +485,13 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char* id, char* host,
 		error_msg("AFU programming model is invalid");
 		goto init_fail;
 	}
-	psl->client = (struct client**)calloc(psl->max_clients,
-					      sizeof(struct client*));
+	psl->client = (struct client **)calloc(psl->max_clients,
+					       sizeof(struct client *));
 	psl->cmd->client = psl->client;
 
 	return location;
 
-init_fail:
+ init_fail:
 	if (psl) {
 		if (psl->afu_event)
 			free(psl->afu_event);

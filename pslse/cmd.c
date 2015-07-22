@@ -50,14 +50,14 @@
 #define CACHELINE_MASK 0xFFFFFFFFFFFFFF80L
 
 // Initialize cmd structure for tracking AFU command activity
-struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
+struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     FILE *dbg_fp, uint8_t dbg_id)
+		     FILE * dbg_fp, uint8_t dbg_id)
 {
 	int i, j;
 	struct cmd *cmd;
 
-	cmd = (struct cmd*) calloc(1, sizeof(struct cmd));
+	cmd = (struct cmd *)calloc(1, sizeof(struct cmd));
 	if (!cmd) {
 		perror("malloc");
 		exit(-1);
@@ -70,13 +70,13 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms* parms,
 	cmd->credits = parms->credits;
 	cmd->page_entries.page_filter = ~((uint64_t) PAGE_MASK);
 	cmd->page_entries.entry_filter = 0;
-	for (i=0; i < LOG2_ENTRIES; i++) {
+	for (i = 0; i < LOG2_ENTRIES; i++) {
 		cmd->page_entries.entry_filter <<= 1;
 		cmd->page_entries.entry_filter += 1;
 	}
 	cmd->page_entries.entry_filter <<= PAGE_ADDR_BITS;
-	for (i=0; i < PAGE_ENTRIES; i++) {
-		for (j=0; j < PAGE_WAYS; j++) {
+	for (i = 0; i < PAGE_ENTRIES; i++) {
+		for (j = 0; j < PAGE_WAYS; j++) {
 			cmd->page_entries.valid[i][j] = 0;
 		}
 	}
@@ -113,7 +113,7 @@ static void _print_event(struct cmd_event *event)
 	}
 	printf(" tag=%02x", event->tag);
 	printf(" context=%d", event->context);
-	printf(" addr=0x%016"PRIx64"\n\t", event->addr);
+	printf(" addr=0x%016" PRIx64 "\n\t", event->addr);
 	printf(" size=0x%x", event->size);
 	printf(" state=");
 	switch (event->state) {
@@ -139,7 +139,7 @@ static void _print_event(struct cmd_event *event)
 		printf("IDLE");
 	}
 	printf(" Resp=0x%x Unlock=%d Restart=%d\n", event->resp,
-	       event->unlock, (event->command==PSL_COMMAND_RESTART));
+	       event->unlock, (event->command == PSL_COMMAND_RESTART));
 }
 
 // Update all pending responses at once to new state
@@ -161,11 +161,11 @@ static void _update_pending_resps(struct cmd *cmd, uint32_t resp)
 static struct client *_get_client(struct cmd *cmd, struct cmd_event *event)
 {
 	// Make sure cmd and client are still valid
-	if ((cmd == NULL) || (cmd->client==NULL))
+	if ((cmd == NULL) || (cmd->client == NULL))
 		return NULL;
 
 	// Abort if client disconnected
-	if (cmd->client[event->context]==NULL) {
+	if (cmd->client[event->context] == NULL) {
 		event->resp = PSL_RESPONSE_FAILED;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -183,10 +183,10 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	struct cmd_event **head;
 	struct cmd_event *event;
 
-	if (cmd==NULL)
+	if (cmd == NULL)
 		return;
 
-	event = (struct cmd_event*) calloc(1, sizeof(struct cmd_event));
+	event = (struct cmd_event *)calloc(1, sizeof(struct cmd_event));
 	event->context = context;
 	event->command = command;
 	event->tag = tag;
@@ -197,13 +197,13 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	event->state = state;
 	event->resp = resp;
 	event->unlock = unlock;
-	event->data = (uint8_t*)malloc(CACHELINE_BYTES);
+	event->data = (uint8_t *) malloc(CACHELINE_BYTES);
 	memset(event->data, 0xFF, CACHELINE_BYTES);
-	event->parity = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
-	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE/8);
+	event->parity = (uint8_t *) malloc(DWORDS_PER_CACHELINE / 8);
+	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE / 8);
 
 	// Test for client disconnect
-	if (_get_client(cmd, event)==NULL) {
+	if (_get_client(cmd, event) == NULL) {
 		free(event->parity);
 		free(event->data);
 		free(event);
@@ -234,7 +234,7 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	// Only track first interrupt until software reads event
 	if (!cmd->irq)
 		cmd->irq = irq;
-int_done:
+ int_done:
 	_add_cmd(cmd, handle, tag, command, abort, type, (uint64_t) irq, 0,
 		 MEM_IDLE, resp, 0);
 }
@@ -288,8 +288,8 @@ static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
 
 // Determine what type of command to add to list
 static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
-		      uint64_t addr, uint32_t size, uint32_t abort,
-		      uint32_t handle, uint32_t latency)
+		       uint64_t addr, uint32_t size, uint32_t abort,
+		       uint32_t handle, uint32_t latency)
 {
 	uint16_t irq = (uint16_t) (addr & IRQ_MASK);
 	uint8_t unlock = 0;
@@ -299,83 +299,83 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		return;
 	}
 	switch (command) {
-	// Interrupt
+		// Interrupt
 	case PSL_COMMAND_INTREQ:
 		_add_interrupt(cmd, handle, tag, command, abort, irq);
 		break;
-	// Restart
+		// Restart
 	case PSL_COMMAND_RESTART:
 		_add_other(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE);
 		break;
-	// Cacheline lock
+		// Cacheline lock
 	case PSL_COMMAND_LOCK:
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
 		_add_touch(cmd, handle, tag, command, abort, addr, 0);
 		break;
-	// Memory Reads
+		// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
-	case PSL_COMMAND_READ_CL_RES:	/*fall through*/
+	case PSL_COMMAND_READ_CL_RES:	/*fall through */
 		if (!cmd->locked)
 			cmd->res_addr = addr & CACHELINE_MASK;
-	case PSL_COMMAND_READ_CL_NA:	/*fall through*/
-	case PSL_COMMAND_READ_CL_S:	/*fall through*/
-	case PSL_COMMAND_READ_CL_M:	/*fall through*/
-	case PSL_COMMAND_READ_PNA:	/*fall through*/
-	case PSL_COMMAND_READ_LS:	/*fall through*/
-	case PSL_COMMAND_READ_LM:	/*fall through*/
-	case PSL_COMMAND_RD_GO_S:	/*fall through*/
-	case PSL_COMMAND_RD_GO_M:	/*fall through*/
-	case PSL_COMMAND_RWITM:		/*fall through*/
+	case PSL_COMMAND_READ_CL_NA:	/*fall through */
+	case PSL_COMMAND_READ_CL_S:	/*fall through */
+	case PSL_COMMAND_READ_CL_M:	/*fall through */
+	case PSL_COMMAND_READ_PNA:	/*fall through */
+	case PSL_COMMAND_READ_LS:	/*fall through */
+	case PSL_COMMAND_READ_LM:	/*fall through */
+	case PSL_COMMAND_RD_GO_S:	/*fall through */
+	case PSL_COMMAND_RD_GO_M:	/*fall through */
+	case PSL_COMMAND_RWITM:	/*fall through */
 		_add_read(cmd, handle, tag, command, abort, addr, size);
 		break;
-	// Cacheline unlock
+		// Cacheline unlock
 	case PSL_COMMAND_UNLOCK:
 		_add_unlock(cmd, handle, tag, command, abort);
 		break;
-	// Memory Writes
+		// Memory Writes
 	case PSL_COMMAND_WRITE_UNLOCK:
 		unlock = 1;
-	case PSL_COMMAND_WRITE_C:	/*fall through*/
+	case PSL_COMMAND_WRITE_C:	/*fall through */
 		if (!unlock)
 			cmd->res_addr = 0L;
-	case PSL_COMMAND_WRITE_MI:	/*fall through*/
-	case PSL_COMMAND_WRITE_MS:	/*fall through*/
-	case PSL_COMMAND_WRITE_NA:	/*fall through*/
-	case PSL_COMMAND_WRITE_INJ:	/*fall through*/
-	case PSL_COMMAND_WRITE_LM:	/*fall through*/
+	case PSL_COMMAND_WRITE_MI:	/*fall through */
+	case PSL_COMMAND_WRITE_MS:	/*fall through */
+	case PSL_COMMAND_WRITE_NA:	/*fall through */
+	case PSL_COMMAND_WRITE_INJ:	/*fall through */
+	case PSL_COMMAND_WRITE_LM:	/*fall through */
 		if (!(latency % 2) || (latency > 3))
 			error_msg("Write with invalid br_lat=%d", latency);
 		_add_write(cmd, handle, tag, command, abort, addr, size,
 			   unlock);
 		break;
-	// Treat these as memory touch to test for valid addresses
+		// Treat these as memory touch to test for valid addresses
 	case PSL_COMMAND_EVICT_I:
 		if (cmd->locked && cmd->res_addr) {
 			_add_other(cmd, handle, tag, command, abort,
 				   PSL_RESPONSE_NRES);
 			break;
 		}
-	case PSL_COMMAND_PUSH_I:	/*fall through*/
-	case PSL_COMMAND_PUSH_S:	/*fall through*/
+	case PSL_COMMAND_PUSH_I:	/*fall through */
+	case PSL_COMMAND_PUSH_S:	/*fall through */
 		if (cmd->locked) {
 			_add_other(cmd, handle, tag, command, abort,
 				   PSL_RESPONSE_NLOCK);
 			break;
 		}
 	case PSL_COMMAND_TOUCH_I:
-	case PSL_COMMAND_TOUCH_S:	/*fall through*/
-	case PSL_COMMAND_TOUCH_M:	/*fall through*/
-	case PSL_COMMAND_TOUCH_LS:	/*fall through*/
-	case PSL_COMMAND_TOUCH_LM:	/*fall through*/
-	case PSL_COMMAND_INVALIDATE:	/*fall through*/
-	case PSL_COMMAND_CLAIM_M:	/*fall through*/
-	case PSL_COMMAND_CLAIM_U:	/*fall through*/
+	case PSL_COMMAND_TOUCH_S:	/*fall through */
+	case PSL_COMMAND_TOUCH_M:	/*fall through */
+	case PSL_COMMAND_TOUCH_LS:	/*fall through */
+	case PSL_COMMAND_TOUCH_LM:	/*fall through */
+	case PSL_COMMAND_INVALIDATE:	/*fall through */
+	case PSL_COMMAND_CLAIM_M:	/*fall through */
+	case PSL_COMMAND_CLAIM_U:	/*fall through */
 		_add_touch(cmd, handle, tag, command, abort, addr, unlock);
 		break;
 	default:
@@ -388,7 +388,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 // Report parity error on some command bus
 static void _cmd_parity_error(const char *msg, uint64_t value, uint8_t parity)
 {
-	error_msg("Command %s parity error 0x%04"PRIx64",%d", msg, value,
+	error_msg("Command %s parity error 0x%04" PRIx64 ",%d", msg, value,
 		  parity);
 }
 
@@ -401,7 +401,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	uint8_t parity, fail;
 	int rc;
 
-	if (cmd==NULL)
+	if (cmd == NULL)
 		return;
 
 	// Check for command from AFU
@@ -418,7 +418,6 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 		warn_msg("Command without jrunning, tag=0x%02x", tag);
 		return;
 	}
-
 	// Check parity
 	fail = 0;
 	if (parity_enabled) {
@@ -440,14 +439,12 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 			fail = 1;
 		}
 	}
-
 	// Add failed command
 	if (fail) {
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FAILED);
 		return;
 	}
-
 	// Check credits and parse
 	if (!cmd->credits) {
 		warn_msg("AFU issued command without any credits");
@@ -459,23 +456,21 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	cmd->credits--;
 
 	// No clients connected
-	if ((cmd->client==NULL) || (cmd->client[handle] == NULL)) {
+	if ((cmd->client == NULL) || (cmd->client[handle] == NULL)) {
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FAILED);
 		return;
 	}
-
 	// Client is flushing new commands
-	if ((cmd->client[handle]->flushing==FLUSH_FLUSHING) &&
-            (command!=PSL_COMMAND_RESTART)) {
+	if ((cmd->client[handle]->flushing == FLUSH_FLUSHING) &&
+	    (command != PSL_COMMAND_RESTART)) {
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FLUSHED);
 		return;
 	}
-
 	// Check for duplicate tag
 	event = cmd->list;
-	while (event!=NULL) {
+	while (event != NULL) {
 		if (event->tag == tag) {
 			error_msg("Duplicate tag 0x%02x", tag);
 			return;
@@ -498,7 +493,7 @@ void handle_buffer_write(struct cmd *cmd)
 	uint64_t *addr;
 
 	// Make sure cmd structure is valid
-	if (cmd==NULL)
+	if (cmd == NULL)
 		return;
 
 	// Randomly select a pending read (or none)
@@ -506,7 +501,7 @@ void handle_buffer_write(struct cmd *cmd)
 	while (event != NULL) {
 		if ((event->type == CMD_READ) &&
 		    (event->state != MEM_DONE) &&
-		    ((event->client_state!=CLIENT_VALID) ||
+		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
 		}
@@ -514,7 +509,7 @@ void handle_buffer_write(struct cmd *cmd)
 	}
 
 	// Test for client disconnect
-	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
 	// After the client returns data with a call to the function
@@ -542,25 +537,24 @@ void handle_buffer_write(struct cmd *cmd)
 		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				 CACHELINE_BYTES, event->data, event->parity);
 		event->buffer_activity = 1;
-	}
-	else if (client->mem_access == NULL) {
+	} else if (client->mem_access == NULL) {
 		// Send read request to client, set client->mem_access
 		// to point to this event blocking any other memory
 		// accesses to client until data is returned by call
 		// to the _handle_mem_read() function.
 		buffer[0] = (uint8_t) PSLSE_MEMORY_READ;
 		buffer[1] = (uint8_t) event->size;
-		addr = (uint64_t*) &(buffer[2]);
+		addr = (uint64_t *) & (buffer[2]);
 		*addr = htole64(event->addr);
 		event->abort = &(client->abort);
 		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
-			      cmd->dbg_id, event->context)<0) {
+			      cmd->dbg_id, event->context) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 		event->state = MEM_REQUEST;
 		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context);
-		client->mem_access = (void *) event;
+		client->mem_access = (void *)event;
 	}
 }
 
@@ -570,7 +564,7 @@ void handle_buffer_read(struct cmd *cmd)
 	struct cmd_event *event;
 
 	// Check that cmd struct is valid buffer read is available
-	if ((cmd==NULL) || (cmd->buffer_read!=NULL))
+	if ((cmd == NULL) || (cmd->buffer_read != NULL))
 		return;
 
 	// Randomly select a pending write (or none)
@@ -578,7 +572,7 @@ void handle_buffer_read(struct cmd *cmd)
 	while (event != NULL) {
 		if ((event->type == CMD_WRITE) &&
 		    (event->state == MEM_TOUCHED) &&
-		    ((event->client_state!=CLIENT_VALID) ||
+		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
 		}
@@ -586,7 +580,7 @@ void handle_buffer_read(struct cmd *cmd)
 	}
 
 	// Test for client disconnect
-	if ((event==NULL) || (_get_client(cmd, event)==NULL))
+	if ((event == NULL) || (_get_client(cmd, event) == NULL))
 		return;
 
 	// Send buffer read request to AFU.  Setting cmd->buffer_read
@@ -615,35 +609,35 @@ void handle_touch(struct cmd *cmd)
 	// Randomly select a pending touch (or none)
 	event = cmd->list;
 	while (event != NULL) {
-		if (((event->type==CMD_TOUCH) || (event->type==CMD_WRITE)) &&
-		     (event->state==MEM_IDLE) &&
-		     ((event->client_state!=CLIENT_VALID) ||
-                      !allow_reorder(cmd->parms))) {
+		if (((event->type == CMD_TOUCH) || (event->type == CMD_WRITE))
+		    && (event->state == MEM_IDLE)
+		    && ((event->client_state != CLIENT_VALID)
+			|| !allow_reorder(cmd->parms))) {
 			break;
 		}
 		event = event->_next;
 	}
 
 	// Test for client disconnect
-	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
 	// Check that memory request can be driven to client
-	if(client->mem_access != NULL)
+	if (client->mem_access != NULL)
 		return;
 
 	// Send memory touch request to client
 	buffer[0] = (uint8_t) PSLSE_MEMORY_TOUCH;
 	buffer[1] = (uint8_t) event->size;
-	addr = (uint64_t*) &(buffer[2]);
+	addr = (uint64_t *) & (buffer[2]);
 	*addr = htole64(event->addr & CACHELINE_MASK);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
-		      event->context)<0) {
+		      event->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	event->state = MEM_TOUCH;
-	client->mem_access = (void *) event;
+	client->mem_access = (void *)event;
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 }
 
@@ -664,14 +658,14 @@ void handle_interrupt(struct cmd *cmd)
 	head = &cmd->list;
 	while (*head != NULL) {
 		if (((*head)->type == CMD_INTERRUPT) &&
-		    ((*head)->state==MEM_IDLE))
+		    ((*head)->state == MEM_IDLE))
 			break;
 		head = &((*head)->_next);
 	}
 	event = *head;
 
 	// Test for client disconnect
-	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
 	// Send interrupt to client
@@ -680,7 +674,7 @@ void handle_interrupt(struct cmd *cmd)
 	memcpy(&(buffer[1]), &irq, 2);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
-		      event->context)<0) {
+		      event->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
@@ -703,17 +697,17 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 				      event->parity);
 	if (rc == PSL_SUCCESS) {
 		if (parity_enable) {
-			parity_check = (uint8_t*)malloc(DWORDS_PER_CACHELINE/8);
+			parity_check =
+			    (uint8_t *) malloc(DWORDS_PER_CACHELINE / 8);
 			generate_cl_parity(event->data, parity_check);
-			if (strncmp((char *) event->parity,
-				    (char *) parity_check,
-				    DWORDS_PER_CACHELINE/8)) {
+			if (strncmp((char *)event->parity,
+				    (char *)parity_check,
+				    DWORDS_PER_CACHELINE / 8)) {
 				error_msg("Buffer read parity error tag=0x%02x",
 					  event->tag);
 			}
 			free(parity_check);
 		}
-
 		// Free buffer interface for another event
 		cmd->buffer_read = NULL;
 
@@ -753,7 +747,7 @@ void handle_mem_write(struct cmd *cmd)
 	event = *head;
 
 	// Test for client disconnect
-	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
 	// Check that memory request can be driven to client
@@ -766,22 +760,21 @@ void handle_mem_write(struct cmd *cmd)
 	// successful before generating a response.  The client
 	// response will cause a call to either handle_aerror() or
 	// handle_mem_return().
-	buffer = (uint8_t*)malloc(event->size+10);
+	buffer = (uint8_t *) malloc(event->size + 10);
 	offset = event->addr & ~CACHELINE_MASK;
 	buffer[0] = (uint8_t) PSLSE_MEMORY_WRITE;
 	buffer[1] = (uint8_t) event->size;
-	addr = (uint64_t*) &(buffer[2]);
+	addr = (uint64_t *) & (buffer[2]);
 	*addr = htole64(event->addr);
 	memcpy(&(buffer[10]), &(event->data[offset]), event->size);
 	event->abort = &(client->abort);
-	if (put_bytes(client->fd, event->size+10, buffer, cmd->dbg_fp,
-		      cmd->dbg_id, client->context)<0) {
+	if (put_bytes(client->fd, event->size + 10, buffer, cmd->dbg_fp,
+		      cmd->dbg_id, client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
-	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
-			 event->context);
+	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 	event->state = MEM_REQUEST;
-	client->mem_access = (void *) event;
+	client->mem_access = (void *)event;
 }
 
 // Handle data returning from client for memory read
@@ -799,13 +792,13 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 				 event->context, event->resp);
 		return;
 	}
-	memcpy((void *) &(event->data[offset]), (void *) &data, event->size);
+	memcpy((void *)&(event->data[offset]), (void *)&data, event->size);
 	generate_cl_parity(event->data, event->parity);
 	event->state = MEM_RECEIVED;
 }
 
 // Calculate page address in cached index for translation
-static void _calc_index(struct cmd *cmd, uint64_t *addr, uint64_t *index)
+static void _calc_index(struct cmd *cmd, uint64_t * addr, uint64_t * index)
 {
 	*addr &= cmd->page_entries.page_filter;
 	*index = *addr & cmd->page_entries.entry_filter;
@@ -821,21 +814,20 @@ static void _update_age(struct cmd *cmd, uint64_t addr)
 	_calc_index(cmd, &addr, &index);
 	set = age = oldest = 0;
 	empty = PAGE_WAYS;
-	for (i=0; i<PAGE_WAYS; i++) {
+	for (i = 0; i < PAGE_WAYS; i++) {
 		if (cmd->page_entries.valid[index][i] &&
-		    (cmd->page_entries.entry[index][i]!=addr)) {
+		    (cmd->page_entries.entry[index][i] != addr)) {
 			cmd->page_entries.age[index][i]++;
 			if (cmd->page_entries.age[index][i] > age) {
 				age = cmd->page_entries.age[index][i];
 				oldest = i;
 			}
 		}
-		if (!cmd->page_entries.valid[index][i] &&
-		    (empty==PAGE_WAYS)) {
+		if (!cmd->page_entries.valid[index][i] && (empty == PAGE_WAYS)) {
 			empty = i;
 		}
 		if (cmd->page_entries.valid[index][i] &&
-		    (cmd->page_entries.entry[index][i]==addr)) {
+		    (cmd->page_entries.entry[index][i] == addr)) {
 			cmd->page_entries.age[index][i] = 0;
 			set = 1;
 		}
@@ -846,13 +838,12 @@ static void _update_age(struct cmd *cmd, uint64_t addr)
 		return;
 
 	// Empty slot exists
-	if (empty<PAGE_WAYS) {
+	if (empty < PAGE_WAYS) {
 		cmd->page_entries.entry[index][empty] = addr;
 		cmd->page_entries.valid[index][empty] = 1;
 		cmd->page_entries.age[index][empty] = 0;
 		return;
 	}
-
 	// Evict oldest entry and replace with new entry
 	cmd->page_entries.entry[index][oldest] = addr;
 	cmd->page_entries.valid[index][oldest] = 1;
@@ -867,13 +858,13 @@ static int _page_cached(struct cmd *cmd, uint64_t addr)
 
 	_calc_index(cmd, &addr, &index);
 	i = hit = 0;
-	while ((i<PAGE_WAYS) && cmd->page_entries.valid[index][i] &&
-	       (cmd->page_entries.entry[index][i]!=addr)) {
+	while ((i < PAGE_WAYS) && cmd->page_entries.valid[index][i] &&
+	       (cmd->page_entries.entry[index][i] != addr)) {
 		i++;
 	}
 
 	// Hit entry
-	if ((i<PAGE_WAYS) && cmd->page_entries.valid[index][i])
+	if ((i < PAGE_WAYS) && cmd->page_entries.valid[index][i])
 		hit = 1;
 
 	return hit;
@@ -885,14 +876,14 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 	struct client *client;
 
 	// Test for client disconnect
-	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
 	// Randomly cause paged response
-	if (((event->type!=CMD_WRITE) || (event->state!=MEM_REQUEST)) &&
-	    (client->flushing==FLUSH_NONE) && !_page_cached(cmd, event->addr) &&
-	    allow_paged(cmd->parms)) {
-		if (event->type==CMD_READ)
+	if (((event->type != CMD_WRITE) || (event->state != MEM_REQUEST)) &&
+	    (client->flushing == FLUSH_NONE) && !_page_cached(cmd, event->addr)
+	    && allow_paged(cmd->parms)) {
+		if (event->type == CMD_READ)
 			_handle_mem_read(cmd, event, fd);
 		event->resp = PSL_RESPONSE_PAGED;
 		event->state = MEM_DONE;
@@ -904,13 +895,13 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 
 	_update_age(cmd, event->addr);
 
-	if (event->type==CMD_READ)
+	if (event->type == CMD_READ)
 		_handle_mem_read(cmd, event, fd);
-	else if (event->type==CMD_TOUCH)
+	else if (event->type == CMD_TOUCH)
 		event->state = MEM_DONE;
-	else if (event->state==MEM_TOUCH)	// Touch before write
+	else if (event->state == MEM_TOUCH)	// Touch before write
 		event->state = MEM_TOUCHED;
-	else					// Write after touch
+	else			// Write after touch
 		event->state = MEM_DONE;
 	debug_cmd_return(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
 }
@@ -943,8 +934,7 @@ void handle_response(struct cmd *cmd)
 			event = *head;
 			goto drive_resp;
 		}
-		if (((*head)->state == MEM_DONE) &&
-		    !allow_reorder(cmd->parms)) {
+		if (((*head)->state == MEM_DONE) && !allow_reorder(cmd->parms)) {
 			break;
 		}
 		head = &((*head)->_next);
@@ -952,20 +942,19 @@ void handle_response(struct cmd *cmd)
 
 	// Randomly decide not to drive response yet
 	event = *head;
-	if ((event == NULL) ||
-	    ((event->client_state==CLIENT_VALID) && !allow_resp(cmd->parms))) {
+	if ((event == NULL) || ((event->client_state == CLIENT_VALID)
+				&& !allow_resp(cmd->parms))) {
 		return;
 	}
 
-drive_resp:
+ drive_resp:
 	if (event == cmd->buffer_read) {
 		fatal_msg("Driving response when buffer read still active");
 		_print_event(event);
 		assert(event != cmd->buffer_read);
 	}
-
 	// Test for client disconnect
-	if ((event==NULL) || ((client = _get_client(cmd, event))==NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
 	// Send response, remove command from list and free memory
@@ -978,7 +967,7 @@ drive_resp:
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		if (event->command==PSL_COMMAND_RESTART)
+		if (event->command == PSL_COMMAND_RESTART)
 			client->flushing = FLUSH_NONE;
 		*head = event->_next;
 		free(event->data);

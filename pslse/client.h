@@ -27,7 +27,7 @@ enum client_state {
 enum flush_state {
 	FLUSH_NONE,
 	FLUSH_PAGED,
-	FLUSH_FLUSHING	
+	FLUSH_FLUSHING
 };
 
 struct client {
@@ -53,4 +53,4 @@ struct client {
 
 void client_drop(struct client *client, int cycles, enum client_state state);
 
-#endif /* _CLIENT_H_ */
+#endif				/* _CLIENT_H_ */

@@ -28,8 +28,9 @@
 #include "../common/utils.h"
 
 // Parse file to find hostname and ports for AFU simulator(s)
-uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
-			 pthread_mutex_t *lock, FILE *dbg_fp) {
+uint16_t parse_host_data(struct psl ** head, struct parms * parms,
+			 char *filename, pthread_mutex_t * lock, FILE * dbg_fp)
+{
 	FILE *fp;
 	struct psl *psl;
 	char *hostdata, *comment, *afu_id, *host, *port_str;
@@ -40,7 +41,8 @@ uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
 	*head = NULL;
 	fp = fopen(filename, "r");
 	if (!fp) {
-		hostdata = (char *) malloc(strlen(filename)+strlen("fopen:")+1);
+		hostdata =
+		    (char *)malloc(strlen(filename) + strlen("fopen:") + 1);
 		strcpy(hostdata, "fopen:");
 		strcat(hostdata, filename);
 		perror(hostdata);
@@ -49,8 +51,8 @@ uint16_t parse_host_data(struct psl **head, struct parms *parms, char *filename,
 	}
 	host = NULL;
 	port_str = NULL;
-	hostdata = (char *) malloc(MAX_LINE_CHARS);
-	while (fgets(hostdata, MAX_LINE_CHARS-1, fp)) {
+	hostdata = (char *)malloc(MAX_LINE_CHARS);
+	while (fgets(hostdata, MAX_LINE_CHARS - 1, fp)) {
 		// Parse host & port from file
 		afu_id = hostdata;
 		comment = strchr(hostdata, '#');

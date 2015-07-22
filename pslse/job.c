@@ -33,13 +33,13 @@
 
 // Initialize job tracking structure
 struct job *job_init(struct AFU_EVENT *afu_event,
-		     volatile enum pslse_state *psl_state, FILE *dbg_fp,
+		     volatile enum pslse_state *psl_state, FILE * dbg_fp,
 		     uint8_t dbg_id)
 {
 	struct job *job;
 
 	// Initialize job struct
-	job = (struct job*) calloc(1, sizeof(struct job));
+	job = (struct job *)calloc(1, sizeof(struct job));
 	if (!job)
 		return job;
 	job->afu_event = afu_event;
@@ -56,8 +56,8 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 	struct job_event *event;
 
 	// For resets, dump previous job if not reset
-	while ((code==PSL_JOB_RESET) && (job->job!=NULL) &&
-	       (job->job->code!=PSL_JOB_RESET)) {
+	while ((code == PSL_JOB_RESET) && (job->job != NULL) &&
+	       (job->job->code != PSL_JOB_RESET)) {
 		event = job->job;
 		job->job = event->_next;
 		free(event);
@@ -69,7 +69,7 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 		tail = &((*tail)->_next);
 
 	// Create new job event and add to end of list
-	event = (struct job_event *) calloc(1, sizeof(struct job_event));
+	event = (struct job_event *)calloc(1, sizeof(struct job_event));
 	if (!event)
 		return event;
 	event->code = code;
@@ -82,7 +82,6 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 
 	return event;
 }
-
 
 void send_job(struct job *job)
 {
@@ -99,15 +98,14 @@ void send_job(struct job *job)
 		free(event);
 		return;
 	}
-
 	// Test for valid job
 	event = job->job;
 	if ((event == NULL) || (event->state == PSLSE_PENDING))
 		return;
 
 	// Attempt to send job to AFU
-	if(psl_job_control(job->afu_event, event->code, event->addr) ==
-	   PSL_SUCCESS) {
+	if (psl_job_control(job->afu_event, event->code, event->addr) ==
+	    PSL_SUCCESS) {
 		event->state = PSLSE_PENDING;
 
 		// Change job state
@@ -120,7 +118,7 @@ void send_job(struct job *job)
 }
 
 // See if AFU changed any of the aux2 signals and handle accordingly
-int handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
+int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency)
 {
 	struct job_event *event;
 	uint32_t job_running;
@@ -156,7 +154,7 @@ int handle_aux2(struct job *job, uint32_t *parity, uint32_t *latency)
 				job->job = event->_next;
 				free(event);
 				if (job->job != NULL)
-					assert(job->job->_next!=job->job);
+					assert(job->job->_next != job->job);
 			}
 			if (*(job->psl_state) == PSLSE_RESET) {
 				*(job->psl_state) = PSLSE_IDLE;

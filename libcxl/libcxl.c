@@ -175,8 +175,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 
 	DPRINTF("MMIO ACK\n");
 	if (afu->mmio.type == PSLSE_MMIO_READ64) {
-		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 0, 0) < 0)
-		{
+		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 0, 0) < 0) {
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FFEEDB00FL;
@@ -186,8 +185,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		}
 	}
 	if (afu->mmio.type == PSLSE_MMIO_READ32) {
-		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, 0, 0) < 0)
-		{
+		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, 0, 0) < 0) {
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FL;
@@ -622,7 +620,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		*fd = -1;
 		goto connect_fail;
 	}
-	memcpy((char *)afu_map, (char *) buffer, 2);
+	memcpy((char *)afu_map, (char *)buffer, 2);
 	*afu_map = (long)le16toh(*afu_map);
 	return 0;
 

@@ -87,23 +87,23 @@ void info_msg(const char *format, ...);
 void ns_delay(long ns);
 
 // Delay to allow another thread to have mutex lock
-void lock_delay(pthread_mutex_t *lock);
+void lock_delay(pthread_mutex_t * lock);
 
 // Is there incoming data on socket?
 int bytes_ready(int fd, int *abort);
 
 // Allocate memory for data and get size bytes from fd, no debug
-int get_bytes_silent(int fd, int size, uint8_t *data, int timeout, int *abort);
+int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort);
 
 // Allocate memory for data and get size bytes from fd
-int get_bytes(int fd, int size, uint8_t *data, int timeout, int *abort,
-		    FILE *dbg_fp, uint8_t dbg_id, uint16_t context);
+int get_bytes(int fd, int size, uint8_t * data, int timeout, int *abort,
+	      FILE * dbg_fp, uint8_t dbg_id, uint16_t context);
 
 // Put bytes on socket and return number of bytes successfully written, no debug
-int put_bytes_silent(int fd, int size, uint8_t *data);
+int put_bytes_silent(int fd, int size, uint8_t * data);
 
 // Put bytes on socket and return number of bytes successfully written
-int put_bytes(int fd, int size, uint8_t *data, FILE *dbg_fp, uint8_t dbg_id,
+int put_bytes(int fd, int size, uint8_t * data, FILE * dbg_fp, uint8_t dbg_id,
 	      uint16_t context);
 
 // Generate parity for outbound data and checking inbound data
@@ -114,4 +114,4 @@ uint8_t generate_parity(uint64_t data, uint8_t odd);
 // 1 bit of parity for each 64 bits of data
 void generate_cl_parity(uint8_t * data, uint8_t * parity);
 
-#endif /* _UTILS_H_ */
+#endif				/* _UTILS_H_ */

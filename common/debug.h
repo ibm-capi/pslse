@@ -61,38 +61,38 @@ typedef uint8_t DBG_HEADER;
 #define DBG_PARM_REORDER_PERCENT	0x5
 #define DBG_PARM_BUFFER_PERCENT		0x6
 
-size_t debug_get_64(FILE* fp, uint64_t *value);
-size_t debug_get_32(FILE* fp, uint32_t *value);
-size_t debug_get_16(FILE* fp, uint16_t *value);
-size_t debug_get_8(FILE* fp, uint8_t *value);
-DBG_HEADER debug_get_header(FILE* fp);
+size_t debug_get_64(FILE * fp, uint64_t * value);
+size_t debug_get_32(FILE * fp, uint32_t * value);
+size_t debug_get_16(FILE * fp, uint16_t * value);
+size_t debug_get_8(FILE * fp, uint8_t * value);
+DBG_HEADER debug_get_header(FILE * fp);
 
-void debug_send_version(FILE* fp, uint8_t major, uint8_t minor);
-void debug_afu_connect(FILE* fp, uint8_t id);
-void debug_afu_drop(FILE* fp, uint8_t id);
-void debug_cmd_add(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,
+void debug_send_version(FILE * fp, uint8_t major, uint8_t minor);
+void debug_afu_connect(FILE * fp, uint8_t id);
+void debug_afu_drop(FILE * fp, uint8_t id);
+void debug_cmd_add(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
 		   uint16_t command);
-void debug_cmd_update(FILE* fp, uint8_t id, uint8_t tag, uint16_t context,
+void debug_cmd_update(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
 		      uint16_t resp);
-void debug_cmd_client(FILE* fp, uint8_t id, uint8_t tag, uint16_t context);
-void debug_cmd_return(FILE* fp, uint8_t id, uint8_t tag, uint16_t context);
-void debug_cmd_buffer_write(FILE* fp, uint8_t id, uint8_t tag);
-void debug_cmd_buffer_read(FILE* fp, uint8_t id, uint8_t tag);
-void debug_cmd_response(FILE* fp, uint8_t id, uint8_t tag);
-void debug_context_add(FILE* fp, uint8_t id, uint16_t context);
-void debug_context_remove(FILE* fp, uint8_t id, uint16_t context);
-void debug_job_add(FILE* fp, uint8_t id, uint32_t code);
-void debug_job_send(FILE* fp, uint8_t id, uint32_t code);
-void debug_job_aux2(FILE* fp, uint8_t id, uint8_t aux2);
-void debug_parm(FILE* fp, uint32_t parm, uint32_t value);
-void debug_mmio_map(FILE* fp, uint8_t id, uint16_t context);
-void debug_mmio_add(FILE* fp, uint8_t id, uint16_t context, uint8_t rnw,
+void debug_cmd_client(FILE * fp, uint8_t id, uint8_t tag, uint16_t context);
+void debug_cmd_return(FILE * fp, uint8_t id, uint8_t tag, uint16_t context);
+void debug_cmd_buffer_write(FILE * fp, uint8_t id, uint8_t tag);
+void debug_cmd_buffer_read(FILE * fp, uint8_t id, uint8_t tag);
+void debug_cmd_response(FILE * fp, uint8_t id, uint8_t tag);
+void debug_context_add(FILE * fp, uint8_t id, uint16_t context);
+void debug_context_remove(FILE * fp, uint8_t id, uint16_t context);
+void debug_job_add(FILE * fp, uint8_t id, uint32_t code);
+void debug_job_send(FILE * fp, uint8_t id, uint32_t code);
+void debug_job_aux2(FILE * fp, uint8_t id, uint8_t aux2);
+void debug_parm(FILE * fp, uint32_t parm, uint32_t value);
+void debug_mmio_map(FILE * fp, uint8_t id, uint16_t context);
+void debug_mmio_add(FILE * fp, uint8_t id, uint16_t context, uint8_t rnw,
 		    uint8_t dw, uint32_t addr);
-void debug_mmio_send(FILE* fp, uint8_t id, uint16_t context, uint8_t rnw,
+void debug_mmio_send(FILE * fp, uint8_t id, uint16_t context, uint8_t rnw,
 		     uint8_t dw, uint32_t addr);
-void debug_mmio_ack(FILE* fp, uint8_t id);
-void debug_mmio_return(FILE* fp, uint8_t id, uint16_t context);
-void debug_socket_put(FILE* fp, uint8_t id, uint16_t context, uint8_t type);
-void debug_socket_get(FILE* fp, uint8_t id, uint16_t context, uint8_t type);
+void debug_mmio_ack(FILE * fp, uint8_t id);
+void debug_mmio_return(FILE * fp, uint8_t id, uint16_t context);
+void debug_socket_put(FILE * fp, uint8_t id, uint16_t context, uint8_t type);
+void debug_socket_get(FILE * fp, uint8_t id, uint16_t context, uint8_t type);
 
-#endif /* _DEBUG_H_ */
+#endif				/* _DEBUG_H_ */

@@ -242,7 +242,7 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 		perror("socket");
 		return PSL_BAD_SOCKET;
 	}
-	if (bind(event->sockfd, (struct sockaddr *)&ssadr, sizeof(ssadr))==-1) {
+	if (bind(event->sockfd, (struct sockaddr *)&ssadr, sizeof(ssadr)) == -1) {
 		perror("bind");
 		close(event->sockfd);
 		event->sockfd = -1;
