@@ -1,0 +1,25 @@
+CODING NOTES:
+
+The code in the libcxl directory contains the simulation version fo the libcxl
+library.  The libcxl.h file is very similar to the hardware version of libcxl.h
+expect that some unsupported functions remain commented out.
+
+There are a handful of enumeration functions that allow the application to poll
+the available AFUs in the system.  Calling these functions will establish a
+socket connection with the pslse executable by parsing pslse_server.dat for
+the hostname and socket first.  These functions do not create child thread and
+the afu handle returned from them is not useable for anything other than
+further enumeration function calls and open functions calls.  When calling
+cxl_afu_open_h with an enumered handle it returns a different useable handle.
+
+When one of the cxl_afu_open_*() functions is called a child thread is created
+that spins on _psl_loop().  This thread will then handle any memory accesses
+that come from the AFU without interfering with the main application code.
+This thread is also used to handle any MMIO activity that the application code
+generates.  Calls to the cxl_mmio-*() functions will set up the struct mmio_req
+inside the afu handle, then lastly set the state value in the same sturct.  At
+that point the code appears to get stuck in an infinite loop waiting for the
+state to change before completing the rest of the function.  What actually
+happens in that the child thread will handle the MMIO request and change the
+state value when it is complete.  Finally calling cxl_afu_free() will terminate
+the socket connect, shutdown the child thread and free the afu handle.

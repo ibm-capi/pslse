@@ -14,38 +14,23 @@ using this abstraction layer then the same code can be compiled with the
 alternate version of libcxl.c and libcxl.h found on this repository for
 co-simulation of the AFU on most industry standard Verilog simulators.
 
-It should be noted that only a handful of functions are currently supported in
-both environments.  This list should grow but in programming of applications
-should focus only on using the currently supported functions.
 
-Functions currenty supported in both "libcxl" and "pslse":
-- struct cxl_afu_h * cxl_afu_open_dev (char *path);
-- int cxl_afu_attach (struct cxl_afu_h *afu, __u64 wed);
-- void cxl_afu_free (struct cxl_afu_h *afu);
-- bool cxl_pending_event (struct cxl_afu *afu);
-- int cxl_read_event (struct cxl_afu_h *afu, struct cxl_event *event);
-- int cxl_mmio_map (struct cxl_afu_h *afu, __u32 flags);
-- int cxl_mmio_unmap (struct cxl_afu_h *afu);
-- void cxl_mmio_write64 (struct cxl_afu_h *afu, uint64_t offset, uint64_t data);
-- uint64_t cxl_mmio_read64 (struct cxl_afu_h *afu, uint64_t offset);
-- void cxl_mmio_write32 (struct cxl_afu_h *afu, uint64_t offset, uint632t data);
-- uint32_t cxl_mmio_read32 (struct cxl_afu_h *afu, uint64_t offset);
 
-The directories contain the following:
-
-afu_driver/src:		Contains the code that will be needed by the Verilog
-			simulator.
+*** DIRECTORIES ***
 
 afu_driver/verilog:	Contains the file top.v which is a top level wrapper
 			that will instantiate your AFU Verilog code.
 
+afu_driver/src:		Contains the code that will be needed by the Verilog
+			simulator.
+
 common:			Contains code used in multiple places.
 
-debug:			Contains code for parsing debug.log created by pslse.
-
-libcxl:			Contains the replacement libcxl.c file in addition to a
-			pslse_server.dat file.
+libcxl:			Contains the PSLSE version of the libcxl.c file in
+			addition to a sample pslse_server.dat file.
 
 pslse:			Contains the code for the PSLSE server.
 
-sample_app:		Contains shell code a sample application.
+debug:			Contains code for parsing debug.log created by pslse.
+
+sample_app:		Contains shell code for a sample application.

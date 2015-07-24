@@ -1,0 +1,47 @@
+CODING NOTES:
+
+The code in the pslse direcotry builds the "pslse" executable.  When executed,
+pslse will read the file shim_host.dat to look for AFU servers (simulators)
+that it can connect to.  As long as at least 1 valid simulator running the
+"afu_driver" code is found then "pslse" will stay running awaiting connections
+from libcxl based applications.  During initialization the main thread will
+start child threads that spin on _psl_loop (psl.c) for each AFU that is found.
+After this initialization the main thread does nothing but sit and wait for
+client connections.  The child psl_loop threads handle all communication
+between the client applications and AFU.
+
+A libcxl based application can connect to pslse in two ways.  First if the
+application is using the libcxl enumeration functions to walk through the
+available AFUs in the emulated system then it won't be associated with a
+particular AFU yet and needs to be able to attach to any of the AFUs at some
+point.  To handle this pslse will spawn a child thread that loops on the
+_client_loop (pslse.c).  While in this loop the client can send network
+packets to query the system for various details about all the AFUs in the
+emulated system.  This thread will remain as long as the socket connect is
+alive and the client application has not called open for this afu handle.
+When one of the libcxl open() functions is called then the socket will be
+associated with the appropriate psl_loop and this _client_loop thread will
+terminate for that socket connection.  The second way that a libcxl based
+application can connect to pslse is by calling one of the libcxl open()
+functions directly without doing enumeration first.  In this case the socket
+will be associated with the appropriate psl_loop immediately without spawning
+a _client_loop child thread first.
+
+The psl_loop thread will watch for any socket packets from the AFU as well as
+from any connected client applications.  When an event is receive from either
+AFU or client application, typically the information will be stored as an entry
+in a linked list as either a command, mmio or job.  On each iteration of the
+loop the next required action of that linked list entry may or may not be acted
+upon.  These entries will track state to remember where they are in the
+sequence.  Once the final state activity has occurred then that entry will be
+removed from the linked list.
+
+It is worth noting that the purpose of mutli-threaded coding is not for
+performance.  This code will spend most of it's time in sleep waiting for
+something to happen on one of the socket connections.  Given that fact, in
+order to make things easier there is only 1 mutex lock used across all the
+code.  This means that almost all the time only 1 thread is actually making
+forward progress in it's loop.  So most of the time the code is really
+operating in a single threaded fashion.  The function lock_delay() is used
+across the code as a single line way to release the lock, delay for some time
+to allow another thread to gain the lock, then request the lock back.
