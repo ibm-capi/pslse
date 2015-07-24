@@ -18,19 +18,19 @@ static char *_afu_name(uint8_t id)
 
 	major = id >> 4;
 	minor = id & 0xf;
-	name = (char*) malloc(7);
+	name = (char *)malloc(7);
 	sprintf(name, "afu%d.%d", major, minor);
 	return name;
 }
 
-static int _report_version(FILE *fp)
+static int _report_version(FILE * fp)
 {
 	uint8_t major;
 	uint8_t minor;
 
-	if (debug_get_8(fp, &major)<1)
+	if (debug_get_8(fp, &major) < 1)
 		return -1;
-	if (debug_get_8(fp, &minor)<1)
+	if (debug_get_8(fp, &minor) < 1)
 		return -1;
 
 	printf("PSLSE_VERSION=%d.%03d\n", major, minor);
@@ -38,14 +38,14 @@ static int _report_version(FILE *fp)
 	return 0;
 }
 
-static int _parse_parm(FILE *fp)
+static int _parse_parm(FILE * fp)
 {
 	uint32_t parm;
 	uint32_t value;
 
-	if (debug_get_32(fp, &parm)<1)
+	if (debug_get_32(fp, &parm) < 1)
 		return -1;
-	if (debug_get_32(fp, &value)<1)
+	if (debug_get_32(fp, &value) < 1)
 		return -1;
 
 	switch (parm) {
@@ -74,16 +74,16 @@ static int _parse_parm(FILE *fp)
 	return 0;
 }
 
-static int _parse_afu(FILE *fp, DBG_HEADER header)
+static int _parse_afu(FILE * fp, DBG_HEADER header)
 {
 	uint8_t id;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
 	name = _afu_name(id);
 
-	switch(header) {
+	switch (header) {
 	case DBG_HEADER_AFU_CONNECT:
 		printf("%s:Connect\n", name);
 		break;
@@ -98,19 +98,19 @@ static int _parse_afu(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_context(FILE *fp, DBG_HEADER header)
+static int _parse_context(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context;
 	uint8_t id;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
 	name = _afu_name(id);
 
-	switch(header) {
+	switch (header) {
 	case DBG_HEADER_CONTEXT_ADD:
 		printf("%s:CLIENT: Added context %d\n", name, context);
 		break;
@@ -125,15 +125,15 @@ static int _parse_context(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_job(FILE *fp, DBG_HEADER header)
+static int _parse_job(FILE * fp, DBG_HEADER header)
 {
 	uint32_t code;
 	uint8_t id;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_32(fp, &code)<1)
+	if (debug_get_32(fp, &code) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -164,15 +164,15 @@ static int _parse_job(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_map(FILE *fp, DBG_HEADER header)
+static int _parse_map(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context;
 	uint8_t id;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -181,36 +181,35 @@ static int _parse_map(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_mmio(FILE *fp, DBG_HEADER header)
+static int _parse_mmio(FILE * fp, DBG_HEADER header)
 {
 	uint32_t addr;
 	uint16_t context;
 	uint8_t id, rnw, dw;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &rnw)<1)
+	if (debug_get_8(fp, &rnw) < 1)
 		return -1;
-	if (debug_get_8(fp, &dw)<1)
+	if (debug_get_8(fp, &dw) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
-	if (debug_get_32(fp, &addr)<1)
+	if (debug_get_32(fp, &addr) < 1)
 		return -1;
 	name = _afu_name(id);
 
 	printf("%s", name);
-	if (header==DBG_HEADER_MMIO_ADD) {
-		if (((int16_t) context)!=-1)
+	if (header == DBG_HEADER_MMIO_ADD) {
+		if (((int16_t) context) != -1)
 			printf(",%d", context);
 		printf(":MMIO: Added ");
-		if (((int16_t) context)==-1)
+		if (((int16_t) context) == -1)
 			printf("Descriptor ");
-	}
-	else {
+	} else {
 		printf(":MMIO: Sent ");
-		if (((int16_t) context)==1)
+		if (((int16_t) context) == 1)
 			printf("Descriptor ");
 	}
 	if (rnw)
@@ -227,12 +226,12 @@ static int _parse_mmio(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_mmio_ack(FILE *fp, DBG_HEADER header)
+static int _parse_mmio_ack(FILE * fp, DBG_HEADER header)
 {
 	uint8_t id;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -241,15 +240,15 @@ static int _parse_mmio_ack(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_mmio_return(FILE *fp, DBG_HEADER header)
+static int _parse_mmio_return(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context;
 	uint8_t id;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -258,19 +257,19 @@ static int _parse_mmio_return(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_cmd_add(FILE *fp, DBG_HEADER header)
+static int _parse_cmd_add(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context, command;
 	uint8_t id, tag;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &tag)<1)
+	if (debug_get_8(fp, &tag) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
-	if (debug_get_16(fp, &command)<1)
+	if (debug_get_16(fp, &command) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -281,19 +280,19 @@ static int _parse_cmd_add(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_cmd_update(FILE *fp, DBG_HEADER header)
+static int _parse_cmd_update(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context, resp;
 	uint8_t id, tag;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &tag)<1)
+	if (debug_get_8(fp, &tag) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
-	if (debug_get_16(fp, &resp)<1)
+	if (debug_get_16(fp, &resp) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -304,22 +303,22 @@ static int _parse_cmd_update(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_cmd_client(FILE *fp, DBG_HEADER header)
+static int _parse_cmd_client(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context;
 	uint8_t id, tag;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &tag)<1)
+	if (debug_get_8(fp, &tag) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
 	name = _afu_name(id);
 
 	printf("%s,%d:CMD: Client ", name, context);
-	if (header==DBG_HEADER_CMD_CLIENT_REQ)
+	if (header == DBG_HEADER_CMD_CLIENT_REQ)
 		printf("Request");
 	else
 		printf("Return");
@@ -329,36 +328,36 @@ static int _parse_cmd_client(FILE *fp, DBG_HEADER header)
 	return 0;
 }
 
-static int _parse_cmd_buffer(FILE *fp, DBG_HEADER header)
+static int _parse_cmd_buffer(FILE * fp, DBG_HEADER header)
 {
 	uint8_t id, tag;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &tag)<1)
+	if (debug_get_8(fp, &tag) < 1)
 		return -1;
 	name = _afu_name(id);
 
 	printf("%s:CMD: Buffer ", name);
-	if (header==DBG_HEADER_CMD_BUFFER_WRITE)
+	if (header == DBG_HEADER_CMD_BUFFER_WRITE)
 		printf("Write");
 	else
 		printf("Read");
-        printf(" request tag=0x%02x\n", tag);
+	printf(" request tag=0x%02x\n", tag);
 	free(name);
 
 	return 0;
 }
 
-static int _parse_cmd_response(FILE *fp, DBG_HEADER header)
+static int _parse_cmd_response(FILE * fp, DBG_HEADER header)
 {
 	uint8_t id, tag;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &tag)<1)
+	if (debug_get_8(fp, &tag) < 1)
 		return -1;
 	name = _afu_name(id);
 
@@ -375,7 +374,7 @@ static void _aux2_banner(int *printed, char *name)
 	*printed = 1;
 }
 
-static int _parse_aux(FILE *fp, DBG_HEADER header)
+static int _parse_aux(FILE * fp, DBG_HEADER header)
 {
 	uint64_t error = 0;
 	uint8_t aux2;
@@ -383,13 +382,13 @@ static int _parse_aux(FILE *fp, DBG_HEADER header)
 	char *name;
 	int banner = 0;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &aux2)<1)
+	if (debug_get_8(fp, &aux2) < 1)
 		return -1;
 	name = _afu_name(id);
-	if ((aux2 && DBG_AUX2_DONE)==DBG_AUX2_DONE) {
-		if (debug_get_64(fp, &error)<1)
+	if ((aux2 && DBG_AUX2_DONE) == DBG_AUX2_DONE) {
+		if (debug_get_64(fp, &error) < 1)
 			return -1;
 	}
 
@@ -398,77 +397,75 @@ static int _parse_aux(FILE *fp, DBG_HEADER header)
 		_aux2_banner(&banner, name);
 		printf(" brlat=%d", latency);
 	}
-	if ((aux2 & DBG_AUX2_PAREN)==DBG_AUX2_PAREN) {
+	if ((aux2 & DBG_AUX2_PAREN) == DBG_AUX2_PAREN) {
 		if (!parity) {
 			_aux2_banner(&banner, name);
 			printf(" parity=1");
 		}
 		parity = 1;
-	}
-	else {
+	} else {
 		if (parity) {
 			_aux2_banner(&banner, name);
 			printf(" parity=0");
 		}
 		parity = 0;
 	}
-	if ((aux2 & DBG_AUX2_TBREQ)==DBG_AUX2_TBREQ) {
+	if ((aux2 & DBG_AUX2_TBREQ) == DBG_AUX2_TBREQ) {
 		_aux2_banner(&banner, name);
 		printf(" tbreq");
 	}
-	if ((aux2 & DBG_AUX2_LLCACK)==DBG_AUX2_LLCACK) {
+	if ((aux2 & DBG_AUX2_LLCACK) == DBG_AUX2_LLCACK) {
 		_aux2_banner(&banner, name);
 		printf(" lcack");
 	}
-	if ((aux2 & DBG_AUX2_RUNNING)==DBG_AUX2_RUNNING) {
+	if ((aux2 & DBG_AUX2_RUNNING) == DBG_AUX2_RUNNING) {
 		if (!running) {
 			_aux2_banner(&banner, name);
 			printf(" jrunning=1");
 		}
 		running = 1;
-	}
-	else {
+	} else {
 		if (running) {
 			_aux2_banner(&banner, name);
 			printf(" jrunning=0");
 		}
 		running = 0;
 	}
-	if ((aux2 & DBG_AUX2_DONE)==DBG_AUX2_DONE) {
+	if ((aux2 & DBG_AUX2_DONE) == DBG_AUX2_DONE) {
 		_aux2_banner(&banner, name);
 		printf(" jdone");
 	}
 	if (error) {
 		_aux2_banner(&banner, name);
-		printf(" jerror=%016"PRIx64, error);
+		printf(" jerror=%016" PRIx64, error);
 	}
 	if (banner)
 		printf("\n");
 	free(name);
-	
+
 	return 0;
 }
 
-static int _parse_socket(FILE *fp, DBG_HEADER header, int silent)
+static int _parse_socket(FILE * fp, DBG_HEADER header, int silent)
 {
 	uint8_t id, type;
 	uint16_t context;
 	char *name;
 
-	if (debug_get_8(fp, &id)<1)
+	if (debug_get_8(fp, &id) < 1)
 		return -1;
-	if (debug_get_8(fp, &type)<1)
+	if (debug_get_8(fp, &type) < 1)
 		return -1;
-	if (debug_get_16(fp, &context)<1)
+	if (debug_get_16(fp, &context) < 1)
 		return -1;
 
 	if (silent)
 		return 0;
 
-	if (id != (uint8_t)-1) {
+	if (id != (uint8_t) - 1) {
 		name = _afu_name(id);
 		printf("%s", name);
-		if (context != (uint16_t)-1)
+		if (context != (uint16_t) - 1)
 			printf(",%d", context);
 		printf(":");
 		free(name);
@@ -540,7 +537,7 @@ static int _parse_socket(FILE *fp, DBG_HEADER header, int silent)
 	case PSLSE_INTERRUPT:
 		printf("INTERRRUPT");
 		break;
-	default :
+	default:
 		printf("Unknown:0x%02x", type);
 	}
 	printf("\n");
@@ -553,13 +550,12 @@ int main(int argc, char **argv)
 	DBG_HEADER header;
 	int silent;
 
-	if((fp = fopen("debug.log", "r"))==NULL) {
+	if ((fp = fopen("debug.log", "r")) == NULL) {
 		perror("fopen:debug.log");
 		return -1;
 	}
 
-	while ((header = debug_get_header(fp))!=(DBG_HEADER)-1)
-	{
+	while ((header = debug_get_header(fp)) != (DBG_HEADER) - 1) {
 		silent = 0;
 		switch (header) {
 		case DBG_HEADER_VERSION:
