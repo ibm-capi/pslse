@@ -1,62 +1,69 @@
+/*
+ * Copyright 2015 International Business Machines
+ */
+
 #include <inttypes.h>
 #include <libcxl.h>
 #include <stdio.h>
 
-#define DEVICE "/dev/cxl/afu0.0d"
 #define CACHELINE_BYTES 128
 
 struct wed {
-  uint16_t endian_test;		// Always = 1
-  uint16_t volatile status;	// Status bits
-  uint32_t reserved00;
-  // Reserve entire 128 byte cacheline for WED
-  uint64_t reserved01;
-  uint64_t reserved02;
-  uint64_t reserved03;
-  uint64_t reserved04;
-  uint64_t reserved05;
-  uint64_t reserved06;
-  uint64_t reserved07;
-  uint64_t reserved08;
-  uint64_t reserved09;
-  uint64_t reserved10;
-  uint64_t reserved11;
-  uint64_t reserved12;
-  uint64_t reserved13;
-  uint64_t reserved14;
-  uint64_t reserved15;
+	uint16_t endian_test;	// Always = 1
+	uint16_t volatile status;	// Status bits
+	uint32_t reserved00;
+	// Reserve entire 128 byte cacheline for WED
+	uint64_t reserved01;
+	uint64_t reserved02;
+	uint64_t reserved03;
+	uint64_t reserved04;
+	uint64_t reserved05;
+	uint64_t reserved06;
+	uint64_t reserved07;
+	uint64_t reserved08;
+	uint64_t reserved09;
+	uint64_t reserved10;
+	uint64_t reserved11;
+	uint64_t reserved12;
+	uint64_t reserved13;
+	uint64_t reserved14;
+	uint64_t reserved15;
 };
 
-int main (int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 
-  // Open AFU
-  struct cxl_afu_h *afu_h;
-  afu_h = cxl_afu_open_dev (DEVICE);
-  if (!afu_h) {
-    perror("cxl_afu_open_dev:"DEVICE);
-    return -1;
-  }
+	// Open first AFU found
+	struct cxl_afu_h *afu_h;
+	afu_h = cxl_afu_next(NULL);
+	if (!afu_h) {
+		fprintf(stderr, "\nNo AFU found!\n\n");
+		return -1;
+	}
+	afu_h = cxl_afu_open_h(afu_h, CXL_VIEW_DEDICATED);
+	if (!afu_h) {
+		perror("cxl_afu_open_h");
+		return -1;
+	}
+	// Prepare WED
+	struct wed *wed = NULL;
+	if (posix_memalign((void **)&wed, CACHELINE_BYTES, sizeof(struct wed))) {
+		perror("posix_memalign");
+		return -1;
+	}
+	printf("Allocated WED memory @ 0x%016" PRIx64 "\n", (uint64_t) wed);
+	wed->endian_test = 1;
+	wed->status = 0;
 
-  // Prepare WED
-  struct wed *wed = NULL;
-  if (posix_memalign ((void **) &wed, CACHELINE_BYTES, sizeof (struct wed))) {
-    perror ("posix_memalign");
-    return -1;
-  }
-  printf("Allocated WED memory @ 0x%016"PRIx64"\n", (uint64_t) wed);
-  wed->endian_test = 1;
-  wed->status = 0;
+	// Start AFU
+	cxl_afu_attach(afu_h, (uint64_t) wed);
 
-  // Start AFU
-  cxl_afu_attach (afu_h, (uint64_t) wed);
-
-  // Map AFU MMIO registers, if needed
-  printf ("Mapping AFU registers...\n");
-  if ((cxl_mmio_map (afu_h, CXL_MMIO_BIG_ENDIAN)) < 0) {
-    perror("cxl_mmio_map:"DEVICE);
-    return -1;
-  }
+	// Map AFU MMIO registers, if needed
+	printf("Mapping AFU registers...\n");
+	if ((cxl_mmio_map(afu_h, CXL_MMIO_BIG_ENDIAN)) < 0) {
+		perror("cxl_mmio_map");
+		return -1;
+	}
 
   /**************************************************************************
 
@@ -75,11 +82,11 @@ int main (int argc, char *argv[])
 
   **************************************************************************/
 
-  // Unmap AFU MMIO registers, if previously mapped
-  cxl_mmio_unmap (afu_h);
+	// Unmap AFU MMIO registers, if previously mapped
+	cxl_mmio_unmap(afu_h);
 
-  // Free AFU
-  cxl_afu_free (afu_h);
+	// Free AFU
+	cxl_afu_free(afu_h);
 
-  return 0;
+	return 0;
 }

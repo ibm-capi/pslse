@@ -1,28 +1,26 @@
 srcdir = $(PWD)
+COMMON_DIR=../common
 include Makefile.vars
 include Makefile.rules
 
-OBJS = libcxl.o psl_interface.o
-CFLAGS += -Iinclude -fPIC
+OBJS = debug.o libcxl.o psl_interface.o utils.o
 
-all: include/misc/cxl.h libcxl.so libcxl.a
+all: $(COMMON_DIR)/misc/cxl.h libcxl.so libcxl.a
 
 CHECK_HEADER = $(shell echo \\\#include\ $(1) | $(CC) $(CFLAGS) -E - > /dev/null 2>&1 && echo y || echo n)
 
-include/misc/cxl.h:
+$(COMMON_DIR)/misc/cxl.h:
 ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),n)
-	$(call Q,WGET include/misc/cxl.h, wget -P include/misc -q http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/include/uapi/misc/cxl.h)
+	$(call Q,WGET $(COMMON_DIR)/misc/cxl.h, wget -P $(COMMON_DIR)/misc -q http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/include/uapi/misc/cxl.h)
 endif
 
-libcxl.so: libcxl.o psl_interface.o
-	$(call Q,CC, $(CC) $(CFLAGS) -shared libcxl.o psl_interface.o -o libcxl.so, libcxl.so) -Wl,--version-script symver.map
+libcxl.so: $(OBJS)
+	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o $@, $@) -Wl,--version-script symver.map
 
-libcxl.a: libcxl.o psl_interface.o
-	$(call Q,AR, ar rcs libcxl.a libcxl.o psl_interface.o, libcxl.a)
-
-libcxl.o psl_interface.o:
+libcxl.a: $(OBJS)
+	$(call Q,AR, $(AR) rcs $@ $^, $@)
 
 clean:
-	rm -f *.o *.d libcxl.so libcxl.a include/misc/cxl.h
+	rm -f *.[od] $(COMMON_DIR)/*.[od] gmon.out libcxl.so libcxl.a $(COMMON_DIR)/misc/cxl.h
 
 .PHONY: clean all

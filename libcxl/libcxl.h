@@ -42,13 +42,11 @@ struct cxl_afu_h;
  * cxl_adapter_next() will implicitly free used buffers if it is called on the
  * last adapter, or cxl_adapter_free() can be called explicitly.
  */
-/* NOT YET SUPPORTED FOR SIMULATION
-struct cxl_adapter_h * cxl_adapter_next(struct cxl_adapter_h *adapter);
-char * cxl_adapter_dev_name(struct cxl_adapter_h *adapter);
+struct cxl_adapter_h *cxl_adapter_next(struct cxl_adapter_h *adapter);
+char *cxl_adapter_dev_name(struct cxl_adapter_h *adapter);
 void cxl_adapter_free(struct cxl_adapter_h *adapter);
 #define cxl_for_each_adapter(adapter) \
 	for (adapter = cxl_adapter_next(NULL); adapter; adapter = cxl_adapter_next(adapter))
-   NOT YET SUPPORTED FOR SIMULATION */
 
 /*
  * AFU Enumeration
@@ -65,15 +63,14 @@ void cxl_adapter_free(struct cxl_adapter_h *adapter);
  * cxl_[adapter]_afu_next() will implicitly free used buffers if it is called
  * on the last AFU, or cxl_afu_free() can be called explicitly.
  */
-/* NOT YET SUPPORTED FOR SIMULATION
-struct cxl_afu_h * cxl_adapter_afu_next(struct cxl_adapter_h *adapter, struct cxl_afu_h *afu);
-struct cxl_afu_h * cxl_afu_next(struct cxl_afu_h *afu);
-char * cxl_afu_dev_name(struct cxl_afu_h *afu);
+struct cxl_afu_h *cxl_adapter_afu_next(struct cxl_adapter_h *adapter,
+				       struct cxl_afu_h *afu);
+struct cxl_afu_h *cxl_afu_next(struct cxl_afu_h *afu);
+char *cxl_afu_dev_name(struct cxl_afu_h *afu);
 #define cxl_for_each_adapter_afu(adapter, afu) \
-	for (afu = cxl_adapter_afu_next(adapter, NULL); afu; afu = cxl_adapter_afu_next(NULL, afu))
+	for (afu = cxl_adapter_afu_next(adapter, NULL); afu; afu = cxl_adapter_afu_next(adapter, afu))
 #define cxl_for_each_afu(afu) \
 	for (afu = cxl_afu_next(NULL); afu; afu = cxl_afu_next(afu))
-   NOT YET SUPPORTED FOR SIMULATION */
 
 enum cxl_views {
 	CXL_VIEW_DEDICATED = 0,
@@ -87,7 +84,7 @@ enum cxl_views {
  * closed by cxl_afu_free() regardless of how it was opened.
  */
 struct cxl_afu_h *cxl_afu_open_dev(char *path);
-//struct cxl_afu_h * cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
+struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view);
 //struct cxl_afu_h * cxl_afu_fd_to_h(int fd);
 void cxl_afu_free(struct cxl_afu_h *afu);
 int cxl_afu_opened(struct cxl_afu_h *afu);
@@ -95,8 +92,8 @@ int cxl_afu_opened(struct cxl_afu_h *afu);
 /*
  * Attach AFU context to this process
  */
-//int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-//                      __u64 amr);
+int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
+			__u64 amr);
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
 
 /*
@@ -108,7 +105,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
  * Returns the file descriptor for the open AFU to use with event loops.
  * Returns -1 if the AFU is not open.
  */
-//int cxl_afu_fd(struct cxl_afu_h *afu);
+int cxl_afu_fd(struct cxl_afu_h *afu);
 
 /*
  * sysfs helpers
@@ -142,11 +139,11 @@ enum cxl_image {
  * Get/set attribute values.
  * Return 0 on success, -1 on error.
  */
-//int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
+int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
+int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
+int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
-//int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
+int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_mode(struct cxl_afu_h *afu, long value);
@@ -167,8 +164,8 @@ enum cxl_image {
  */
 int cxl_event_pending(struct cxl_afu_h *afu);
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
-/*int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
-			    __u32 type, __u16 irq);*/
+int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
+			    __u32 type, __u16 irq);
 
 /*
  * fprint wrappers to print out CXL events - useful for debugging.

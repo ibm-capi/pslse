@@ -6,4 +6,4 @@
 # Line format is as follows:
 # AFU_DEVICE,HOSTNAME:PORT
 #
-afu0.0d,localhost:32768
+afu0.0,localhost:32768

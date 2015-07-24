@@ -38,7 +38,7 @@ static uint32_t genoddParitybitperbytes(uint64_t data)
 	// Count off least significant asserted bit
 	while (data) {
 		oddparity = 1 - oddparity;	// 0->1 or 1->0
-		data &= data - 1;	// Remove lsb
+		data &= data - 1;	// Remove lsb that is set to 1
 	}
 
 	return oddparity;
@@ -227,7 +227,7 @@ int psl_close_afu_event(struct AFU_EVENT *event)
 
 int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 {
-	int cs = 0;
+	int cs = -1;
 	psl_event_reset(event);
 	event->room = 64;
 	event->rbp = 0;
@@ -239,10 +239,13 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 	ssadr.sin_port = htons(port);
 	event->sockfd = socket(PF_INET, SOCK_STREAM, 0);
 	if (event->sockfd < 0) {
+		perror("socket");
 		return PSL_BAD_SOCKET;
 	}
 	if (bind(event->sockfd, (struct sockaddr *)&ssadr, sizeof(ssadr)) == -1) {
+		perror("bind");
 		close(event->sockfd);
+		event->sockfd = -1;
 		return PSL_BAD_SOCKET;
 	}
 	char hostname[1024];
@@ -252,14 +255,21 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 	       port);
 	fflush(stdout);
 	if (listen(event->sockfd, 10) == -1) {
+		perror("listen");
 		close(event->sockfd);
+		event->sockfd = -1;
 		return PSL_BAD_SOCKET;
 	}
-	cs = accept(event->sockfd, (struct sockaddr *)&csadr, &csalen);
+	while (cs < 0) {
+		cs = accept(event->sockfd, (struct sockaddr *)&csadr, &csalen);
+		if ((cs < 0) && (errno != EINTR)) {
+			perror("accept");
+			close(event->sockfd);
+			event->sockfd = -1;
+			return PSL_BAD_SOCKET;
+		}
+	}
 	close(event->sockfd);
-	if (cs < 0) {
-		return PSL_BAD_SOCKET;
-	}
 	event->sockfd = cs;
 	fcntl(event->sockfd, F_SETFL, O_NONBLOCK);
 	char clientname[1024];
@@ -632,8 +642,9 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 }
 
 /* Call this to send an event to the PSL model */
+/* UPDATE: Now static as it's called in psl_get_psl_events() */
 
-int psl_signal_psl_model(struct AFU_EVENT *event)
+static int psl_signal_psl_model(struct AFU_EVENT *event)
 {
 	int i, bc, bl;
 	int bp = 1;
@@ -729,7 +740,7 @@ int psl_signal_psl_model(struct AFU_EVENT *event)
 int psl_get_afu_events(struct AFU_EVENT *event)
 {
 	int bc = 0;
-	int rbc = 1;
+	uint32_t rbc = 1;
 	fd_set watchset;	/* fds to read from */
 	/* initialize watchset */
 	FD_ZERO(&watchset);

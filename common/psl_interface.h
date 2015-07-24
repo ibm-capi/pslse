@@ -120,10 +120,6 @@ int psl_get_command(struct AFU_EVENT *event,
 
 int psl_signal_afu_model(struct AFU_EVENT *event);
 
-/* Call this periodically to send events and clocking synchronization to PSL */
-
-int psl_signal_psl_model(struct AFU_EVENT *event);
-
 /* This function checks the socket connection for data from the external AFU
  * simulator. It needs to be called periodically to poll the socket connection.
  * It will update the AFU_EVENT structure.  It returns a 1 if there are new

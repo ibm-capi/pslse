@@ -1,12 +1,27 @@
 LIBCXL_1 {
 	global:
+		cxl_adapter_next;
+		cxl_adapter_dev_name;
+		cxl_adapter_free;
+		cxl_adapter_afu_next;
+		cxl_afu_next;
+		cxl_afu_dev_name;
+
 		cxl_afu_open_dev;
+		cxl_afu_open_h;
 		cxl_afu_free;
 		cxl_afu_opened;
+		cxl_afu_attach_full;
 		cxl_afu_attach;
+		cxl_afu_fd;
 
+		cxl_get_api_version;
+		cxl_get_api_version_compatible;
+		cxl_get_irqs_max;
+		cxl_get_irqs_min;
 		cxl_pending_event;
 		cxl_read_event;
+		cxl_read_expected_event;
 
 		cxl_mmio_map;
 		cxl_mmio_unmap;

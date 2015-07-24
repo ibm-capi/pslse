@@ -1,23 +1,12 @@
-CC := $(CROSS_COMPILE)$(CC)
+srcdir = $(PWD)
+COMMON_DIR=../../common
+include Makefile.vars
+include Makefile.rules
 
-OBJ_DIR=obj
-PSL_DIR=../../libcxl
-LINK_FLAGS=-shared -E
-PSL_FLAGS=-Wall -c -DDEBUG -I$(PSL_DIR) -fPIC
-VLI_FLAGS=-Wall -g -c -fPIC -I$(VPI_USER_H_DIR) -I$(PSL_DIR) -DDEBUG
+OBJS = afu_driver.o psl_interface.o
 
 ifdef CDS_INST_DIR
   VPI_USER_H_DIR=$(CDS_INST_DIR)/tools/include
-else
-  ## NOTE: If using 32-bit VPI functions, must link as 32bit below;
-  ## may require downloading 32b C libs which are not
-  ## installed by default on some Linux distributions
-  ## (eg. Debian need to do sudo dpkg --add-architecture i386; sudo apt-get install libc6:i386; )
-  ifeq ($(shell uname) $(shell arch),Linux x86_64)
-    LINK_FLAGS+=-melf_i386
-    PSL_FLAGS+=-m32
-    VLI_FLAGS+=-m32
-  endif
 endif
 
 ifndef VPI_USER_H_DIR
@@ -26,16 +15,10 @@ endif
 
 all: veriuser.sl libvpi.so
 
-libvpi.so veriuser.sl: $(OBJ_DIR)/afu_driver.o $(OBJ_DIR)/psl_interface.o
-	ld $(LINK_FLAGS) -o $@ $^
+veriuser.sl libvpi.so : afu_driver.o psl_interface.o
+	$(call Q,CC, $(CC) $(LINK_FLAGS) -o $@ $^, $@)
 
-$(OBJ_DIR)/afu_driver.o: afu_driver.c $(PSL_DIR)/psl_interface.h
-	if [ ! -d $(OBJ_DIR) ];then mkdir $(OBJ_DIR);fi
-	$(CC) $(VLI_FLAGS) -o $@ afu_driver.c
-
-$(OBJ_DIR)/psl_interface.o: $(PSL_DIR)/psl_interface*
-	if [ ! -d $(OBJ_DIR) ];then mkdir $(OBJ_DIR);fi
-	$(CC) $(PSL_FLAGS) -o $@ $(PSL_DIR)/psl_interface.c
+afu_driver.o: CFLAGS += -I$(VPI_USER_H_DIR) -I$(COMMON_DIR)
 
 clean:
-	rm -f $(OBJ_DIR)/*.o veriuser.sl libvpi.so
+	rm -f *.[od] veriuser.sl libvpi.so

@@ -3,5 +3,10 @@
 *.d
 *.o
 *.sl
-obj
+.*.swp
+gmon.out
+debug.log
+common/misc
+debug/debug
 libcxl/include
+pslse/pslse

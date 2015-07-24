@@ -1,0 +1,62 @@
+Quick start instructions for various simulators:
+
+A) modelsim_ase (Free version for ModelSim with Quartus)
+B) NCsim
+
+
+A) modelsim_ase
+
+	1) Build your AFU logic with the file afu_driver/verilog/top.v as your
+		top level logic that instances your AFU logic underneath.
+		Use "Analysis & Synthesis" to build your model.
+
+	2) Create a symbolic link in your {quartus_dir} to point to veriuser.sl
+		that you built when following the instructions in QUICK_START.
+		***NOTE: modelsim_ase is a 32-bit executable.  If you are
+		building on a 64-bit machine you need to do "BIT32=y make" when
+		you build veriuser.sl to force a 32-bit compile.
+
+	3) Start the simulator from Quartus by pressing the "RTL Simulation"
+		button.
+
+	4) Each time the simulator is started it creates the file:
+		{quartus_dir}/simulation/modelsim/modelsim.ini
+		Since it is created automatically you'll need to change it
+		every time you start the simulator.  Edit this file, search
+		for Veriuser and uncomment this line to point to veriuser.sl.
+
+	5) Get simulator to recognize changes to modelsim.ini file by clicking
+		Compile->Compile Options->OK.
+
+	6) Find a better solution for steps 4) & 5).  ;-)
+
+	7) Press the "Simulate" button and select "work->top".  Press OK.
+
+	8) Set up any simulation parmeters you like such as run time or load
+		a waveform macro, etc.
+
+	9) "Run" you simulation.
+
+	10) At this point the simulator will be waiting for pslse to connect.
+		Refer back to QUICK_START for those instructions.
+
+
+B) NCsim
+
+	1) Set the CDS_INST_DIR environment variable to the path where Cadence
+		was installed.  It should contain "tools/include".
+
+	2) Add the afu_driver/src directory where you built libvpi.so in the
+		QUICK_START instructions to the LD_LIBRARY_PATH environment
+		variable.
+
+	3) Use ncvlog to compile afu_driver/verilog/top.v along with your
+		AFU Verilog files.  Make sure to pass "-SV" as well.
+
+	4) Use ncelab to elaborate work.top with the option:
+		"-TIMESCALE 1ns/1ns"
+
+	5) Run the work.top simulation using ncsim.
+
+	6) At this point the simulator will be waiting for pslse to connect.
+		Refer back to QUICK_START for those instructions.
