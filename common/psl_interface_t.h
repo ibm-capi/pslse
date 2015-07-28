@@ -59,14 +59,15 @@
 
 #define PSL_JOB_START 0x90
 #define PSL_JOB_RESET 0x80
-#define PSL_JOB_LOAD 0x16
-#define PSL_JOB_SAVE 0xC
-#define PSL_JOB_STOP 0x60
 #define PSL_JOB_LLCMD 0x45
-#define PSL_JOB_SNOOP_SI 0x1
-#define PSL_JOB_SNOOP_MI 0x3
-#define PSL_JOB_SNOOP_MS 0x2
 #define PSL_JOB_TIMEBASE 0x42
+
+/* LLCMD decode */
+
+#define PSL_LLCMD_MASK 0xFFFF000000000000LL
+#define PSL_LLCMD_TERMINATE 0x0001000000000000LL
+#define PSL_LLCMD_REMOVE 0x0002000000000000LL
+#define PSL_LLCMD_ADD 0x0005000000000000LL
 
 /* Response codes for PSL responses */
 
@@ -90,34 +91,22 @@
 #define PSL_COMMAND_READ_CL_RES  0x0A67
 #define PSL_COMMAND_READ_PE      0x0A52
 #define PSL_COMMAND_READ_PNA     0x0E00
-#define PSL_COMMAND_READ_LS      0x0A90
-#define PSL_COMMAND_READ_LM      0x0AA0
-#define PSL_COMMAND_RD_GO_S      0x0AD0
-#define PSL_COMMAND_RD_GO_M      0x0AF0
-#define PSL_COMMAND_RWITM        0x0AE0
 #define PSL_COMMAND_TOUCH_I      0x0240
 #define PSL_COMMAND_TOUCH_S      0x0250
 #define PSL_COMMAND_TOUCH_M      0x0260
-#define PSL_COMMAND_TOUCH_LS     0x0290
-#define PSL_COMMAND_TOUCH_LM     0x02A0
 #define PSL_COMMAND_WRITE_MI     0x0D60
 #define PSL_COMMAND_WRITE_MS     0x0D70
 #define PSL_COMMAND_WRITE_UNLOCK 0x0D6B
 #define PSL_COMMAND_WRITE_C      0x0D67
 #define PSL_COMMAND_WRITE_NA     0x0D00
 #define PSL_COMMAND_WRITE_INJ    0x0D10
-#define PSL_COMMAND_WRITE_LM     0x0DA0
 #define PSL_COMMAND_PUSH_I       0x0140
 #define PSL_COMMAND_PUSH_S       0x0150
-#define PSL_COMMAND_INVALIDATE   0x02C0
-#define PSL_COMMAND_CLAIM_M      0x02E0
-#define PSL_COMMAND_CLAIM_U      0x02F0
-#define PSL_COMMAND_CLEAN        0x0210
 #define PSL_COMMAND_EVICT_I      0x1140
-#define PSL_COMMAND_ZERO_M       0x1160
+#define PSL_COMMAND_FLUSH        0x0100
 #define PSL_COMMAND_INTREQ       0x0000
 #define PSL_COMMAND_LOCK         0x016B
-#define PSL_COMMAND_UNLOCK       0x027B
+#define PSL_COMMAND_UNLOCK       0x017B
 #define PSL_COMMAND_RESTART      0x0001
 
 /* Create one of these structures to interface to an AFU model and use the functions below to manipulate it */

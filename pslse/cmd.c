@@ -327,11 +327,6 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_READ_CL_S:	/*fall through */
 	case PSL_COMMAND_READ_CL_M:	/*fall through */
 	case PSL_COMMAND_READ_PNA:	/*fall through */
-	case PSL_COMMAND_READ_LS:	/*fall through */
-	case PSL_COMMAND_READ_LM:	/*fall through */
-	case PSL_COMMAND_RD_GO_S:	/*fall through */
-	case PSL_COMMAND_RD_GO_M:	/*fall through */
-	case PSL_COMMAND_RWITM:	/*fall through */
 		_add_read(cmd, handle, tag, command, abort, addr, size);
 		break;
 		// Cacheline unlock
@@ -348,7 +343,6 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_WRITE_MS:	/*fall through */
 	case PSL_COMMAND_WRITE_NA:	/*fall through */
 	case PSL_COMMAND_WRITE_INJ:	/*fall through */
-	case PSL_COMMAND_WRITE_LM:	/*fall through */
 		if (!(latency % 2) || (latency > 3))
 			error_msg("Write with invalid br_lat=%d", latency);
 		_add_write(cmd, handle, tag, command, abort, addr, size,
@@ -371,11 +365,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_TOUCH_I:
 	case PSL_COMMAND_TOUCH_S:	/*fall through */
 	case PSL_COMMAND_TOUCH_M:	/*fall through */
-	case PSL_COMMAND_TOUCH_LS:	/*fall through */
-	case PSL_COMMAND_TOUCH_LM:	/*fall through */
-	case PSL_COMMAND_INVALIDATE:	/*fall through */
-	case PSL_COMMAND_CLAIM_M:	/*fall through */
-	case PSL_COMMAND_CLAIM_U:	/*fall through */
+	case PSL_COMMAND_FLUSH:		/*fall through */
 		_add_touch(cmd, handle, tag, command, abort, addr, unlock);
 		break;
 	default:
