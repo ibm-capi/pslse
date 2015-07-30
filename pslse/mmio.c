@@ -133,10 +133,12 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 
 	// Store data from reads
 	_wait_for_done(mmio, &(event00->state), lock);
-	mmio->desc.req_prog_model = (uint16_t) event00->data;
-	mmio->desc.num_of_afu_CRs = (uint16_t) (event00->data >> 16);
-	mmio->desc.num_of_processes = (uint16_t) (event00->data >> 32);
-	mmio->desc.num_ints_per_process = (uint16_t) (event00->data >> 48);
+	mmio->desc.req_prog_model = (uint16_t) event00->data & 0xffffl;
+	mmio->desc.num_of_afu_CRs = (uint16_t) (event00->data >> 16) & 0xffffl;
+	mmio->desc.num_of_processes =
+	    (uint16_t) (event00->data >> 32) & 0xffffl;
+	mmio->desc.num_ints_per_process =
+	    (uint16_t) (event00->data >> 48) & 0xffffl;
 	free(event00);
 
 	_wait_for_done(mmio, &(event20->state), lock);
@@ -415,4 +417,16 @@ struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client)
 	free(buffer);
 
 	return NULL;
+}
+
+int dedicated_mode_support(struct mmio *mmio)
+{
+	return ((mmio->desc.req_prog_model & PROG_MODEL_MASK) ==
+		PROG_MODEL_DEDICATED);
+}
+
+int directed_mode_support(struct mmio *mmio)
+{
+	return ((mmio->desc.req_prog_model & PROG_MODEL_MASK) ==
+		PROG_MODEL_DIRECTED);
 }

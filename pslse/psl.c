@@ -473,11 +473,11 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 
 	// Finish PSL configuration
 	psl->state = PSLSE_IDLE;
-	if ((psl->mmio->desc.req_prog_model & 0x7fffl) == PROG_MODEL_DEDICATED) {
+	if (dedicated_mode_support(psl->mmio)) {
 		// Dedicated AFU
 		psl->max_clients = 1;
 	}
-	if ((psl->mmio->desc.req_prog_model & 0x7fffl) == PROG_MODEL_DIRECTED) {
+	if (directed_mode_support(psl->mmio)) {
 		// Dedicated AFU
 		psl->max_clients = psl->mmio->desc.num_of_processes;
 	}

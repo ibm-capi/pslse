@@ -26,6 +26,7 @@
 #include "../common/psl_interface.h"
 #include "../common/utils.h"
 
+#define PROG_MODEL_MASK 0x7fff
 #define PROG_MODEL_DEDICATED 0x0010
 #define PROG_MODEL_DIRECTED 0x0004
 #define MMIO_FULL_RANGE 0x4000000
@@ -93,5 +94,9 @@ struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 			       int rnw, int dw);
 
 struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client);
+
+int dedicated_mode_support(struct mmio *mmio);
+
+int directed_mode_support(struct mmio *mmio);
 
 #endif				/* _MMIO_H_ */

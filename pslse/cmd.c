@@ -365,7 +365,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_TOUCH_I:
 	case PSL_COMMAND_TOUCH_S:	/*fall through */
 	case PSL_COMMAND_TOUCH_M:	/*fall through */
-	case PSL_COMMAND_FLUSH:		/*fall through */
+	case PSL_COMMAND_FLUSH:	/*fall through */
 		_add_touch(cmd, handle, tag, command, abort, addr, unlock);
 		break;
 	default:

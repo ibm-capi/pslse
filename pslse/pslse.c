@@ -240,7 +240,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	// Check AFU type is valid for connection
 	switch (afu_type) {
 	case 'd':
-		if (!(psl->mmio->desc.req_prog_model & PROG_MODEL_DEDICATED)) {
+		if (!dedicated_mode_support(psl->mmio)) {
 			warn_msg
 			    ("afu%d.%d is does not support dedicated mode\n",
 			     major, minor);
@@ -251,7 +251,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		break;
 	case 'm':
 	case 's':
-		if (!(psl->mmio->desc.req_prog_model & PROG_MODEL_DIRECTED)) {
+		if (!directed_mode_support(psl->mmio)) {
 			warn_msg("afu%d.%d is does not support directed mode\n",
 				 major, minor);
 			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
