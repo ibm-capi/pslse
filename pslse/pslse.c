@@ -262,6 +262,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	default:
 		warn_msg("AFU device type '%c' is not valid\n", afu_type);
 		put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
+		close(client->fd);
 		return -1;
 	}
 
