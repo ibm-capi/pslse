@@ -243,7 +243,7 @@ static void _req_max_int(struct cxl_afu_h *afu)
 	memcpy((char *)&(buffer[1]), (char *)&value, sizeof(uint16_t));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		afu->opened = 0;
 		afu->attached = 0;
 		afu->int_req.max = 0;
@@ -268,7 +268,7 @@ static void _pslse_attach(struct cxl_afu_h *afu)
 	*wed_ptr = htole64(afu->attach.wed);
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		afu->opened = 0;
 		afu->attached = 0;
 		afu->attach.state = LIBCXL_REQ_IDLE;
@@ -293,7 +293,7 @@ static void _mmio_map(struct cxl_afu_h *afu)
 	*flags_ptr = htole32(flags);
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		afu->opened = 0;
 		afu->attached = 0;
 		afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -321,7 +321,7 @@ static void _mmio_write64(struct cxl_afu_h *afu)
 	memcpy((char *)&(buffer[offset]), (char *)&data, sizeof(data));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		afu->opened = 0;
 		afu->attached = 0;
 		afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -349,7 +349,7 @@ static void _mmio_write32(struct cxl_afu_h *afu)
 	memcpy((char *)&(buffer[offset]), (char *)&data, sizeof(data));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		afu->opened = 0;
 		afu->attached = 0;
 		afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -373,7 +373,7 @@ static void _mmio_read(struct cxl_afu_h *afu)
 	memcpy((char *)&(buffer[offset]), (char *)&addr, sizeof(addr));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		afu->opened = 0;
 		afu->attached = 0;
 		afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -604,20 +604,17 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 	}
 	if (get_bytes_silent(*fd, 1, buffer, 0, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
-		close(*fd);
-		*fd = -1;
+		close_socket(fd);
 		goto connect_fail;
 	}
 	if (buffer[0] != (uint8_t) PSLSE_CONNECT) {
 		warn_msg("cxl_afu_open_dev:PSLSE bad acknowledge");
-		close(*fd);
-		*fd = -1;
+		close_socket(fd);
 		goto connect_fail;
 	}
 	if (get_bytes_silent(*fd, sizeof(uint16_t), buffer, 0, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:afu_map");
-		close(*fd);
-		*fd = -1;
+		close_socket(fd);
 		goto connect_fail;
 	}
 	memcpy((char *)afu_map, (char *)buffer, 2);
@@ -696,7 +693,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 	buffer[1] = afu->dbg_id;
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		errno = ENODEV;
 		return NULL;
 	}
@@ -735,7 +732,7 @@ static void _release_afus(struct cxl_afu_h *afu)
 		current = current->_next;
 		if (afu->fd) {
 			put_bytes_silent(afu->fd, 1, &rc);
-			close(afu->fd);
+			close_socket(&(afu->fd));
 		}
 		if (afu->id)
 			free(afu->id);
@@ -756,14 +753,14 @@ static void _release_adapters(struct cxl_adapter_h *adapter)
 		// Disconnect from PSLSE
 		if (adapter->fd) {
 			put_bytes_silent(adapter->fd, 1, &rc);
-			close(adapter->fd);
+			close_socket(&(adapter->fd));
 		}
 		free(adapter->id);
 		free(adapter);
 	}
 }
 
-static struct cxl_afu_h *_pslse_open(int fd, uint16_t afu_map, uint8_t major,
+static struct cxl_afu_h *_pslse_open(int *fd, uint16_t afu_map, uint8_t major,
 				     uint8_t minor, char afu_type)
 {
 	struct cxl_afu_h *afu;
@@ -775,12 +772,12 @@ static struct cxl_afu_h *_pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	position >>= minor;
 	if ((afu_map & position) != position) {
 		warn_msg("open:AFU not in system");
-		close(fd);
+		close_socket(fd);
 		errno = ENODEV;
 		return NULL;
 	}
 	// Create struct for AFU
-	afu = _new_afu(afu_map, position, fd);
+	afu = _new_afu(afu_map, position, *fd);
 	if (afu == NULL)
 		return NULL;
 
@@ -788,7 +785,7 @@ static struct cxl_afu_h *_pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	buffer[0] = (uint8_t) PSLSE_OPEN;
 	buffer[1] = afu->dbg_id;
 	buffer[2] = afu_type;
-	afu->fd = fd;
+	afu->fd = *fd;
 	if (put_bytes_silent(afu->fd, 3, buffer) != 3) {
 		warn_msg("open:Failed to write to socket");
 		free(buffer);
@@ -804,7 +801,7 @@ static struct cxl_afu_h *_pslse_open(int fd, uint16_t afu_map, uint8_t major,
 	// Start thread
 	if (pthread_create(&(afu->thread), NULL, _psl_loop, afu)) {
 		perror("pthread_create");
-		close(afu->fd);
+		close_socket(&(afu->fd));
 		goto open_fail;
 	}
 	// Wait for open acknowledgement
@@ -909,6 +906,7 @@ void cxl_adapter_free(struct cxl_adapter_h *adapter)
 	_release_afus(adapter->afu_list);
 	if (adapter->id)
 		free(adapter->id);
+	close_socket(&(adapter->fd));
 	free(adapter);
 }
 
@@ -1054,7 +1052,7 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	minor = afu_id[5] - '0';
 	afu_type = afu_id[6];
 
-	return _pslse_open(fd, afu_map, major, minor, afu_type);
+	return _pslse_open(&fd, afu_map, major, minor, afu_type);
 }
 
 struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
@@ -1098,7 +1096,7 @@ struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 		errno = ENODEV;
 		return NULL;
 	}
-	return _pslse_open(afu->fd, afu->map, major, minor, afu_type);
+	return _pslse_open(&(afu->fd), afu->map, major, minor, afu_type);
 }
 
 void cxl_afu_free(struct cxl_afu_h *afu)
@@ -1116,7 +1114,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 		while (afu->attached)	/*infinite loop */
 			_delay_1ms();
 	}
-	close(afu->fd);
+	close_socket(&(afu->fd));
 	afu->opened = 0;
 	pthread_join(afu->thread, NULL);
 

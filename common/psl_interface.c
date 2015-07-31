@@ -214,11 +214,21 @@ int psl_init_afu_event(struct AFU_EVENT *event, char *server_host, int port)
 
 int psl_close_afu_event(struct AFU_EVENT *event)
 {
-	if (close(event->sockfd)) {
+	char buffer[4096];
+
+	// Shutdown socket traffic
+	if (shutdown(event->sockfd, SHUT_RDWR))
 		return PSL_CLOSE_ERROR;
-	} else {
-		return PSL_SUCCESS;
-	}
+
+	// Drain any data in socket
+	while (recv(event->sockfd, buffer, sizeof(buffer)-1, MSG_DONTWAIT)>0);
+
+	// Close socket
+	if (close(event->sockfd))
+		return PSL_CLOSE_ERROR;
+	event->sockfd = -1;
+
+	return PSL_SUCCESS;
 }
 
 /* Call this once after creation to initialize the AFU_EVENT structure. */
@@ -244,8 +254,7 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 	}
 	if (bind(event->sockfd, (struct sockaddr *)&ssadr, sizeof(ssadr)) == -1) {
 		perror("bind");
-		close(event->sockfd);
-		event->sockfd = -1;
+		psl_close_afu_event(event);
 		return PSL_BAD_SOCKET;
 	}
 	char hostname[1024];
@@ -256,16 +265,14 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 	fflush(stdout);
 	if (listen(event->sockfd, 10) == -1) {
 		perror("listen");
-		close(event->sockfd);
-		event->sockfd = -1;
+		psl_close_afu_event(event);
 		return PSL_BAD_SOCKET;
 	}
 	while (cs < 0) {
 		cs = accept(event->sockfd, (struct sockaddr *)&csadr, &csalen);
 		if ((cs < 0) && (errno != EINTR)) {
 			perror("accept");
-			close(event->sockfd);
-			event->sockfd = -1;
+			psl_close_afu_event(event);
 			return PSL_BAD_SOCKET;
 		}
 	}

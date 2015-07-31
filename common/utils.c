@@ -293,3 +293,25 @@ void generate_cl_parity(uint8_t * data, uint8_t * parity)
 		parity[i / BYTES_PER_DWORD] += p;
 	}
 }
+
+// Gracefully shutdown and close socket connection
+int close_socket(int *sockfd)
+{
+	char buffer[4096];
+	int true = 1;
+
+	// Shutdown socket traffic
+	if (shutdown(*sockfd, SHUT_RDWR))
+		return -1;
+
+	// Drain any data in socket
+	while (recv(*sockfd, buffer, sizeof(buffer)-1, MSG_DONTWAIT)>0);
+
+	// Close socket
+	setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int));
+	if (close(*sockfd))
+		return -1;
+	*sockfd = -1;
+
+	return 0;
+}

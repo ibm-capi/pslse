@@ -82,8 +82,7 @@ static void _free(struct psl *psl, struct client *client)
 
 	info_msg("%s client disconnect from %s context %d", client->ip,
 		 psl->name, client->context);
-	close(client->fd);
-	client->fd = -1;
+	close_socket(&(client->fd));
 	if (client->ip)
 		free(client->ip);
 	client->ip = NULL;
@@ -310,7 +309,7 @@ static void *_psl_loop(void *ptr)
 			// FIXME: Send warning to clients first?
 			info_msg("Disconnected %s context %d\n", psl->name,
 				 psl->client[i]->context);
-			close(psl->client[i]->fd);
+			close_socket(&(psl->client[i]->fd));
 		}
 	}
 
@@ -336,8 +335,10 @@ static void *_psl_loop(void *ptr)
 	}
 	if (psl->host)
 		free(psl->host);
-	if (psl->afu_event)
+	if (psl->afu_event) {
+		psl_close_afu_event(psl->afu_event);
 		free(psl->afu_event);
+	}
 	if (psl->name)
 		free(psl->name);
 	if (*(psl->head) == psl)
@@ -493,8 +494,10 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 
  init_fail:
 	if (psl) {
-		if (psl->afu_event)
+		if (psl->afu_event) {
+			psl_close_afu_event(psl->afu_event);
 			free(psl->afu_event);
+		}
 		if (psl->host)
 			free(psl->host);
 		if (psl->name)

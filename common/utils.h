@@ -114,4 +114,7 @@ uint8_t generate_parity(uint64_t data, uint8_t odd);
 // 1 bit of parity for each 64 bits of data
 void generate_cl_parity(uint8_t * data, uint8_t * parity);
 
+// Gracefully shutdown and close socket connection
+int close_socket(int *sockfd);
+
 #endif				/* _UTILS_H_ */

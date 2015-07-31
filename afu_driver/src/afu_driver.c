@@ -693,6 +693,7 @@ static void psl()
 	// Error case
 	if (rc < 0) {
 		info_message("Socket closed: Ending Simulation.");
+		psl_close_afu_event(&event);
 #ifdef FINISH
 		vpi_control(vpiFinish, 1);
 #else

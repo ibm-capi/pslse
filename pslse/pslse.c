@@ -170,7 +170,7 @@ static void _max_irqs(struct client *client, uint8_t id)
 }
 
 // Handshake with client and attach to PSL
-static struct client *_client_connect(int fd, char *ip)
+static struct client *_client_connect(int *fd, char *ip)
 {
 	struct client *client;
 	uint8_t buffer[MAX_LINE_CHARS];
@@ -181,25 +181,25 @@ static struct client *_client_connect(int fd, char *ip)
 	// Parse client handshake data
 	ack[0] = PSLSE_DETACH;
 	memset(buffer, '\0', MAX_LINE_CHARS);
-	rc = get_bytes(fd, 5, buffer, timeout, 0, fp, -1, -1);
+	rc = get_bytes(*fd, 5, buffer, timeout, 0, fp, -1, -1);
 	if ((rc < 0) || (strcmp((char *)buffer, "PSLSE"))) {
 		info_msg("Connecting application is not PSLSE client\n");
 		info_msg("Expected: \"PSLSE\" Got: \"%s\"", buffer);
-		put_bytes(fd, 1, ack, fp, -1, -1);
-		close(fd);
+		put_bytes(*fd, 1, ack, fp, -1, -1);
+		close_socket(fd);
 		return NULL;
 	}
-	rc = get_bytes_silent(fd, 2, buffer, timeout, 0);
+	rc = get_bytes_silent(*fd, 2, buffer, timeout, 0);
 	if ((rc < 0) || ((uint8_t) buffer[0] != PSLSE_VERSION_MAJOR) ||
 	    ((uint8_t) buffer[1] != PSLSE_VERSION_MINOR)) {
 		info_msg("Client is wrong version\n");
-		put_bytes(fd, 1, ack, fp, -1, -1);
-		close(fd);
+		put_bytes(*fd, 1, ack, fp, -1, -1);
+		close_socket(fd);
 		return NULL;
 	}
 	// Initialize client struct
 	client = (struct client *)calloc(1, sizeof(struct client));
-	client->fd = fd;
+	client->fd = *fd;
 	client->ip = ip;
 	client->pending = 1;
 	client->flushing = FLUSH_NONE;
@@ -209,7 +209,7 @@ static struct client *_client_connect(int fd, char *ip)
 	ack[0] = PSLSE_CONNECT;
 	map = htole16(afu_map);
 	memcpy(&(ack[1]), &map, sizeof(map));
-	if (put_bytes(fd, 3, ack, fp, -1, -1) < 0) {
+	if (put_bytes(client->fd, 3, ack, fp, -1, -1) < 0) {
 		free(client);
 		return NULL;
 	}
@@ -234,7 +234,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	if (!psl) {
 		info_msg("Did not find valid PSL for afu%d.%d\n", major, minor);
 		put_bytes(client->fd, 1, &(rc[0]), fp, -1, -1);
-		close(client->fd);
+		close_socket(&(client->fd));
 		return -1;
 	}
 	// Check AFU type is valid for connection
@@ -245,7 +245,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			    ("afu%d.%d is does not support dedicated mode\n",
 			     major, minor);
 			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-			close(client->fd);
+			close_socket(&(client->fd));
 			return -1;
 		}
 		break;
@@ -255,14 +255,14 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			warn_msg("afu%d.%d is does not support directed mode\n",
 				 major, minor);
 			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-			close(client->fd);
+			close_socket(&(client->fd));
 			return -1;
 		}
 		break;
 	default:
 		warn_msg("AFU device type '%c' is not valid\n", afu_type);
 		put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-		close(client->fd);
+		close_socket(&(client->fd));
 		return -1;
 	}
 
@@ -283,7 +283,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	if (context < 0) {
 		info_msg("No room for new client on afu%d.%d\n", major, minor);
 		put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
-		close(client->fd);
+		close_socket(&(client->fd));
 		return -1;
 	}
 	// Attach to PSL
@@ -309,7 +309,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	}
 	// Acknowledge to client
 	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context) < 0) {
-		close(client->fd);
+		close_socket(&(client->fd));
 		return -1;
 	}
 	debug_context_add(fp, psl->dbg_id, context);
@@ -509,7 +509,7 @@ int main(int argc, char **argv)
 		}
 		// Add new client
 		info_msg("Connection from %s", ip);
-		client = _client_connect(connect_fd, ip);
+		client = _client_connect(&connect_fd, ip);
 		if (client != NULL) {
 			if (client_list != NULL)
 				client_list->_prev = client;
@@ -524,6 +524,7 @@ int main(int argc, char **argv)
 		lock_delay(&lock);
 	}
 	info_msg("No AFUs connected, Shutting down PSLSE\n");
+	close_socket(&listen_fd);
 
 	// Shutdown unassociated client connections
 	while (client_list != NULL) {
@@ -534,6 +535,7 @@ int main(int argc, char **argv)
 		pthread_mutex_unlock(&lock);
 		pthread_join(client->thread, NULL);
 		pthread_mutex_lock(&lock);
+		close_socket(&(client->fd));
 		free(client);
 	}
 	pthread_mutex_unlock(&lock);
