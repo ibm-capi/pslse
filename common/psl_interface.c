@@ -221,7 +221,8 @@ int psl_close_afu_event(struct AFU_EVENT *event)
 		return PSL_CLOSE_ERROR;
 
 	// Drain any data in socket
-	while (recv(event->sockfd, buffer, sizeof(buffer)-1, MSG_DONTWAIT)>0);
+	while (recv(event->sockfd, buffer, sizeof(buffer) - 1, MSG_DONTWAIT) >
+	       0) ;
 
 	// Close socket
 	if (close(event->sockfd))

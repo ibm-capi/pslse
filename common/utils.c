@@ -305,7 +305,7 @@ int close_socket(int *sockfd)
 		return -1;
 
 	// Drain any data in socket
-	while (recv(*sockfd, buffer, sizeof(buffer)-1, MSG_DONTWAIT)>0);
+	while (recv(*sockfd, buffer, sizeof(buffer) - 1, MSG_DONTWAIT) > 0) ;
 
 	// Close socket
 	setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int));
