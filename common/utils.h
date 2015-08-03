@@ -68,9 +68,6 @@ enum pslse_state {
 	PSLSE_DONE
 };
 
-// Usage message
-void usage(int argc, char **argv);
-
 // Display fatal message (For catching code bugs, not AFU bugs)
 void fatal_msg(const char *format, ...);
 

@@ -26,7 +26,7 @@
 #define DEFAULT_CREDITS 64
 
 // Randomly decide based on percent chance
-static inline int percent_chance(unsigned int chance)
+static inline int percent_chance(int chance)
 {
 	return ((rand() % 100) < chance);
 }
@@ -56,9 +56,9 @@ int allow_buffer(struct parms *parms)
 }
 
 // Decide a single random percentage value from a percentage range
-static void percent_parm(char *value, unsigned int *parm)
+static void percent_parm(char *value, int *parm)
 {
-	unsigned min, max;
+	int min, max;
 	char *comma;
 
 	*parm = atoi(value);
@@ -83,7 +83,7 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 	char parm[MAX_LINE_CHARS];
 	char *value;
 	FILE *fp;
-	unsigned int data;
+	int data;
 
 	// Allocate memory for struct
 	parms = (struct parms *)malloc(sizeof(struct parms));

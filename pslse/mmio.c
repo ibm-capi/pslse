@@ -109,8 +109,7 @@ static struct mmio_event *_add_mmio(struct mmio *mmio, struct client *client,
 	return _add_event(mmio, client, rnw, dw, addr, 0, data);
 }
 
-static void _wait_for_done(struct mmio *mmio, enum pslse_state *state,
-			   pthread_mutex_t * lock)
+static void _wait_for_done(enum pslse_state *state, pthread_mutex_t * lock)
 {
 	while (*state != PSLSE_DONE)	/* infinite loop */
 		lock_delay(lock);
@@ -132,7 +131,7 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 	event48 = _add_desc(mmio, 1, 1, 0x48 >> 2, 0L);
 
 	// Store data from reads
-	_wait_for_done(mmio, &(event00->state), lock);
+	_wait_for_done(&(event00->state), lock);
 	mmio->desc.req_prog_model = (uint16_t) event00->data & 0xffffl;
 	mmio->desc.num_of_afu_CRs = (uint16_t) (event00->data >> 16) & 0xffffl;
 	mmio->desc.num_of_processes =
@@ -141,27 +140,27 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 	    (uint16_t) (event00->data >> 48) & 0xffffl;
 	free(event00);
 
-	_wait_for_done(mmio, &(event20->state), lock);
+	_wait_for_done(&(event20->state), lock);
 	mmio->desc.AFU_CR_len = event20->data;
 	free(event20);
 
-	_wait_for_done(mmio, &(event28->state), lock);
+	_wait_for_done(&(event28->state), lock);
 	mmio->desc.AFU_CR_offset = event28->data;
 	free(event28);
 
-	_wait_for_done(mmio, &(event30->state), lock);
+	_wait_for_done(&(event30->state), lock);
 	mmio->desc.PerProcessPSA = event30->data;
 	free(event30);
 
-	_wait_for_done(mmio, &(event38->state), lock);
+	_wait_for_done(&(event38->state), lock);
 	mmio->desc.PerProcessPSA_offset = event38->data;
 	free(event38);
 
-	_wait_for_done(mmio, &(event40->state), lock);
+	_wait_for_done(&(event40->state), lock);
 	mmio->desc.AFU_EB_len = event40->data;
 	free(event40);
 
-	_wait_for_done(mmio, &(event48->state), lock);
+	_wait_for_done(&(event48->state), lock);
 	mmio->desc.AFU_EB_offset = event48->data;
 	free(event48);
 

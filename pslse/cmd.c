@@ -161,7 +161,8 @@ static void _update_pending_resps(struct cmd *cmd, uint32_t resp)
 static struct client *_get_client(struct cmd *cmd, struct cmd_event *event)
 {
 	// Make sure cmd and client are still valid
-	if ((cmd == NULL) || (cmd->client == NULL))
+	if ((cmd == NULL) || (cmd->client == NULL) ||
+	    (event->context >= cmd->max_clients))
 		return NULL;
 
 	// Abort if client disconnected

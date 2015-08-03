@@ -222,7 +222,6 @@ static struct client *_client_connect(int *fd, char *ip)
 static int _client_associate(struct client *client, uint8_t id, char afu_type)
 {
 	struct psl *psl;
-	struct job_event *reset;
 	uint32_t mmio_offset, mmio_size;
 	uint8_t major, minor;
 	int i, context, clients;
@@ -304,9 +303,9 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	client->type = afu_type;
 
 	// Send reset to AFU, if no other clients already connected
-	if (clients == 0) {
-		reset = add_job(psl->job, PSL_JOB_RESET, 0L);
-	}
+	if (clients == 0)
+		add_job(psl->job, PSL_JOB_RESET, 0L);
+
 	// Acknowledge to client
 	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context) < 0) {
 		close_socket(&(client->fd));

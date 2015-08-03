@@ -28,14 +28,6 @@
 #include "debug.h"
 #include "utils.h"
 
-// Usage message
-void usage(int argc, char **argv)
-{
-	fflush(stderr);
-	printf("\nUsage: %s HOST:PORT\n\n", argv[0]);
-	exit(1);
-}
-
 // Display fatal message (For catching coding bugs, not AFU bugs)
 void fatal_msg(const char *format, ...)
 {

@@ -61,7 +61,7 @@ struct pages {
 
 struct cmd_event {
 	uint64_t addr;
-	uint32_t context;
+	int32_t context;
 	uint32_t command;
 	uint32_t tag;
 	uint32_t abt;
@@ -92,6 +92,7 @@ struct cmd {
 	uint64_t lock_addr;
 	uint64_t res_addr;
 	uint32_t credits;
+	int max_clients;
 	uint16_t irq;
 	int locked;
 };

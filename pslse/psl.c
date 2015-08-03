@@ -194,11 +194,10 @@ static void *_psl_loop(void *ptr)
 {
 	struct psl *psl = (struct psl *)ptr;
 	struct cmd_event *event, *temp;
-	int events, i, stopped, reset, idle;
+	int events, i, stopped, reset;
 	uint8_t ack = PSLSE_DETACH;
 
 	stopped = 1;
-	idle = 1;
 	pthread_mutex_lock(psl->lock);
 	while (psl->state != PSLSE_DONE) {
 		// idle_cycles continues to generate clock cycles for some
@@ -247,7 +246,6 @@ static void *_psl_loop(void *ptr)
 		}
 		// Check for event from application
 		reset = 0;
-		idle = 0;
 		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
@@ -269,7 +267,6 @@ static void *_psl_loop(void *ptr)
 			}
 			if (client_cmd(psl->cmd, psl->client[i])) {
 				psl->client[i]->idle_cycles = PSL_IDLE_CYCLES;
-				idle = 0;
 			}
 		}
 
@@ -489,6 +486,7 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 	psl->client = (struct client **)calloc(psl->max_clients,
 					       sizeof(struct client *));
 	psl->cmd->client = psl->client;
+	psl->cmd->max_clients = psl->max_clients;
 
 	return location;
 

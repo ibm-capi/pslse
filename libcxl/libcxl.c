@@ -713,7 +713,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 
 static void _release_afus(struct cxl_afu_h *afu)
 {
-	struct cxl_afu_h *last, *current;
+	struct cxl_afu_h *current;
 	uint8_t rc = PSLSE_DETACH;
 	int adapter;
 
@@ -721,10 +721,9 @@ static void _release_afus(struct cxl_afu_h *afu)
 		return;
 
 	current = afu->_head;
-	while (current->adapter < afu->adapter) {
-		last = current;
+	while (current->adapter < afu->adapter)
 		current = current->_next;
-	}
+
 	adapter = afu->adapter;
 	current = afu;
 	while ((current != NULL) && (current->adapter == adapter)) {
