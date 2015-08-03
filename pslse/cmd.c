@@ -240,11 +240,43 @@ static void _add_interrupt(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		 MEM_IDLE, resp, 0);
 }
 
+// Format and add misc. command to list
+static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
+		       uint32_t command, uint32_t abort, uint32_t resp)
+{
+	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
+		 resp, 0);
+}
+
+// Check address alignment
+static int _aligned(addr, size)
+{
+	// Check valid size
+	if (size & (size - 1)) {
+		warn_msg("AFU issued command with invalid size %d", size);
+		return 0;
+	}
+	// Check aligned address
+	if (addr & (size - 1)) {
+		warn_msg("AFU issued command with unaligned address %016"
+			 PRIx64, addr);
+		return 0;
+	}
+
+	return 1;
+}
+
 // Format and add memory touch to command list
 static void _add_touch(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		       uint32_t command, uint32_t abort, uint64_t addr,
-		       uint8_t unlock)
+		       uint32_t size, uint8_t unlock)
 {
+	// Check command size and address
+	if (!_aligned(addr, size)) {
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		return;
+	}
 	_add_cmd(cmd, handle, tag, command, abort, CMD_TOUCH, addr,
 		 CACHELINE_BYTES, MEM_IDLE, PSL_RESPONSE_DONE, unlock);
 }
@@ -262,6 +294,12 @@ static void _add_read(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		      uint32_t command, uint32_t abort, uint64_t addr,
 		      uint32_t size)
 {
+	// Check command size and address
+	if (!_aligned(addr, size)) {
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		return;
+	}
 	// Reads will be added to the list and will next be processed
 	// in the function handle_buffer_write()
 	_add_cmd(cmd, handle, tag, command, abort, CMD_READ, addr, size,
@@ -273,18 +311,16 @@ static void _add_write(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		       uint32_t command, uint32_t abort, uint64_t addr,
 		       uint32_t size, uint8_t unlock)
 {
+	// Check command size and address
+	if (!_aligned(addr, size)) {
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		return;
+	}
 	// Writes will be added to the list and will next be processed
 	// in the function handle_touch()
 	_add_cmd(cmd, handle, tag, command, abort, CMD_WRITE, addr, size,
 		 MEM_IDLE, PSL_RESPONSE_DONE, unlock);
-}
-
-// Format and add misc. command to list
-static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint32_t abort, uint32_t resp)
-{
-	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
-		 resp, 0);
 }
 
 // Determine what type of command to add to list
@@ -313,7 +349,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
-		_add_touch(cmd, handle, tag, command, abort, addr, 0);
+		_add_touch(cmd, handle, tag, command, abort, addr, size, 0);
 		break;
 		// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
@@ -367,7 +403,8 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_TOUCH_S:	/*fall through */
 	case PSL_COMMAND_TOUCH_M:	/*fall through */
 	case PSL_COMMAND_FLUSH:	/*fall through */
-		_add_touch(cmd, handle, tag, command, abort, addr, unlock);
+		_add_touch(cmd, handle, tag, command, abort, addr, size,
+			   unlock);
 		break;
 	default:
 		error_msg("Command currently unsupported 0x%04x", cmd);
