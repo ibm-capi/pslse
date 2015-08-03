@@ -169,6 +169,17 @@ static void _max_irqs(struct client *client, uint8_t id)
 	}
 }
 
+static void _free_client(struct client *client)
+{
+	if (client == NULL)
+		return;
+
+	if (client->ip)
+		free(client->ip);
+
+	free(client);
+}
+
 // Handshake with client and attach to PSL
 static struct client *_client_connect(int *fd, char *ip)
 {
@@ -210,7 +221,7 @@ static struct client *_client_connect(int *fd, char *ip)
 	map = htole16(afu_map);
 	memcpy(&(ack[1]), &map, sizeof(map));
 	if (put_bytes(client->fd, 3, ack, fp, -1, -1) < 0) {
-		free(client);
+		_free_client(client);
 		return NULL;
 	}
 
@@ -506,7 +517,7 @@ int main(int argc, char **argv)
 				*client_ptr = client->_next;
 				if (client->_next != NULL)
 					client->_next->_prev = client->_prev;
-				free(client);
+				_free_client(client);
 				lock_delay(&lock);
 				continue;
 			}
@@ -541,7 +552,7 @@ int main(int argc, char **argv)
 		pthread_join(client->thread, NULL);
 		pthread_mutex_lock(&lock);
 		close_socket(&(client->fd));
-		free(client);
+		_free_client(client);
 	}
 	pthread_mutex_unlock(&lock);
 
