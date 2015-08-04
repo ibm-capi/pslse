@@ -118,7 +118,8 @@ void send_job(struct job *job)
 }
 
 // See if AFU changed any of the aux2 signals and handle accordingly
-int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency)
+int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
+		uint64_t * error)
 {
 	struct job_event *event;
 	uint32_t job_running;
@@ -136,7 +137,7 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency)
 		return 0;
 
 	// See if AFU is driving AUX2 signal changes
-	dbg_aux2 = reset = reset_complete = 0;
+	dbg_aux2 = reset = reset_complete = *error = 0;
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
 				&tb_request, &par_enable, &read_latency) ==
@@ -144,6 +145,7 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency)
 		// Handle job_done
 		if (job_done) {
 			dbg_aux2 |= DBG_AUX2_DONE;
+			*error = job_error;
 			if (job->job != NULL) {
 				event = job->job;
 				// Is job_done for reset or start?

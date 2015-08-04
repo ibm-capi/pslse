@@ -103,9 +103,27 @@ static void _free(struct psl *psl, struct client *client)
 // Handle events from AFU
 static void _handle_afu(struct psl *psl)
 {
+	struct client *client;
+	uint64_t error;
+	uint8_t *buffer;
 	int reset_done;
+	size_t size;
+
 	reset_done = handle_aux2(psl->job, &(psl->parity_enabled),
-				 &(psl->latency));
+				 &(psl->latency), &error);
+	if (error && !directed_mode_support(psl->mmio)) {
+		client = psl->client[0];
+		size = 1 + sizeof(uint64_t);
+		buffer = (uint8_t *) malloc(size);
+		buffer[0] = PSLSE_AFU_ERROR;
+		error = htole64(error);
+		memcpy((char *)&(buffer[1]), (char *)&error, sizeof(error));
+		if (put_bytes
+		    (client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
+		     0) < 0) {
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		}
+	}
 	handle_mmio_ack(psl->mmio, psl->parity_enabled);
 	if (psl->cmd != NULL) {
 		if (reset_done)

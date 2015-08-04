@@ -36,7 +36,7 @@
 #define PSL_IDLE_CYCLES 20
 
 #define PSLSE_VERSION_MAJOR	0x01
-#define PSLSE_VERSION_MINOR	0x00
+#define PSLSE_VERSION_MINOR	0x01
 
 #define PSLSE_CONNECT		0x01
 #define PSLSE_QUERY		0x02
@@ -57,6 +57,7 @@
 #define PSLSE_MMIO_ACK		0x11
 #define PSLSE_MMIO_FAIL		0x12
 #define PSLSE_INTERRUPT		0x13
+#define PSLSE_AFU_ERROR		0x14
 
 // PSLSE states
 enum pslse_state {
