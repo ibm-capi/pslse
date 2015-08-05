@@ -407,8 +407,9 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 			   unlock);
 		break;
 	default:
-		error_msg("Command currently unsupported 0x%04x", cmd);
-		cmd->credits++;
+		warn_msg("Unsupported command 0x%04x", cmd);
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
 		break;
 	}
 }

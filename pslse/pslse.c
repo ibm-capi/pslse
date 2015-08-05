@@ -484,7 +484,7 @@ int main(int argc, char **argv)
 	if (psl_list == NULL) {
 		free(parms);
 		fclose(fp);
-		error_msg("Unable to connect to any simulators");
+		warn_msg("Unable to connect to any simulators");
 		return -1;
 	}
 	// Start server
