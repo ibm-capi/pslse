@@ -20,7 +20,7 @@
 # NOTE: Must be a single value, not a min,max range
 #CREDITS:64
 
-# Randomization seed.  Set this to force reproducable sequence of event
+# Randomization seed.  Set this to force reproducible sequence of event
 # NOTE: Must be a single value, not a min,max range
 SEED:13
 
