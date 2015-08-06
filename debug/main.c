@@ -537,6 +537,9 @@ static int _parse_socket(FILE * fp, DBG_HEADER header, int silent)
 	case PSLSE_INTERRUPT:
 		printf("INTERRRUPT");
 		break;
+	case PSLSE_AFU_ERROR:
+		printf("AFU ERROR");
+		break;
 	default:
 		printf("Unknown:0x%02x", type);
 	}
