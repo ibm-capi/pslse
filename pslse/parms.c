@@ -186,8 +186,8 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 			debug_parm(dbg_fp, DBG_PARM_BUFFER_PERCENT,
 				   parms->buffer_percent);
 		} else {
-			error_msg("Ignoring invalid parm in %s: %s\n",
-				  filename, parm);
+			warn_msg("Ignoring invalid parm in %s: %s\n",
+				 filename, parm);
 			continue;
 		}
 	}

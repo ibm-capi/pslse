@@ -23,6 +23,8 @@
 #include <poll.h>
 #include <pthread.h>
 
+#define EVENT_QUEUE_MAX 3
+
 enum libcxl_req_state {
 	LIBCXL_REQ_IDLE,
 	LIBCXL_REQ_REQUEST,
@@ -53,9 +55,8 @@ struct mmio_req {
 
 struct cxl_afu_h {
 	pthread_t thread;
-	struct cxl_event *irq;
-	struct cxl_event *dsi;
-	struct cxl_event *first_event;
+	pthread_mutex_t event_lock;
+	struct cxl_event *events[EVENT_QUEUE_MAX];
 	int adapter;
 	char *id;
 	uint8_t context;

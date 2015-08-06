@@ -103,9 +103,27 @@ static void _free(struct psl *psl, struct client *client)
 // Handle events from AFU
 static void _handle_afu(struct psl *psl)
 {
+	struct client *client;
+	uint64_t error;
+	uint8_t *buffer;
 	int reset_done;
+	size_t size;
+
 	reset_done = handle_aux2(psl->job, &(psl->parity_enabled),
-				 &(psl->latency));
+				 &(psl->latency), &error);
+	if (error && !directed_mode_support(psl->mmio)) {
+		client = psl->client[0];
+		size = 1 + sizeof(uint64_t);
+		buffer = (uint8_t *) malloc(size);
+		buffer[0] = PSLSE_AFU_ERROR;
+		error = htole64(error);
+		memcpy((char *)&(buffer[1]), (char *)&error, sizeof(error));
+		if (put_bytes
+		    (client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
+		     0) < 0) {
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		}
+	}
 	handle_mmio_ack(psl->mmio, psl->parity_enabled);
 	if (psl->cmd != NULL) {
 		if (reset_done)
@@ -219,9 +237,10 @@ static void *_psl_loop(void *ptr)
 			events = psl_get_afu_events(psl->afu_event);
 
 			// Error on socket
-			if (events < 0)
+			if (events < 0) {
+				warn_msg("Lost connection with AFU");
 				break;
-
+			}
 			// Handle events from AFU
 			if (events > 0)
 				_handle_afu(psl);
@@ -304,7 +323,7 @@ static void *_psl_loop(void *ptr)
 	for (i = 0; i < psl->max_clients; i++) {
 		if ((psl->client != NULL) && (psl->client[i] != NULL)) {
 			// FIXME: Send warning to clients first?
-			info_msg("Disconnected %s context %d\n", psl->name,
+			info_msg("Disconnecting %s context %d", psl->name,
 				 psl->client[i]->context);
 			close_socket(&(psl->client[i]->fd));
 		}
@@ -314,7 +333,7 @@ static void *_psl_loop(void *ptr)
 	debug_afu_drop(psl->dbg_fp, psl->dbg_id);
 
 	// Disconnect from simulator, free memory and shut down thread
-	info_msg("Disconnected %s @ %s:%d\n", psl->name, psl->host, psl->port);
+	info_msg("Disconnecting %s @ %s:%d", psl->name, psl->host, psl->port);
 	if (psl->client)
 		free(psl->client);
 	if (psl->_prev)

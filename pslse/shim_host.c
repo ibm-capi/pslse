@@ -28,7 +28,7 @@
 #include "../common/utils.h"
 
 // Parse file to find hostname and ports for AFU simulator(s)
-uint16_t parse_host_data(struct psl ** head, struct parms * parms,
+uint16_t parse_host_data(struct psl **head, struct parms *parms,
 			 char *filename, pthread_mutex_t * lock, FILE * dbg_fp)
 {
 	FILE *fp;

@@ -220,7 +220,7 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 	if (rc == PSL_SUCCESS) {
 		debug_mmio_ack(mmio->dbg_fp, mmio->dbg_id);
 		if (!mmio->list || (mmio->list->state != PSLSE_PENDING)) {
-			error_msg("Unexpected MMIO ack from AFU");
+			warn_msg("Unexpected MMIO ack from AFU");
 			return;
 		}
 		// Keep data for MMIO reads

@@ -79,25 +79,113 @@ static int _testmemaddr(uint8_t * memaddr)
 static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 {
 	uint16_t size;
-	uint8_t type;
+	int i;
 
 	// Only track a single DSI at a time
-	if (afu->dsi != NULL)
-		return;
+	pthread_mutex_lock(&(afu->event_lock));
+	i = 0;
+	while (afu->events[i] != NULL) {
+		if (afu->events[i]->header.type == CXL_EVENT_DATA_STORAGE) {
+			pthread_mutex_unlock(&(afu->event_lock));
+			return;
+		}
+		++i;
+	}
+	assert(i < EVENT_QUEUE_MAX);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_data_storage);
-	afu->dsi = (struct cxl_event *)calloc(1, size);
-	afu->dsi->header.type = CXL_EVENT_DATA_STORAGE;
-	afu->dsi->header.size = size;
-	afu->dsi->header.process_element = afu->context;
-	afu->dsi->fault.addr = addr & FOURK_MASK;
-	afu->dsi->fault.dsisr = DSISR;
-	if (afu->first_event == NULL)
-		afu->first_event = afu->dsi;
-	type = (uint8_t) CXL_EVENT_DATA_STORAGE;
+	afu->events[i] = (struct cxl_event *)calloc(1, size);
+	afu->events[i]->header.type = CXL_EVENT_DATA_STORAGE;
+	afu->events[i]->header.size = size;
+	afu->events[i]->header.process_element = afu->context;
+	afu->events[i]->fault.addr = addr & FOURK_MASK;
+	afu->events[i]->fault.dsisr = DSISR;
+
 	// FIXME: Handle errors on write?
-	write(afu->pipe[1], &type, 1);
+	write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	pthread_mutex_unlock(&(afu->event_lock));
+}
+
+static void _handle_interrupt(struct cxl_afu_h *afu)
+{
+	uint16_t size, irq;
+	uint8_t data[sizeof(irq)];
+	int i;
+
+	DPRINTF("AFU INTERRUPT\n");
+	if (get_bytes_silent(afu->fd, sizeof(irq), data, 0, 0) < 0) {
+		afu->opened = 0;
+		afu->attached = 0;
+		return;
+	}
+	memcpy(&irq, data, sizeof(irq));
+	irq = le16toh(irq);
+
+	// Only track a single interrupt at a time
+	pthread_mutex_lock(&(afu->event_lock));
+	i = 0;
+	while (afu->events[i] != NULL) {
+		if (afu->events[i]->header.type -= CXL_EVENT_AFU_INTERRUPT) {
+			pthread_mutex_unlock(&(afu->event_lock));
+			return;
+		}
+		++i;
+	}
+	assert(i < EVENT_QUEUE_MAX);
+
+	size = sizeof(struct cxl_event_header) +
+	    sizeof(struct cxl_event_afu_interrupt);
+	afu->events[i] = (struct cxl_event *)calloc(1, size);
+	afu->events[i]->header.type = CXL_EVENT_AFU_INTERRUPT;
+	afu->events[i]->header.size = size;
+	afu->events[i]->header.process_element = afu->context;
+	afu->events[i]->irq.irq = irq;
+
+	// FIXME: Handle errors on write?
+	write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	pthread_mutex_unlock(&(afu->event_lock));
+}
+
+static void _handle_afu_error(struct cxl_afu_h *afu)
+{
+	uint64_t error;
+	uint16_t size;
+	uint8_t data[sizeof(error)];
+	int i;
+
+	DPRINTF("AFU ERROR\n");
+	if (get_bytes_silent(afu->fd, sizeof(error), data, 0, 0) < 0) {
+		afu->opened = 0;
+		afu->attached = 0;
+		return;
+	}
+	memcpy(&error, data, sizeof(error));
+	error = le64toh(error);
+
+	// Only track a single AFU error at a time
+	pthread_mutex_lock(&(afu->event_lock));
+	i = 0;
+	while (afu->events[i] != NULL) {
+		if (afu->events[i]->header.type == CXL_EVENT_AFU_ERROR) {
+			pthread_mutex_unlock(&(afu->event_lock));
+			return;
+		}
+		++i;
+	}
+	assert(i < EVENT_QUEUE_MAX);
+
+	size = sizeof(struct cxl_event_header) +
+	    sizeof(struct cxl_event_afu_error);
+	afu->events[i] = (struct cxl_event *)calloc(1, size);
+	afu->events[i]->header.type = CXL_EVENT_AFU_ERROR;
+	afu->events[i]->header.size = size;
+	afu->events[i]->header.process_element = afu->context;
+	afu->events[i]->afu_error.error = error;
+
+	// FIXME: Handle errors on write?
+	write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	pthread_mutex_unlock(&(afu->event_lock));
 }
 
 static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
@@ -195,39 +283,6 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		}
 	}
 	afu->mmio.state = LIBCXL_REQ_IDLE;
-}
-
-static void _handle_interrupt(struct cxl_afu_h *afu)
-{
-	uint16_t size, irq;
-	uint8_t data[sizeof(uint16_t)];
-	uint8_t type;
-
-	DPRINTF("AFU INTERRUPT\n");
-	if (get_bytes_silent(afu->fd, sizeof(uint16_t), data, 0, 0) < 0) {
-		afu->opened = 0;
-		afu->attached = 0;
-		return;
-	}
-	memcpy(&irq, data, sizeof(uint16_t));
-	irq = le16toh(irq);
-
-	// Only track a single interrupt at a time
-	if (afu->irq != NULL)
-		return;
-
-	size = sizeof(struct cxl_event_header) +
-	    sizeof(struct cxl_event_afu_interrupt);
-	afu->irq = (struct cxl_event *)calloc(1, size);
-	afu->irq->header.type = CXL_EVENT_AFU_INTERRUPT;
-	afu->irq->header.size = size;
-	afu->irq->header.process_element = afu->context;
-	afu->irq->irq.irq = irq;
-	if (afu->first_event == NULL)
-		afu->first_event = afu->irq;
-	type = (uint8_t) CXL_EVENT_AFU_INTERRUPT;
-	// FIXME: Handle errors on write?
-	write(afu->pipe[1], &type, 1);
 }
 
 static void _req_max_int(struct cxl_afu_h *afu)
@@ -535,6 +590,9 @@ static void *_psl_loop(void *ptr)
 		case PSLSE_INTERRUPT:
 			_handle_interrupt(afu);
 			break;
+		case PSLSE_AFU_ERROR:
+			_handle_afu_error(afu);
+			break;
 		default:
 			break;
 		}
@@ -682,6 +740,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 	}
 
 	pipe(afu->pipe);
+	pthread_mutex_init(&(afu->event_lock), NULL);
 	afu->fd = fd;
 	afu->map = afu_map;
 	afu->dbg_id = (major << 4) | minor;
@@ -735,6 +794,7 @@ static void _release_afus(struct cxl_afu_h *afu)
 		}
 		if (afu->id)
 			free(afu->id);
+		pthread_mutex_destroy(&(afu->event_lock));
 		free(afu);
 	}
 }
@@ -817,6 +877,7 @@ static struct cxl_afu_h *_pslse_open(int *fd, uint16_t afu_map, uint8_t major,
 	return afu;
 
  open_fail:
+	pthread_mutex_destroy(&(afu->event_lock));
 	free(afu);
 	errno = ENODEV;
 	return NULL;
@@ -1120,6 +1181,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
  free_done:
 	if (afu->id != NULL)
 		free(afu->id);
+	pthread_mutex_destroy(&(afu->event_lock));
 	free(afu);
 }
 
@@ -1203,36 +1265,37 @@ int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp)
 
 int cxl_event_pending(struct cxl_afu_h *afu)
 {
-	if (afu->first_event == NULL)
-		return 0;
-	return 1;
+	if (afu->events[0] != NULL)
+		return 1;
+
+	return 0;
 }
 
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 {
 	uint8_t type;
+	int i;
 
 	if (afu == NULL || event == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 	// Function will block until event occurs
-	while (afu->opened && (afu->first_event == NULL)) {	/*infinite loop */
+	pthread_mutex_lock(&(afu->event_lock));
+	while (afu->opened && !afu->events[0]) {	/*infinite loop */
+		pthread_mutex_unlock(&(afu->event_lock));
 		if (_delay_1ms() < 0)
 			return -1;
+		pthread_mutex_lock(&(afu->event_lock));
 	}
 
-	// Copy event data, free and move next event, if any, to first
-	memcpy(event, afu->first_event, afu->first_event->header.size);
-	if (afu->first_event == afu->irq) {
-		free(afu->irq);
-		afu->irq = NULL;
-		afu->first_event = afu->dsi;
-	} else if (afu->first_event == afu->dsi) {
-		free(afu->dsi);
-		afu->dsi = NULL;
-		afu->first_event = afu->irq;
-	}
+	// Copy event data, free and move remaining events in queue
+	memcpy(event, afu->events[0], afu->events[0]->header.size);
+	free(afu->events[0]);
+	for (i = 1; i < EVENT_QUEUE_MAX; i++)
+		afu->events[i - 1] = afu->events[i];
+	afu->events[EVENT_QUEUE_MAX - 1] = NULL;
+	pthread_mutex_unlock(&(afu->event_lock));
 	read(afu->pipe[0], &type, 1);
 	return 0;
 }
