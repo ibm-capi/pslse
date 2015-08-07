@@ -72,7 +72,7 @@ C) VCS
 		your AFU HDL files. The following command has been tested and
 		works:
 		
-		$VCS_HOME/bin/vcs -q -sverilog -gui -R -file ./pslse/vcs_include ./pslse/afu_driver/src/afu_driver.c ./pslse/common/psl_interface.c +vpi ./pslse/afu_driver/verilog/top.v [path to your AFU]		
+		$VCS_HOME/bin/vcs -q -sverilog -gui -R -file ./pslse/vcs_include ./pslse/afu_driver/src/afu_driver.c ./pslse/common/psl_interface.c +vpi ./pslse/afu_driver/verilog/top.v [path to your AFU]/*		
 
 		When invoked from the parent directory of PSLSE [eg. ~/project/], 
 		this will compile the necessary C files, as well as include 
