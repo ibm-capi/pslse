@@ -2,6 +2,7 @@ Quick start instructions for various simulators:
 
 A) modelsim_ase (Free version for ModelSim with Quartus)
 B) NCsim
+C) VCS
 
 
 A) modelsim_ase
@@ -60,3 +61,21 @@ B) NCsim
 
 	6) At this point the simulator will be waiting for pslse to connect.
 		Refer back to QUICK_START for those instructions.
+
+C) VCS
+	1) Set the VPI_USER_H_DIR environment variable to
+		"$VCS_HOME/`vcs -platform`/lib"
+
+	2) Comment out the VLI instatiation code in afu_driver.c
+
+	3) Use vcs to compile afu_driver.c, psl_interface.c, top.v, as well as
+		your AFU HDL files. The following command has been tested and
+		works:
+		
+		$VCS_HOME/bin/vcs -q -sverilog -gui -R -file ./pslse/vcs_include ./pslse/afu_driver/src/afu_driver.c ./pslse/common/psl_interface.c +vpi ./pslse/afu_driver/verilog/top.v [path to your AFU]		
+
+		When invoked from the parent directory of PSLSE [eg. ~/project/], 
+		this will compile the necessary C files, as well as include 
+		the needed header files, compile your AFU source code 
+		(additional flags may need to be passed for VHDL), link 
+		everything, then run the simulation with a gui.
