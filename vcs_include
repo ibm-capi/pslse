@@ -1,0 +1,3 @@
+-CFLAGS '-I[absolute path to /pslse/common]'
+-CFLAGS '-I$VCS_HOME/`vcs -platform`/lib'
+-P ./pslse/afu_driver/verilog/top.tab
