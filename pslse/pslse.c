@@ -419,6 +419,7 @@ static int _start_server()
 				perror("bind");
 				return -1;
 			}
+			info_msg("_start_server: Bumping port count");
 			++port;
 			continue;
 		}
@@ -426,7 +427,7 @@ static int _start_server()
 	}
 	listen(listen_fd, 4);	// FIXME: constant 4
 	hostname[MAX_LINE_CHARS - 1] = '\0';
-	gethostname(hostname, 1023);
+	gethostname(hostname, MAX_LINE_CHARS-1);
 	info_msg("Started PSLSE server, listening on %s:%d", hostname, port);
 
 	return listen_fd;

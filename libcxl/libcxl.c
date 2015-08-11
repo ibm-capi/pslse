@@ -608,7 +608,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 	uint8_t buffer[MAX_LINE_CHARS];
 	struct sockaddr_in ssadr;
 	struct hostent *he;
-	char *host, *port_str;
+	char *host, *port_str, *afudev;
 	int port;
 
 	// Get hostname and port of PSLSE server
@@ -618,25 +618,47 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		perror("fopen:pslse_server.dat");
 		goto connect_fail;
 	}
+	do {
 	if (fgets((char *)buffer, MAX_LINE_CHARS - 1, fp) == NULL) {
 		perror("fgets:pslse_server.dat");
 		fclose(fp);
 		goto connect_fail;
 	}
+	}
+	while(buffer[0] == '#');
 	fclose(fp);
-	host = (char *)buffer;
-	port_str = strchr((char *)buffer, ':');
-	*port_str = '\0';
-	port_str++;
-	if (!host || !port_str) {
-		warn_msg("cxl_afu_open_dev:Invalid format in pslse_server.dat");
+
+	afudev = (char *)buffer;
+
+	host = strchr((char*)buffer,',');
+
+	if (!host)
+	{
+		warn_msg("cxl_afu_open_dev:Invalid format in pslse_server.dat, missing hostname");
+		warn_msg(buffer);
 		goto connect_fail;
 	}
+	*host='\0';
+	++host;
+
+	port_str = strchr((char *)host, ':');
+
+	if(!port_str)
+	{
+		warn_msg("cxl_afu_open_dev:Invalid format in pslse_server.dat, missing port number");
+		warn_msg(host);
+		goto connect_fail;
+	}
+	*port_str = '\0';
+	port_str++;
 	port = atoi(port_str);
+
+	printf("Connecting to host '%s' port %d",host,port);
 
 	// Connect to PSLSE server
 	if ((he = gethostbyname(host)) == NULL) {
 		herror("gethostbyname");
+		puts(host);
 		goto connect_fail;
 	}
 	memset(&ssadr, 0, sizeof(ssadr));
