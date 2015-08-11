@@ -1,0 +1,8 @@
+$afu_init call=afu_init
+$register_clock call=register_clock
+$register_control call=register_control
+$register_mmio call=register_mmio
+$register_command call=register_command
+$register_rd_buffer call=register_rd_buffer
+$register_wr_buffer call=register_wr_buffer
+$register_response call=register_response
