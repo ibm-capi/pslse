@@ -427,7 +427,7 @@ static int _start_server()
 	}
 	listen(listen_fd, 4);	// FIXME: constant 4
 	hostname[MAX_LINE_CHARS - 1] = '\0';
-	gethostname(hostname, MAX_LINE_CHARS-1);
+	gethostname(hostname, MAX_LINE_CHARS - 1);
 	info_msg("Started PSLSE server, listening on %s:%d", hostname, port);
 
 	return listen_fd;
