@@ -205,10 +205,8 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 
 	// Test for client disconnect
 	if (_get_client(cmd, event) == NULL) {
-		free(event->parity);
-		free(event->data);
-		free(event);
-		return;
+		event->resp = PSL_RESPONSE_FAILED;
+		event->state = MEM_DONE;
 	}
 
 	head = &(cmd->list);
@@ -954,12 +952,14 @@ void handle_response(struct cmd *cmd)
 	int rc;
 
 	// Select a random pending response (or none)
+	client = NULL;
 	head = &cmd->list;
 	while (*head != NULL) {
 		// Fast track error responses
 		if (((*head)->resp == PSL_RESPONSE_PAGED) ||
 		    ((*head)->resp == PSL_RESPONSE_NRES) ||
 		    ((*head)->resp == PSL_RESPONSE_NLOCK) ||
+		    ((*head)->resp == PSL_RESPONSE_FAILED) ||
 		    ((*head)->resp == PSL_RESPONSE_FLUSHED)) {
 			event = *head;
 			goto drive_resp;
@@ -976,13 +976,6 @@ void handle_response(struct cmd *cmd)
 				&& !allow_resp(cmd->parms))) {
 		return;
 	}
-
- drive_resp:
-	if (event == cmd->buffer_read) {
-		fatal_msg("Driving response when buffer read still active");
-		_print_event(event);
-		assert(event != cmd->buffer_read);
-	}
 	// Test for client disconnect
 	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
@@ -994,10 +987,19 @@ void handle_response(struct cmd *cmd)
 		client->flushing = FLUSH_FLUSHING;
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
+
+ drive_resp:
+	// Check for pending buffer activity
+	if (event == cmd->buffer_read) {
+		fatal_msg("Driving response when buffer read still active");
+		_print_event(event);
+		assert(event != cmd->buffer_read);
+	}
+
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	if (rc == PSL_SUCCESS) {
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		if (event->command == PSL_COMMAND_RESTART)
+		if ((client != NULL) && (event->command == PSL_COMMAND_RESTART))
 			client->flushing = FLUSH_NONE;
 		*head = event->_next;
 		free(event->data);
