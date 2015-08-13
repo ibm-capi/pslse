@@ -484,8 +484,9 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 
 	cmd->credits--;
 
-	// No clients connected
-	if ((cmd->client == NULL) || (cmd->client[handle] == NULL)) {
+	// Client not connected
+	if ((cmd == NULL) || (cmd->client == NULL) ||
+	    (handle >= cmd->max_clients) || ((cmd->client[handle]) == NULL)) {
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FAILED);
 		return;
