@@ -34,7 +34,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <malloc.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <pthread.h>

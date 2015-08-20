@@ -28,8 +28,8 @@
 
 #include <assert.h>
 #include <inttypes.h>
-#include <malloc.h>
 #include <poll.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 #include "mmio.h"

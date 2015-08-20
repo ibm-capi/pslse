@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>

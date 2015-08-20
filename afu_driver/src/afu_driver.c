@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <malloc.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdint.h>

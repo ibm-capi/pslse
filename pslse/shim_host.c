@@ -21,7 +21,6 @@
  *  hostname and ports of each AFU simulator and calls psl_init for each.
  */
 
-#include <malloc.h>
 #include <stdlib.h>
 
 #include "shim_host.h"

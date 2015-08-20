@@ -15,7 +15,6 @@
  */
 
 #include <errno.h>
-#include <malloc.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdarg.h>
