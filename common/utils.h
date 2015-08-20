@@ -88,7 +88,7 @@ void ns_delay(long ns);
 void lock_delay(pthread_mutex_t * lock);
 
 // Is there incoming data on socket?
-int bytes_ready(int fd, int *abort);
+int bytes_ready(int fd, int timeout, int *abort);
 
 // Allocate memory for data and get size bytes from fd, no debug
 int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort);

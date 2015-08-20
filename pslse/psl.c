@@ -158,7 +158,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	// Check for event from application
 	cmd = (struct cmd_event *)client->mem_access;
 	mmio = NULL;
-	if (bytes_ready(client->fd, &(client->abort))) {
+	if (bytes_ready(client->fd, 1, &(client->abort))) {
 		if (get_bytes(client->fd, 1, buffer, psl->timeout,
 			      &(client->abort), psl->dbg_fp, psl->dbg_id,
 			      client->context) < 0) {

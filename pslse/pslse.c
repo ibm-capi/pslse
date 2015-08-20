@@ -213,6 +213,7 @@ static struct client *_client_connect(int *fd, char *ip)
 	client->fd = *fd;
 	client->ip = ip;
 	client->pending = 1;
+	client->timeout = timeout;
 	client->flushing = FLUSH_NONE;
 	client->state = CLIENT_NONE;
 
@@ -335,7 +336,7 @@ static void *_client_loop(void *ptr)
 
 	pthread_mutex_lock(&lock);
 	while (client->pending) {
-		rc = bytes_ready(client->fd, &(client->abort));
+		rc = bytes_ready(client->fd, client->timeout, &(client->abort));
 		if (rc == 0) {
 			lock_delay(&lock);
 			continue;

@@ -103,7 +103,7 @@ void lock_delay(pthread_mutex_t * lock)
 }
 
 // Is there incoming data on socket?
-int bytes_ready(int fd, int *abort)
+int bytes_ready(int fd, int timeout, int *abort)
 {
 	struct pollfd pfd;
 	int rc;
@@ -111,14 +111,15 @@ int bytes_ready(int fd, int *abort)
 	pfd.fd = fd;
 	pfd.events = POLLIN | POLLHUP;
 	pfd.revents = 0;
-	rc = poll(&pfd, 1, 1);
+	do {
+		rc = poll(&pfd, 1, timeout);
+	}
+	while ((rc < 0) && (errno == EINTR));
 	if ((abort != NULL) && (*abort != 0))
 		return -1;
 	if (rc > 0)
 		return 1;
 	if (rc == 0)
-		return 0;
-	if (errno == EINTR)
 		return 0;
 	warn_msg("Socket disconnect on poll");
 	return -1;
@@ -127,33 +128,17 @@ int bytes_ready(int fd, int *abort)
 // Get bytes from socket
 int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 {
-	struct timespec start, now;
-	double milliseconds;
 	int count, bytes, rc;
-
-	if (clock_gettime(CLOCK_REALTIME, &start) < 0) {
-		perror("clock_gettime");
-		return -1;
-	}
 
 	bytes = 0;
 	while (bytes < size) {
-		// Check for timeout
-		if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
-			perror("clock_gettime");
-			break;
-		}
-		milliseconds = (double)(now.tv_sec - start.tv_sec) *
-		    (double)1000L +
-		    (double)(now.tv_nsec - start.tv_nsec) / (double)(1000000L);
-		if ((timeout > 0) && (((int)milliseconds) > timeout)) {
+		// Check for socket activity
+
+		rc = bytes_ready(fd, timeout, abort);
+		if (rc == 0) {
 			warn_msg("Socket timeout");
 			break;
 		}
-		// Check for socket activity
-		rc = bytes_ready(fd, abort);
-		if (rc == 0)
-			continue;
 		if (rc < 0) {
 			perror("bytes_ready");
 			break;

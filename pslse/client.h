@@ -37,6 +37,7 @@ struct client {
 	int fd;
 	int context;
 	int abort;
+	int timeout;
 	enum flush_state flushing;
 	enum client_state state;
 	uint16_t max_irqs;

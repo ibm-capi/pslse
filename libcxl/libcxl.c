@@ -117,7 +117,8 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 	int i;
 
 	DPRINTF("AFU INTERRUPT\n");
-	if (get_bytes_silent(afu->fd, sizeof(irq), data, 0, 0) < 0) {
+	if (get_bytes_silent(afu->fd, sizeof(irq), data, 1000, 0) < 0) {
+		warn_msg("Socket failure getting IRQ");
 		afu->opened = 0;
 		afu->attached = 0;
 		return -1;
@@ -161,7 +162,8 @@ static int _handle_afu_error(struct cxl_afu_h *afu)
 	int i;
 
 	DPRINTF("AFU ERROR\n");
-	if (get_bytes_silent(afu->fd, sizeof(error), data, 0, 0) < 0) {
+	if (get_bytes_silent(afu->fd, sizeof(error), data, 1000, 0) < 0) {
+		warn_msg("Socket failure getting AFU ERROR");
 		afu->opened = 0;
 		afu->attached = 0;
 		return -1;
@@ -281,7 +283,8 @@ static void _handle_ack(struct cxl_afu_h *afu)
 
 	DPRINTF("MMIO ACK\n");
 	if (afu->mmio.type == PSLSE_MMIO_READ64) {
-		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 0, 0) < 0) {
+		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 1000, 0) < 0) {
+			warn_msg("Socket failure getting MMIO Ack");
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FFEEDB00FL;
@@ -291,7 +294,8 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		}
 	}
 	if (afu->mmio.type == PSLSE_MMIO_READ32) {
-		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, 0, 0) < 0) {
+		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, 1000, 0) < 0) {
+			warn_msg("Socket failure getting MMIO Read 32 data");
 			afu->opened = 0;
 			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FL;
@@ -494,7 +498,7 @@ static void *_psl_loop(void *ptr)
 			}
 		}
 		// Process socket input from PSLSE
-		rc = bytes_ready(afu->fd, 0);
+		rc = bytes_ready(afu->fd, 1000, 0);
 		if (rc == 0)
 			continue;
 		if (rc < 0) {
@@ -503,7 +507,8 @@ static void *_psl_loop(void *ptr)
 			afu->opened = 0;
 			break;
 		}
-		if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
+		if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+			warn_msg("Socket failure getting PSL event");
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
@@ -512,7 +517,8 @@ static void *_psl_loop(void *ptr)
 		DPRINTF("PSL EVENT\n");
 		switch (buffer[0]) {
 		case PSLSE_OPEN:
-			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting OPEN context");
 				afu->opened = 0;
 				afu->open.state = LIBCXL_REQ_IDLE;
 				break;
@@ -530,7 +536,8 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MAX_INT:
 			size = sizeof(uint16_t);
-			if (get_bytes_silent(afu->fd, size, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting max interrupt acknowledge");
 				afu->opened = 0;
 				break;
 			}
@@ -541,7 +548,8 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_QUERY:
 			size = sizeof(uint16_t) + sizeof(uint16_t);
-			if (get_bytes_silent(afu->fd, size, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting PSLSE query");
 				afu->opened = 0;
 				break;
 			}
@@ -552,13 +560,15 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MEMORY_READ:
 			DPRINTF("AFU MEMORY READ\n");
-			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting memory read size");
 				afu->opened = 0;
 				break;
 			}
 			size = (uint8_t) buffer[0];
 			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
 					     -1, 0) < 0) {
+				warn_msg("Socket failure getting memory read addr");
 				afu->opened = 0;
 				break;
 			}
@@ -568,7 +578,8 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MEMORY_WRITE:
 			DPRINTF("AFU MEMORY WRITE\n");
-			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting memory write size");
 				afu->opened = 0;
 				break;
 			}
@@ -580,7 +591,8 @@ static void *_psl_loop(void *ptr)
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
 			addr = le64toh(addr);
-			if (get_bytes_silent(afu->fd, size, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting memory write data");
 				afu->opened = 0;
 				break;
 			}
@@ -588,13 +600,15 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_MEMORY_TOUCH:
 			DPRINTF("AFU MEMORY TOUCH\n");
-			if (get_bytes_silent(afu->fd, 1, buffer, 0, 0) < 0) {
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg("Socket failure getting memory touch size");
 				afu->opened = 0;
 				break;
 			}
 			size = buffer[0];
 			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
 					     -1, 0) < 0) {
+				warn_msg("Socket failure getting memory touch addr");
 				afu->opened = 0;
 				break;
 			}
@@ -692,7 +706,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		warn_msg("cxl_afu_open_dev:Failed to write to socket!");
 		goto connect_fail;
 	}
-	if (get_bytes_silent(*fd, 1, buffer, 0, 0) < 0) {
+	if (get_bytes_silent(*fd, 1, buffer, -1, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:Socket failed open acknowledge");
 		close_socket(fd);
 		goto connect_fail;
@@ -702,7 +716,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		close_socket(fd);
 		goto connect_fail;
 	}
-	if (get_bytes_silent(*fd, sizeof(uint16_t), buffer, 0, 0) < 0) {
+	if (get_bytes_silent(*fd, sizeof(uint16_t), buffer, 1000, 0) < 0) {
 		warn_msg("cxl_afu_open_dev:afu_map");
 		close_socket(fd);
 		goto connect_fail;
