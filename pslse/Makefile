@@ -8,7 +8,7 @@ OBJS = pslse.o client.o cmd.o debug.o job.o mmio.o parms.o psl.o shim_host.o psl
 all: pslse
 
 pslse: $(OBJS)
-	$(call Q,CC, $(CC) $(CFLAGS) -o $@ $^ -lpthread -lrt, $@)
+	$(call Q,CC, $(CC) $(CFLAGS) -o $@ $^ -lpthread, $@)
 
 clean:
 	rm -f *.[od] gmon.out pslse
