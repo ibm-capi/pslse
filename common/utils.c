@@ -27,6 +27,33 @@
 #include "debug.h"
 #include "utils.h"
 
+// Is this a little endian machine?
+static uint16_t _is_little_endian(void)
+{
+	union
+	{
+		uint16_t i16;
+		uint8_t i8[sizeof(uint16_t)];
+	} u;
+	u.i16=1;
+	return u.i8[0];
+}
+
+uint64_t htonll(uint64_t hostlonglong)
+{
+	if (_is_little_endian()) {
+		return (((uint64_t) (htonl((uint32_t) hostlonglong))) << 32) ||
+			((uint64_t) (htonl((uint32_t) (hostlonglong >> 32))));
+	}
+
+	return hostlonglong;
+}
+
+uint64_t ntohll(uint64_t netlonglong)
+{
+	return htonll(netlonglong);
+}
+
 // Display fatal message (For catching coding bugs, not AFU bugs)
 void fatal_msg(const char *format, ...)
 {

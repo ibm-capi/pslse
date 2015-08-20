@@ -572,7 +572,7 @@ void handle_buffer_write(struct cmd *cmd)
 		buffer[0] = (uint8_t) PSLSE_MEMORY_READ;
 		buffer[1] = (uint8_t) event->size;
 		addr = (uint64_t *) & (buffer[2]);
-		*addr = htole64(event->addr);
+		*addr = htonll(event->addr);
 		event->abort = &(client->abort);
 		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
 			      cmd->dbg_id, event->context) < 0) {
@@ -657,7 +657,7 @@ void handle_touch(struct cmd *cmd)
 	buffer[0] = (uint8_t) PSLSE_MEMORY_TOUCH;
 	buffer[1] = (uint8_t) event->size;
 	addr = (uint64_t *) & (buffer[2]);
-	*addr = htole64(event->addr & CACHELINE_MASK);
+	*addr = htonll(event->addr & CACHELINE_MASK);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context) < 0) {
@@ -697,7 +697,7 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send interrupt to client
 	buffer[0] = PSLSE_INTERRUPT;
-	irq = htole16(cmd->irq);
+	irq = htons(cmd->irq);
 	memcpy(&(buffer[1]), &irq, 2);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
@@ -792,7 +792,7 @@ void handle_mem_write(struct cmd *cmd)
 	buffer[0] = (uint8_t) PSLSE_MEMORY_WRITE;
 	buffer[1] = (uint8_t) event->size;
 	addr = (uint64_t *) & (buffer[2]);
-	*addr = htole64(event->addr);
+	*addr = htonll(event->addr);
 	memcpy(&(buffer[10]), &(event->data[offset]), event->size);
 	event->abort = &(client->abort);
 	if (put_bytes(client->fd, event->size + 10, buffer, cmd->dbg_fp,

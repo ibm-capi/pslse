@@ -150,7 +150,7 @@ static void _max_irqs(struct client *client, uint8_t id)
 		return;
 	}
 	memcpy((char *)&client->max_irqs, (char *)buffer, sizeof(uint16_t));
-	client->max_irqs = le16toh(client->max_irqs);
+	client->max_irqs = ntohs(client->max_irqs);
 
 	// Limit to legal value
 	if (client->max_irqs < psl->mmio->desc.num_ints_per_process)
@@ -160,7 +160,7 @@ static void _max_irqs(struct client *client, uint8_t id)
 
 	// Return set value
 	buffer[0] = PSLSE_MAX_INT;
-	value = htole16(client->max_irqs);
+	value = htons(client->max_irqs);
 	memcpy(&(buffer[1]), (char *)&value, 2);
 	if (put_bytes(client->fd, 3, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context) < 0) {
@@ -218,7 +218,7 @@ static struct client *_client_connect(int *fd, char *ip)
 
 	// Return acknowledge to client
 	ack[0] = PSLSE_CONNECT;
-	map = htole16(afu_map);
+	map = htons(afu_map);
 	memcpy(&(ack[1]), &map, sizeof(map));
 	if (put_bytes(client->fd, 3, ack, fp, -1, -1) < 0) {
 		_free_client(client);

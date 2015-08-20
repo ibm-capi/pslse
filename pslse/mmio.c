@@ -36,6 +36,7 @@
  *  memory will be freed.
  */
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <stdlib.h>
@@ -260,8 +261,8 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 	}
 	// Check flags value and set
 	if (!mmio->flags) {
-		mmio->flags = le32toh(flags);
-	} else if (mmio->flags != le32toh(flags)) {
+		mmio->flags = ntohl(flags);
+	} else if (mmio->flags != ntohl(flags)) {
 		warn_msg("Set conflicting mmio endianess for AFU");
 		ack = PSLSE_MMIO_FAIL;
 	}
@@ -293,21 +294,21 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 			     &(client->abort)) < 0) {
 		goto write_fail;
 	}
-	offset = le32toh(offset);
+	offset = ntohl(offset);
 	if (dw) {
 		if (get_bytes_silent(fd, 8, (uint8_t *) & data64, mmio->timeout,
 				     &(client->abort)) < 0) {
 			goto write_fail;
 		}
 		// Convert data from client from little endian to host
-		data = le64toh(data64);
+		data = ntohll(data64);
 	} else {
 		if (get_bytes_silent(fd, 4, (uint8_t *) & data32, mmio->timeout,
 				     &(client->abort)) < 0) {
 			goto write_fail;
 		}
 		// Convert data from client from little endian to host
-		data32 = le32toh(data32);
+		data32 = ntohl(data32);
 		data = (uint64_t) data32;
 		data <<= 32;
 		data |= (uint64_t) data32;
@@ -333,7 +334,7 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 			     &(client->abort)) < 0) {
 		goto read_fail;
 	}
-	offset = le32toh(offset);
+	offset = ntohl(offset);
 	event = _add_mmio(mmio, client, 1, dw, offset / 4, 0);
 	return event;
 

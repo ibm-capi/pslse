@@ -26,6 +26,7 @@
  *  for handling jobs, commands and mmios are each in there own separate files.
  */
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <poll.h>
@@ -57,7 +58,7 @@ static void _attach(struct psl *psl, struct client *client)
 		goto attach_done;
 	}
 	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
-	wed = le64toh(wed);
+	wed = ntohll(wed);
 
 	// Send start to AFU
 	if (add_job(psl->job, PSL_JOB_START, wed) != NULL) {
@@ -116,7 +117,7 @@ static void _handle_afu(struct psl *psl)
 		size = 1 + sizeof(uint64_t);
 		buffer = (uint8_t *) malloc(size);
 		buffer[0] = PSLSE_AFU_ERROR;
-		error = htole64(error);
+		error = htonll(error);
 		memcpy((char *)&(buffer[1]), (char *)&error, sizeof(error));
 		if (put_bytes
 		    (client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,

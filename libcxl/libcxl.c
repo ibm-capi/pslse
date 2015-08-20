@@ -123,7 +123,7 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 		return -1;
 	}
 	memcpy(&irq, data, sizeof(irq));
-	irq = le16toh(irq);
+	irq = ntohs(irq);
 
 	// Only track a single interrupt at a time
 	pthread_mutex_lock(&(afu->event_lock));
@@ -168,7 +168,7 @@ static int _handle_afu_error(struct cxl_afu_h *afu)
 		return -1;
 	}
 	memcpy(&error, data, sizeof(error));
-	error = le64toh(error);
+	error = ntohll(error);
 
 	// Only track a single AFU error at a time
 	pthread_mutex_lock(&(afu->event_lock));
@@ -289,7 +289,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 			afu->mmio.data = 0xFEEDB00FFEEDB00FL;
 		} else {
 			memcpy(&(afu->mmio.data), data, sizeof(uint64_t));
-			afu->mmio.data = le64toh(afu->mmio.data);
+			afu->mmio.data = ntohll(afu->mmio.data);
 		}
 	}
 	if (afu->mmio.type == PSLSE_MMIO_READ32) {
@@ -300,7 +300,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 			afu->mmio.data = 0xFEEDB00FL;
 		} else {
 			memcpy(&(afu->mmio.data), data, sizeof(uint32_t));
-			afu->mmio.data = le32toh(afu->mmio.data);
+			afu->mmio.data = ntohl(afu->mmio.data);
 		}
 	}
 	afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -315,7 +315,7 @@ static void _req_max_int(struct cxl_afu_h *afu)
 	size = 1 + sizeof(uint16_t);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MAX_INT;
-	value = htole16(afu->int_req.max);
+	value = htons(afu->int_req.max);
 	memcpy((char *)&(buffer[1]), (char *)&value, sizeof(uint16_t));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
@@ -341,7 +341,7 @@ static void _pslse_attach(struct cxl_afu_h *afu)
 	buffer[0] = PSLSE_ATTACH;
 	offset = 1;
 	wed_ptr = (uint64_t *) & (buffer[offset]);
-	*wed_ptr = htole64(afu->attach.wed);
+	*wed_ptr = htonll(afu->attach.wed);
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
 		close_socket(&(afu->fd));
@@ -366,7 +366,7 @@ static void _mmio_map(struct cxl_afu_h *afu)
 	buffer[0] = PSLSE_MMIO_MAP;
 	flags = (uint32_t) afu->mmio.data;
 	flags_ptr = (uint32_t *) & (buffer[1]);
-	*flags_ptr = htole32(flags);
+	*flags_ptr = htonl(flags);
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
 		close_socket(&(afu->fd));
@@ -390,10 +390,10 @@ static void _mmio_write64(struct cxl_afu_h *afu)
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MMIO_WRITE64;
 	offset = 1;
-	addr = htole32(afu->mmio.addr);
+	addr = htonl(afu->mmio.addr);
 	memcpy((char *)&(buffer[offset]), (char *)&addr, sizeof(addr));
 	offset += sizeof(addr);
-	data = htole64(afu->mmio.data);
+	data = htonll(afu->mmio.data);
 	memcpy((char *)&(buffer[offset]), (char *)&data, sizeof(data));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
@@ -418,10 +418,10 @@ static void _mmio_write32(struct cxl_afu_h *afu)
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MMIO_WRITE32;
 	offset = 1;
-	addr = htole32(afu->mmio.addr);
+	addr = htonl(afu->mmio.addr);
 	memcpy((char *)&(buffer[offset]), (char *)&addr, sizeof(addr));
 	offset += sizeof(addr);
-	data = htole32(afu->mmio.data);
+	data = htonl(afu->mmio.data);
 	memcpy((char *)&(buffer[offset]), (char *)&data, sizeof(data));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
@@ -445,7 +445,7 @@ static void _mmio_read(struct cxl_afu_h *afu)
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = afu->mmio.type;
 	offset = 1;
-	addr = htole32(afu->mmio.addr);
+	addr = htonl(afu->mmio.addr);
 	memcpy((char *)&(buffer[offset]), (char *)&addr, sizeof(addr));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
@@ -542,7 +542,7 @@ static void *_psl_loop(void *ptr)
 			}
 			memcpy((char *)&value, (char *)buffer,
 			       sizeof(uint16_t));
-			afu->irqs_max = le16toh(value);
+			afu->irqs_max = ntohs(value);
 			afu->int_req.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_QUERY:
@@ -553,9 +553,9 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			memcpy((char *)&value, (char *)&(buffer[1]), 2);
-			afu->irqs_min = (long)le16toh(value);
+			afu->irqs_min = (long)ntohs(value);
 			memcpy((char *)&value, (char *)&(buffer[3]), 2);
-			afu->irqs_max = (long)le16toh(value);
+			afu->irqs_max = (long)ntohs(value);
 			break;
 		case PSLSE_MEMORY_READ:
 			DPRINTF("AFU MEMORY READ\n");
@@ -572,7 +572,7 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
-			addr = le64toh(addr);
+			addr = ntohll(addr);
 			_handle_read(afu, addr, size);
 			break;
 		case PSLSE_MEMORY_WRITE:
@@ -589,7 +589,7 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
-			addr = le64toh(addr);
+			addr = ntohll(addr);
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) < 0) {
 				warn_msg("Socket failure getting memory write data");
 				afu->opened = 0;
@@ -612,7 +612,7 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
-			addr = le64toh(addr);
+			addr = ntohll(addr);
 			_handle_touch(afu, addr, size);
 			break;
 		case PSLSE_MMIO_ACK:
@@ -721,7 +721,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 		goto connect_fail;
 	}
 	memcpy((char *)afu_map, (char *)buffer, 2);
-	*afu_map = (long)le16toh(*afu_map);
+	*afu_map = (long)ntohs(*afu_map);
 	return 0;
 
  connect_fail:

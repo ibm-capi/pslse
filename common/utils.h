@@ -36,7 +36,7 @@
 #define PSL_IDLE_CYCLES 20
 
 #define PSLSE_VERSION_MAJOR	0x01
-#define PSLSE_VERSION_MINOR	0x01
+#define PSLSE_VERSION_MINOR	0x02
 
 #define PSLSE_CONNECT		0x01
 #define PSLSE_QUERY		0x02
@@ -68,6 +68,12 @@ enum pslse_state {
 	PSLSE_RUNNING,
 	PSLSE_DONE
 };
+
+// Convert host to network byte ordering
+uint64_t htonll(uint64_t hostlonglong);
+
+// Convert network to host byte ordering
+uint64_t ntohll(uint64_t netlonglong);
 
 // Display fatal message (For catching code bugs, not AFU bugs)
 void fatal_msg(const char *format, ...);
