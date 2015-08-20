@@ -76,7 +76,7 @@ static int _testmemaddr(uint8_t * memaddr)
 	return ret;
 }
 
-static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
+static int _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 {
 	uint16_t size;
 	int i;
@@ -87,7 +87,7 @@ static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 	while (afu->events[i] != NULL) {
 		if (afu->events[i]->header.type == CXL_EVENT_DATA_STORAGE) {
 			pthread_mutex_unlock(&(afu->event_lock));
-			return;
+			return 0;
 		}
 		++i;
 	}
@@ -102,12 +102,15 @@ static void _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 	afu->events[i]->fault.addr = addr & FOURK_MASK;
 	afu->events[i]->fault.dsisr = DSISR;
 
-	// FIXME: Handle errors on write?
-	write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	do {
+		i = write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	}
+	while ((i==0) || (errno==EINTR));
 	pthread_mutex_unlock(&(afu->event_lock));
+	return i;
 }
 
-static void _handle_interrupt(struct cxl_afu_h *afu)
+static int _handle_interrupt(struct cxl_afu_h *afu)
 {
 	uint16_t size, irq;
 	uint8_t data[sizeof(irq)];
@@ -117,7 +120,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	if (get_bytes_silent(afu->fd, sizeof(irq), data, 0, 0) < 0) {
 		afu->opened = 0;
 		afu->attached = 0;
-		return;
+		return -1;
 	}
 	memcpy(&irq, data, sizeof(irq));
 	irq = le16toh(irq);
@@ -128,7 +131,7 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	while (afu->events[i] != NULL) {
 		if (afu->events[i]->header.type -= CXL_EVENT_AFU_INTERRUPT) {
 			pthread_mutex_unlock(&(afu->event_lock));
-			return;
+			return 0;
 		}
 		++i;
 	}
@@ -142,12 +145,15 @@ static void _handle_interrupt(struct cxl_afu_h *afu)
 	afu->events[i]->header.process_element = afu->context;
 	afu->events[i]->irq.irq = irq;
 
-	// FIXME: Handle errors on write?
-	write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	do {
+		i = write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	}
+	while ((i==0) || (errno==EINTR));
 	pthread_mutex_unlock(&(afu->event_lock));
+	return i;
 }
 
-static void _handle_afu_error(struct cxl_afu_h *afu)
+static int _handle_afu_error(struct cxl_afu_h *afu)
 {
 	uint64_t error;
 	uint16_t size;
@@ -158,7 +164,7 @@ static void _handle_afu_error(struct cxl_afu_h *afu)
 	if (get_bytes_silent(afu->fd, sizeof(error), data, 0, 0) < 0) {
 		afu->opened = 0;
 		afu->attached = 0;
-		return;
+		return -1;
 	}
 	memcpy(&error, data, sizeof(error));
 	error = le64toh(error);
@@ -169,7 +175,7 @@ static void _handle_afu_error(struct cxl_afu_h *afu)
 	while (afu->events[i] != NULL) {
 		if (afu->events[i]->header.type == CXL_EVENT_AFU_ERROR) {
 			pthread_mutex_unlock(&(afu->event_lock));
-			return;
+			return 0;
 		}
 		++i;
 	}
@@ -183,9 +189,12 @@ static void _handle_afu_error(struct cxl_afu_h *afu)
 	afu->events[i]->header.process_element = afu->context;
 	afu->events[i]->afu_error.error = error;
 
-	// FIXME: Handle errors on write?
-	write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	do {
+		i = write(afu->pipe[1], &(afu->events[i]->header.type), 1);
+	}
+	while ((i==0) || (errno==EINTR));
 	pthread_mutex_unlock(&(afu->event_lock));
+	return i;
 }
 
 static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
@@ -193,7 +202,10 @@ static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 	uint8_t buffer[MAX_LINE_CHARS];
 
 	if (!_testmemaddr((uint8_t *) addr)) {
-		_handle_dsi(afu, addr);
+		if (_handle_dsi(afu, addr) < 0) {
+			perror("DSI Failure");
+			return;
+		}
 		DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
 		buffer[0] = (uint8_t) PSLSE_MEM_FAILURE;
 		if (put_bytes_silent(afu->fd, 1, buffer) != 1) {
@@ -217,7 +229,10 @@ static void _handle_write(struct cxl_afu_h *afu, uint64_t addr, uint8_t size,
 	uint8_t buffer;
 
 	if (!_testmemaddr((uint8_t *) addr)) {
-		_handle_dsi(afu, addr);
+		if (_handle_dsi(afu, addr) < 0) {
+			perror("DSI Failure");
+			return;
+		}
 		DPRINTF("WRITE to invalid addr @ 0x%016" PRIx64 "\n", addr);
 		buffer = PSLSE_MEM_FAILURE;
 		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
@@ -240,7 +255,10 @@ static void _handle_touch(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 	uint8_t buffer;
 
 	if (!_testmemaddr((uint8_t *) addr)) {
-		_handle_dsi(afu, addr);
+		if (_handle_dsi(afu, addr) < 0) {
+			perror("DSI Failure");
+			return;
+		}
 		DPRINTF("TOUCH of invalid addr @ 0x%016" PRIx64 "\n", addr);
 		buffer = (uint8_t) PSLSE_MEM_FAILURE;
 		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
@@ -588,16 +606,23 @@ static void *_psl_loop(void *ptr)
 			_handle_ack(afu);
 			break;
 		case PSLSE_INTERRUPT:
-			_handle_interrupt(afu);
+			if (_handle_interrupt(afu) < 0) {
+				perror("Interrupt Failure");
+				goto psl_fail;
+			}
 			break;
 		case PSLSE_AFU_ERROR:
-			_handle_afu_error(afu);
+			if (_handle_afu_error(afu) < 0) {
+				perror("AFU ERROR Failure");
+				goto psl_fail;
+			}
 			break;
 		default:
 			break;
 		}
 	}
 
+psl_fail:
 	afu->attached = 0;
 	pthread_exit(NULL);
 }
@@ -638,7 +663,7 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 	}
 	port = atoi(port_str);
 
-	printf("Connecting to host '%s' port %d", host, port);
+	info_msg("Connecting to host '%s' port %d", host, port);
 
 	// Connect to PSLSE server
 	if ((he = gethostbyname(host)) == NULL) {
@@ -746,7 +771,9 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 		return NULL;
 	}
 
-	pipe(afu->pipe);
+	if (pipe(afu->pipe) < 0)
+		return NULL;
+
 	pthread_mutex_init(&(afu->event_lock), NULL);
 	afu->fd = fd;
 	afu->map = afu_map;
@@ -1197,18 +1224,6 @@ int cxl_afu_opened(struct cxl_afu_h *afu)
 	return afu->opened;
 }
 
-int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-			__u64 amr)
-{
-	// Request maximum interrupts
-	afu->int_req.max = num_interrupts;
-	afu->int_req.state = LIBCXL_REQ_REQUEST;
-	while (afu->int_req.state != LIBCXL_REQ_IDLE)	/*infinite loop */
-		_delay_1ms();
-
-	return cxl_afu_attach(afu, wed);
-}
-
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 {
 	DPRINTF("AFU ATTACH\n");
@@ -1231,6 +1246,18 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 	afu->attached = 1;
 
 	return 0;
+}
+
+int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
+			__u64 amr)
+{
+	// Request maximum interrupts
+	afu->int_req.max = num_interrupts;
+	afu->int_req.state = LIBCXL_REQ_REQUEST;
+	while (afu->int_req.state != LIBCXL_REQ_IDLE)	/*infinite loop */
+		_delay_1ms();
+
+	return cxl_afu_attach(afu, wed);
 }
 
 int cxl_afu_fd(struct cxl_afu_h *afu)
@@ -1303,8 +1330,9 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 		afu->events[i - 1] = afu->events[i];
 	afu->events[EVENT_QUEUE_MAX - 1] = NULL;
 	pthread_mutex_unlock(&(afu->event_lock));
-	read(afu->pipe[0], &type, 1);
-	return 0;
+	if (read(afu->pipe[0], &type, 1) > 0)
+		return 0;
+	return -1;
 }
 
 int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
