@@ -69,11 +69,13 @@ enum pslse_state {
 	PSLSE_DONE
 };
 
+#ifndef __APPLE__
 // Convert host to network byte ordering
 uint64_t htonll(uint64_t hostlonglong);
 
 // Convert network to host byte ordering
 uint64_t ntohll(uint64_t netlonglong);
+#endif /* __APPLE__ */
 
 // Display fatal message (For catching code bugs, not AFU bugs)
 void fatal_msg(const char *format, ...);

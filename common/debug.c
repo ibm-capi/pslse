@@ -5,18 +5,19 @@
 
 #include "debug.h"
 #include "psl_interface_t.h"
+#include "utils.h"
 
 static DBG_HEADER adjust_header(DBG_HEADER header)
 {
 	switch (sizeof(header)) {
 	case sizeof(uint64_t):	/*constant condition */
-		header = htole64(header);
+		header = htonll(header);
 		break;
 	case sizeof(uint32_t):	/*constant condition */
-		header = htole32(header);
+		header = htonl(header);
 		break;
 	case sizeof(uint16_t):	/*constant condition */
-		header = htole16(header);
+		header = htons(header);
 		break;
 	default:
 		break;
@@ -78,7 +79,7 @@ static void _debug_send_id_16(FILE * fp, DBG_HEADER header, uint8_t id,
 		offset += sizeof(header);
 		buffer[offset] = id;
 		offset += sizeof(id);
-		value = htole16(value);
+		value = htons(value);
 		memcpy(buffer + offset, (char *)&value, sizeof(value));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -100,7 +101,7 @@ static void _debug_send_id_32(FILE * fp, DBG_HEADER header, uint8_t id,
 		offset += sizeof(header);
 		buffer[offset] = id;
 		offset += sizeof(id);
-		value = htole32(value);
+		value = htonl(value);
 		memcpy(buffer + offset, (char *)&value, sizeof(value));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -120,10 +121,10 @@ static void _debug_send_32_32(FILE * fp, DBG_HEADER header, uint32_t value0,
 	if ((buffer = (char *)malloc(size)) != NULL) {
 		memcpy(buffer, (char *)&header, sizeof(DBG_HEADER));
 		offset += sizeof(header);
-		value0 = htole32(value0);
+		value0 = htonl(value0);
 		memcpy(buffer + offset, (char *)&value0, sizeof(value0));
 		offset += sizeof(value0);
-		value0 = htole32(value1);
+		value0 = htonl(value1);
 		memcpy(buffer + offset, (char *)&value1, sizeof(value1));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -148,7 +149,7 @@ static void _debug_send_id_8_16(FILE * fp, DBG_HEADER header, uint8_t id,
 		offset += sizeof(id);
 		buffer[offset] = value0;
 		offset += sizeof(value0);
-		value1 = htole16(value1);
+		value1 = htons(value1);
 		memcpy(buffer + offset, (char *)&value1, sizeof(value1));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -175,10 +176,10 @@ static void _debug_send_id_8_16_16(FILE * fp, DBG_HEADER header, uint8_t id,
 		offset += sizeof(id);
 		buffer[offset] = value0;
 		offset += sizeof(value0);
-		value1 = htole16(value1);
+		value1 = htons(value1);
 		memcpy(buffer + offset, (char *)&value1, sizeof(value1));
 		offset += sizeof(value1);
-		value2 = htole16(value2);
+		value2 = htons(value2);
 		memcpy(buffer + offset, (char *)&value2, sizeof(value2));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -207,10 +208,10 @@ static void _debug_send_id_8_8_16_32(FILE * fp, DBG_HEADER header, uint8_t id,
 		offset += sizeof(value0);
 		buffer[offset] = value1;
 		offset += sizeof(value1);
-		value2 = htole16(value2);
+		value2 = htons(value2);
 		memcpy(buffer + offset, (char *)&value2, sizeof(value2));
 		offset += sizeof(value2);
-		value3 = htole32(value3);
+		value3 = htonl(value3);
 		memcpy(buffer + offset, (char *)&value3, sizeof(value3));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -221,7 +222,7 @@ size_t debug_get_64(FILE * fp, uint64_t * value)
 {
 	size_t rc;
 	rc = fread((char *)value, sizeof(uint64_t), 1, fp);
-	*value = le64toh(*value);
+	*value = ntohll(*value);
 	return rc;
 }
 
@@ -229,7 +230,7 @@ size_t debug_get_32(FILE * fp, uint32_t * value)
 {
 	size_t rc;
 	rc = fread((char *)value, sizeof(uint32_t), 1, fp);
-	*value = le32toh(*value);
+	*value = ntohl(*value);
 	return rc;
 }
 
@@ -237,7 +238,7 @@ size_t debug_get_16(FILE * fp, uint16_t * value)
 {
 	size_t rc;
 	rc = fread((char *)value, sizeof(uint16_t), 1, fp);
-	*value = le16toh(*value);
+	*value = ntohs(*value);
 	return rc;
 }
 

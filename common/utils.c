@@ -27,6 +27,7 @@
 #include "debug.h"
 #include "utils.h"
 
+#ifndef __APPLE__
 // Is this a little endian machine?
 static uint16_t _is_little_endian(void)
 {
@@ -53,6 +54,7 @@ uint64_t ntohll(uint64_t netlonglong)
 {
 	return htonll(netlonglong);
 }
+#endif /* __APPLE__ */
 
 // Display fatal message (For catching coding bugs, not AFU bugs)
 void fatal_msg(const char *format, ...)
