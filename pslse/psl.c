@@ -27,10 +27,10 @@
  */
 
 #include <assert.h>
-#include <endian.h>
 #include <inttypes.h>
 #include <malloc.h>
 #include <poll.h>
+#include <sys/types.h>
 
 #include "mmio.h"
 #include "psl.h"

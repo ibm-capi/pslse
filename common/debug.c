@@ -1,7 +1,7 @@
-#include <endian.h>
 #include <inttypes.h>
 #include <malloc.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 #include "debug.h"
 #include "psl_interface_t.h"

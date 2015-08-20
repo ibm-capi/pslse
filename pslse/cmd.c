@@ -36,10 +36,10 @@
  */
 
 #include <assert.h>
-#include <endian.h>
 #include <inttypes.h>
 #include <malloc.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 #include "cmd.h"
 #include "mmio.h"

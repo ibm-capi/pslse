@@ -16,7 +16,6 @@
 
 #include <arpa/inet.h>
 #include <assert.h>
-#include <endian.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <malloc.h>
@@ -27,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
