@@ -358,7 +358,7 @@ void buffer_read()
 	get_signal_long(brdata, data);
 	get_signal32(brpar, &parity);
 	parity16 = (uint16_t) parity;
-	parity16 = htonl(parity16);
+	parity16 = htons(parity16);
 	psl_afu_read_buffer_data(&event, CACHELINE_BYTES, data,
 				 (uint8_t *) & parity16);
 
