@@ -87,6 +87,7 @@ struct cmd {
 	struct client **client;
 	struct pages page_entries;
 	volatile enum pslse_state *psl_state;
+	char *afu_name;
 	FILE *dbg_fp;
 	uint8_t dbg_id;
 	uint64_t lock_addr;
@@ -99,7 +100,7 @@ struct cmd {
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 		     struct mmio *mmio, volatile enum pslse_state *state,
-		     FILE * dbg_fp, uint8_t dbg_id);
+		     char *afu_name, FILE * dbg_fp, uint8_t dbg_id);
 
 void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency);
 

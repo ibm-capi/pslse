@@ -45,14 +45,15 @@
 #include "mmio.h"
 
 // Initialize MMIO tracking structure
-struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, FILE * dbg_fp,
-		       uint8_t dbg_id)
+struct mmio *mmio_init(struct AFU_EVENT *afu_event, int timeout, char *afu_name,
+		       FILE * dbg_fp, uint8_t dbg_id)
 {
 	struct mmio *mmio = (struct mmio *)calloc(1, sizeof(struct mmio));
 	if (!mmio)
 		return mmio;
 	mmio->afu_event = afu_event;
 	mmio->list = NULL;
+	mmio->afu_name = afu_name;
 	mmio->dbg_fp = dbg_fp;
 	mmio->dbg_id = dbg_id;
 	mmio->timeout = timeout;
@@ -194,6 +195,15 @@ void send_mmio(struct mmio *mmio)
 	// Attempt to send mmio to AFU
 	if (event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
 					event->desc) == PSL_SUCCESS) {
+
+#ifdef DEBUG
+		printf("DEBUG : %s:MMIO", mmio->afu_name);
+		if (event->desc)
+			printf(" DESC");
+		printf(" READ %d", event->dw ? 64 : 32);
+		printf(" addr=0x%05x\n", event->addr);
+#endif				/* DEBUG */
+
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
@@ -201,6 +211,20 @@ void send_mmio(struct mmio *mmio)
 	if (!event->rnw && psl_mmio_write(mmio->afu_event, event->dw,
 					  event->addr, event->data, event->desc)
 	    == PSL_SUCCESS) {
+
+#ifdef DEBUG
+		printf("DEBUG : %s:MMIO", mmio->afu_name);
+		if (event->desc)
+			printf(" DESC");
+		printf(" WRITE %d", event->dw ? 64 : 32);
+		printf(" addr=0x%05x", event->addr);
+		if (event->dw)
+			printf(" data=0x%016" PRIx64 "\n", event->data);
+		else
+			printf(" data=0x%08" PRIx32 "\n",
+			       (uint32_t) event->data);
+#endif				/* DEBUG */
+
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
@@ -223,6 +247,19 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 			warn_msg("Unexpected MMIO ack from AFU");
 			return;
 		}
+#ifdef DEBUG
+		printf("DEBUG : %s:MMIO", mmio->afu_name);
+		printf(" ACK");
+		if (mmio->list->rnw) {
+			if (mmio->list->dw)
+				printf(" data=0x%016" PRIx64, read_data);
+			else
+				printf(" data=0x%08" PRIx32,
+				       (uint32_t) read_data);
+		}
+		printf("\n");
+#endif				/* DEBUG */
+
 		// Keep data for MMIO reads
 		if (mmio->list->rnw) {
 			if (parity_enabled) {

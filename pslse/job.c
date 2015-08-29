@@ -33,8 +33,8 @@
 
 // Initialize job tracking structure
 struct job *job_init(struct AFU_EVENT *afu_event,
-		     volatile enum pslse_state *psl_state, FILE * dbg_fp,
-		     uint8_t dbg_id)
+		     volatile enum pslse_state *psl_state, char *afu_name,
+		     FILE * dbg_fp, uint8_t dbg_id)
 {
 	struct job *job;
 
@@ -44,6 +44,7 @@ struct job *job_init(struct AFU_EVENT *afu_event,
 		return job;
 	job->afu_event = afu_event;
 	job->psl_state = psl_state;
+	job->afu_name = afu_name;
 	job->dbg_fp = dbg_fp;
 	job->dbg_id = dbg_id;
 	return job;
@@ -108,6 +109,12 @@ void send_job(struct job *job)
 	    PSL_SUCCESS) {
 		event->state = PSLSE_PENDING;
 
+#ifdef DEBUG
+		printf("DEBUG : %s:JOB", job->afu_name);
+		printf(" code=0x%02x", event->code);
+		printf(" ea=0x%016" PRIx64 "\n", event->addr);
+#endif				/* DEBUG */
+
 		// Change job state
 		if (event->code == PSL_JOB_RESET)
 			*(job->psl_state) = PSLSE_RESET;
@@ -144,6 +151,11 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 	    PSL_SUCCESS) {
 		// Handle job_done
 		if (job_done) {
+
+#ifdef DEBUG
+			printf("DEBUG : %s:JOB done\n", job->afu_name);
+#endif				/* DEBUG */
+
 			dbg_aux2 |= DBG_AUX2_DONE;
 			*error = job_error;
 			if (job->job != NULL) {
@@ -164,6 +176,11 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 		}
 		// Handle job_running
 		if (job_running) {
+
+#ifdef DEBUG
+			printf("DEBUG : %s:JOB running\n", job->afu_name);
+#endif				/* DEBUG */
+
 			*(job->psl_state) = PSLSE_RUNNING;
 			dbg_aux2 |= DBG_AUX2_RUNNING;
 		}

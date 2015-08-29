@@ -438,20 +438,21 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 	debug_afu_connect(psl->dbg_fp, psl->dbg_id);
 
 	// Initialize job handler
-	if ((psl->job = job_init(psl->afu_event, &(psl->state), psl->dbg_fp,
-				 psl->dbg_id)) == NULL) {
+	if ((psl->job = job_init(psl->afu_event, &(psl->state), psl->name,
+				 psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("job_init");
 		goto init_fail;
 	}
 	// Initialize mmio handler
-	if ((psl->mmio = mmio_init(psl->afu_event, psl->timeout, psl->dbg_fp,
-				   psl->dbg_id)) == NULL) {
+	if ((psl->mmio = mmio_init(psl->afu_event, psl->timeout, psl->name,
+				   psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("mmio_init");
 		goto init_fail;
 	}
 	// Initialize cmd handler
 	if ((psl->cmd = cmd_init(psl->afu_event, parms, psl->mmio,
-				 &(psl->state), psl->dbg_fp, psl->dbg_id))
+				 &(psl->state), psl->name, psl->dbg_fp,
+				 psl->dbg_id))
 	    == NULL) {
 		perror("cmd_init");
 		goto init_fail;

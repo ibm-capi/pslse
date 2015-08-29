@@ -35,13 +35,14 @@ struct job {
 	struct job_event *job;
 	volatile enum pslse_state *psl_state;
 	uint32_t read_latency;
+	char *afu_name;
 	FILE *dbg_fp;
 	uint8_t dbg_id;
 };
 
 struct job *job_init(struct AFU_EVENT *afu_event,
-		     volatile enum pslse_state *psl_state, FILE * dbg_fp,
-		     uint8_t dbg_id);
+		     volatile enum pslse_state *psl_state, char *afu_name,
+		     FILE * dbg_fp, uint8_t dbg_id);
 
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr);
 
