@@ -212,9 +212,9 @@ void send_mmio(struct mmio *mmio)
 					  event->addr, event->data, event->desc)
 	    == PSL_SUCCESS) {
 		if (event->dw)
-			sprintf(data, "%016"PRIx64, event->data);
+			sprintf(data, "%016" PRIx64, event->data);
 		else
-			sprintf(data, "%08"PRIx32, (uint32_t) event->data);
+			sprintf(data, "%08" PRIx32, (uint32_t) event->data);
 		debug_msg("%s:%s WRITE%d word=0x%05x data=0x%s",
 			  mmio->afu_name, type, event->dw ? 64 : 32,
 			  event->addr, data);
@@ -248,16 +248,14 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 			sprintf(type, "MMIO");
 		if (mmio->list->rnw) {
 			if (mmio->list->dw) {
-				sprintf(data, "%016"PRIx64, read_data);
-			}
-			else {
-				sprintf(data, "%08"PRIx32,
+				sprintf(data, "%016" PRIx64, read_data);
+			} else {
+				sprintf(data, "%08" PRIx32,
 					(uint32_t) read_data);
 			}
 			debug_msg("%s:%s ACK data=0x%s", mmio->afu_name, type,
 				  data);
-		}
-		else {
+		} else {
 			debug_msg("%s:%s ACK", mmio->afu_name, type);
 		}
 

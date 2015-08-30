@@ -440,8 +440,11 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	if (rc != PSL_SUCCESS)
 		return;
 
-	debug_msg("%s:COMMAND tag=0x%02x code=0x%04x size=0x%02x abt=%d cch=0x%04x", cmd->afu_name, tag, command, size, abort, handle);
-	debug_msg("%s:COMMAND tag=0x%02x addr=0x%016" PRIx64, cmd->afu_name, address);
+	debug_msg
+	    ("%s:COMMAND tag=0x%02x code=0x%04x size=0x%02x abt=%d cch=0x%04x",
+	     cmd->afu_name, tag, command, size, abort, handle);
+	debug_msg("%s:COMMAND tag=0x%02x addr=0x%016" PRIx64, cmd->afu_name,
+		  address);
 
 	// Is AFU running?
 	if (*(cmd->psl_state) != PSLSE_RUNNING) {
@@ -522,6 +525,7 @@ void handle_buffer_write(struct cmd *cmd)
 	struct client *client;
 	uint8_t buffer[10];
 	uint64_t *addr;
+	int quadrant, byte;
 
 	// Make sure cmd structure is valid
 	if (cmd == NULL)
@@ -552,6 +556,14 @@ void handle_buffer_write(struct cmd *cmd)
 				     event->parity) == PSL_SUCCESS) {
 			debug_msg("%s:BUFFER WRITE tag=0x%02x", cmd->afu_name,
 				  event->tag);
+			for (quadrant = 0; quadrant < 4; quadrant++) {
+				DPRINTF("DEBUG: Q%d 0x", quadrant);
+				for (byte = 0; byte < CACHELINE_BYTES / 4;
+				     byte++) {
+					DPRINTF("%02x", event->data[byte]);
+				}
+				DPRINTF("\n");
+			}
 			event->resp = PSL_RESPONSE_DONE;
 			event->state = MEM_DONE;
 			debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id,
@@ -719,6 +731,7 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 	uint8_t *parity_check;
 	int rc;
 	struct cmd_event *event;
+	int quadrant, byte;
 
 	// Has struct been initialized?
 	if ((cmd == NULL) || (cmd->buffer_read == NULL))
@@ -731,6 +744,13 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 	if (rc == PSL_SUCCESS) {
 		debug_msg("%s:BUFFER READ tag=0x%02x", cmd->afu_name,
 			  event->tag);
+		for (quadrant = 0; quadrant < 4; quadrant++) {
+			DPRINTF("DEBUG: Q%d 0x", quadrant);
+			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
+				DPRINTF("%02x", event->data[byte]);
+			}
+			DPRINTF("\n");
+		}
 		if (parity_enable) {
 			parity_check =
 			    (uint8_t *) malloc(DWORDS_PER_CACHELINE / 8);
