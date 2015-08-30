@@ -108,13 +108,8 @@ void send_job(struct job *job)
 	if (psl_job_control(job->afu_event, event->code, event->addr) ==
 	    PSL_SUCCESS) {
 		event->state = PSLSE_PENDING;
-
-#ifdef DEBUG
-		printf("DEBUG : %s:JOB", job->afu_name);
-		printf(" code=0x%02x", event->code);
-		printf(" ea=0x%016" PRIx64 "\n", event->addr);
-#endif				/* DEBUG */
-
+		debug_msg("%s:JOB code=0x%02x ea=0x%016" PRIx64, job->afu_name,
+			  event->code, event->addr);
 		// Change job state
 		if (event->code == PSL_JOB_RESET)
 			*(job->psl_state) = PSLSE_RESET;
@@ -151,11 +146,7 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 	    PSL_SUCCESS) {
 		// Handle job_done
 		if (job_done) {
-
-#ifdef DEBUG
-			printf("DEBUG : %s:JOB done\n", job->afu_name);
-#endif				/* DEBUG */
-
+			debug_msg("%s:JOB done", job->afu_name);
 			dbg_aux2 |= DBG_AUX2_DONE;
 			*error = job_error;
 			if (job->job != NULL) {
@@ -176,11 +167,7 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 		}
 		// Handle job_running
 		if (job_running) {
-
-#ifdef DEBUG
-			printf("DEBUG : %s:JOB running\n", job->afu_name);
-#endif				/* DEBUG */
-
+			debug_msg("%s:JOB running", job->afu_name);
 			*(job->psl_state) = PSLSE_RUNNING;
 			dbg_aux2 |= DBG_AUX2_RUNNING;
 		}

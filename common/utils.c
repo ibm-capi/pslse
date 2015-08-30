@@ -62,7 +62,7 @@ void fatal_msg(const char *format, ...)
 	va_list args;
 
 	fflush(stdout);
-	fprintf(stderr, "FATAL : ");
+	fprintf(stderr, "FATAL:");
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
@@ -76,7 +76,7 @@ void error_msg(const char *format, ...)
 	va_list args;
 
 	fflush(stdout);
-	fprintf(stderr, "ERROR : ");
+	fprintf(stderr, "ERROR:");
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
@@ -85,13 +85,13 @@ void error_msg(const char *format, ...)
 	exit(-1);
 }
 
-// Display error message
+// Display warning message
 void warn_msg(const char *format, ...)
 {
 	va_list args;
 
 	fflush(stdout);
-	fprintf(stderr, "WARNING : ");
+	fprintf(stderr, "WARNING:");
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
@@ -99,17 +99,33 @@ void warn_msg(const char *format, ...)
 	fflush(stderr);
 }
 
-// Display error message
+// Display informational message
 void info_msg(const char *format, ...)
 {
 	va_list args;
 
 	fflush(stdout);
-	printf("INFO : ");
+	printf("INFO:");
 	va_start(args, format);
 	vprintf(format, args);
 	va_end(args);
 	printf("\n");
+	fflush(stdout);
+}
+
+// Display debug message
+void debug_msg(const char *format, ...)
+{
+#ifdef DEBUG
+	va_list args;
+
+	fflush(stdout);
+	printf("DEBUG:");
+	va_start(args, format);
+	vprintf(format, args);
+	va_end(args);
+	printf("\n");
+#endif /* DEBUG */
 	fflush(stdout);
 }
 
@@ -200,7 +216,7 @@ int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 		bytes += count;
 	}
 #if DEBUG
-	DPRINTF("Socket in:0x");
+	DPRINTF("DEBUG:SOCKET IN:0x");
 	for (count = 0; count < bytes; count++)
 		DPRINTF("%02x", data[count]);
 	DPRINTF("\n");
@@ -228,7 +244,7 @@ int put_bytes_silent(int fd, int size, uint8_t * data)
 
 #if DEBUG
 	int i;
-	DPRINTF("Socket out:0x");
+	DPRINTF("DEBUG:SOCKET OUT:0x");
 #endif				/* DEBUG */
 	bytes = 0;
 	while (data && (bytes < size)) {

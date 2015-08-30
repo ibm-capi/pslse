@@ -83,11 +83,14 @@ void fatal_msg(const char *format, ...);
 // Display error message
 void error_msg(const char *format, ...);
 
-// Display error message
+// Display warning message
 void warn_msg(const char *format, ...);
 
-// Display error message
+// Display informational message
 void info_msg(const char *format, ...);
+
+// Display debug message
+void debug_msg(const char *format, ...);
 
 // Delay for up to ns nanoseconds
 void ns_delay(long ns);

@@ -185,6 +185,8 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 void send_mmio(struct mmio *mmio)
 {
 	struct mmio_event *event;
+	char type[5];
+	char data[17];
 
 	event = mmio->list;
 
@@ -192,18 +194,16 @@ void send_mmio(struct mmio *mmio)
 	if ((event == NULL) || (event->state == PSLSE_PENDING))
 		return;
 
+	if (event->desc)
+		sprintf(type, "DESC");
+	else
+		sprintf(type, "MMIO");
+
 	// Attempt to send mmio to AFU
 	if (event->rnw && psl_mmio_read(mmio->afu_event, event->dw, event->addr,
 					event->desc) == PSL_SUCCESS) {
-
-#ifdef DEBUG
-		printf("DEBUG : %s:MMIO", mmio->afu_name);
-		if (event->desc)
-			printf(" DESC");
-		printf(" READ %d", event->dw ? 64 : 32);
-		printf(" addr=0x%05x\n", event->addr);
-#endif				/* DEBUG */
-
+		debug_msg("%s:%s READ%d word=0x%05x", mmio->afu_name, type,
+			  event->dw ? 64 : 32, event->addr);
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
@@ -211,20 +211,13 @@ void send_mmio(struct mmio *mmio)
 	if (!event->rnw && psl_mmio_write(mmio->afu_event, event->dw,
 					  event->addr, event->data, event->desc)
 	    == PSL_SUCCESS) {
-
-#ifdef DEBUG
-		printf("DEBUG : %s:MMIO", mmio->afu_name);
-		if (event->desc)
-			printf(" DESC");
-		printf(" WRITE %d", event->dw ? 64 : 32);
-		printf(" addr=0x%05x", event->addr);
 		if (event->dw)
-			printf(" data=0x%016" PRIx64 "\n", event->data);
+			sprintf(data, "%016"PRIx64, event->data);
 		else
-			printf(" data=0x%08" PRIx32 "\n",
-			       (uint32_t) event->data);
-#endif				/* DEBUG */
-
+			sprintf(data, "%08"PRIx32, (uint32_t) event->data);
+		debug_msg("%s:%s WRITE%d word=0x%05x data=0x%s",
+			  mmio->afu_name, type, event->dw ? 64 : 32,
+			  event->addr, data);
 		debug_mmio_send(mmio->dbg_fp, mmio->dbg_id, event->desc,
 				event->rnw, event->dw, event->addr);
 		event->state = PSLSE_PENDING;
@@ -235,9 +228,11 @@ void send_mmio(struct mmio *mmio)
 void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 {
 	uint64_t read_data;
-	uint8_t parity;
 	uint32_t read_data_parity;
+	uint8_t parity;
 	int rc;
+	char data[17];
+	char type[5];
 
 	rc = psl_get_mmio_acknowledge(mmio->afu_event, &read_data,
 				      &read_data_parity);
@@ -247,18 +242,24 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled)
 			warn_msg("Unexpected MMIO ack from AFU");
 			return;
 		}
-#ifdef DEBUG
-		printf("DEBUG : %s:MMIO", mmio->afu_name);
-		printf(" ACK");
+		if (mmio->list->desc)
+			sprintf(type, "DESC");
+		else
+			sprintf(type, "MMIO");
 		if (mmio->list->rnw) {
-			if (mmio->list->dw)
-				printf(" data=0x%016" PRIx64, read_data);
-			else
-				printf(" data=0x%08" PRIx32,
-				       (uint32_t) read_data);
+			if (mmio->list->dw) {
+				sprintf(data, "%016"PRIx64, read_data);
+			}
+			else {
+				sprintf(data, "%08"PRIx32,
+					(uint32_t) read_data);
+			}
+			debug_msg("%s:%s ACK data=0x%s", mmio->afu_name, type,
+				  data);
 		}
-		printf("\n");
-#endif				/* DEBUG */
+		else {
+			debug_msg("%s:%s ACK", mmio->afu_name, type);
+		}
 
 		// Keep data for MMIO reads
 		if (mmio->list->rnw) {

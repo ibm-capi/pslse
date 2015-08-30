@@ -440,15 +440,8 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	if (rc != PSL_SUCCESS)
 		return;
 
-#ifdef DEBUG
-	printf("DEBUG : %s:COMMAND", cmd->afu_name);
-	printf(" tag=0x%02x", tag);
-	printf(" code=0x%04x", command);
-	printf(" size=0x%02x", size);
-	printf(" abt=%d", abort);
-	printf(" cch=0x%04x\n", handle);
-	printf("\taddr=0x%016" PRIx64 "\n", address);
-#endif				/* DEBUG */
+	debug_msg("%s:COMMAND tag=0x%02x code=0x%04x size=0x%02x abt=%d cch=0x%04x", cmd->afu_name, tag, command, size, abort, handle);
+	debug_msg("%s:COMMAND tag=0x%02x addr=0x%016" PRIx64, cmd->afu_name, address);
 
 	// Is AFU running?
 	if (*(cmd->psl_state) != PSLSE_RUNNING) {
@@ -557,12 +550,8 @@ void handle_buffer_write(struct cmd *cmd)
 		if (psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				     CACHELINE_BYTES, event->data,
 				     event->parity) == PSL_SUCCESS) {
-
-#ifdef DEBUG
-			printf("DEBUG : %s:BUFFER WRITE", cmd->afu_name);
-			printf(" tag=0x%02x\n", event->tag);
-#endif				/* DEBUG */
-
+			debug_msg("%s:BUFFER WRITE tag=0x%02x", cmd->afu_name,
+				  event->tag);
 			event->resp = PSL_RESPONSE_DONE;
 			event->state = MEM_DONE;
 			debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id,
@@ -740,12 +729,8 @@ void handle_buffer_data(struct cmd *cmd, uint32_t parity_enable)
 	rc = psl_get_buffer_read_data(cmd->afu_event, event->data,
 				      event->parity);
 	if (rc == PSL_SUCCESS) {
-
-#ifdef DEBUG
-		printf("DEBUG : %s:BUFFER READ", cmd->afu_name);
-		printf(" tag=0x%02x\n", event->tag);
-#endif				/* DEBUG */
-
+		debug_msg("%s:BUFFER READ tag=0x%02x", cmd->afu_name,
+			  event->tag);
 		if (parity_enable) {
 			parity_check =
 			    (uint8_t *) malloc(DWORDS_PER_CACHELINE / 8);
@@ -1020,13 +1005,8 @@ void handle_response(struct cmd *cmd)
 
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
 	if (rc == PSL_SUCCESS) {
-
-#ifdef DEBUG
-		printf("DEBUG : %s:RESPONSE", cmd->afu_name);
-		printf(" tag=0x%02x", event->tag);
-		printf(" code=0x%x\n", event->resp);
-#endif				/* DEBUG */
-
+		debug_msg("%s:RESPONSE tag=0x%02x code=0x%x", cmd->afu_name,
+			  event->tag, event->resp);
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if ((client != NULL) && (event->command == PSL_COMMAND_RESTART))
 			client->flushing = FLUSH_NONE;
