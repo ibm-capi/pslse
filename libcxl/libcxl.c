@@ -1252,8 +1252,8 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 		return -1;
 	}
 	// Perform PSLSE attach
-	afu->attach.state = LIBCXL_REQ_REQUEST;
 	afu->attach.wed = wed;
+	afu->attach.state = LIBCXL_REQ_REQUEST;
 	while (afu->attach.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	afu->attached = 1;
