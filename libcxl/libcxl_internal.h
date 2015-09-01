@@ -32,24 +32,24 @@ enum libcxl_req_state {
 };
 
 struct int_req {
-	enum libcxl_req_state state;
-	uint16_t max;
+	volatile enum libcxl_req_state state;
+	volatile uint16_t max;
 };
 
 struct open_req {
-	enum libcxl_req_state state;
-	uint8_t context;
+	volatile enum libcxl_req_state state;
+	volatile uint8_t context;
 };
 
 struct attach_req {
-	enum libcxl_req_state state;
-	uint64_t wed;
+	volatile enum libcxl_req_state state;
+	volatile uint64_t wed;
 };
 
 struct mmio_req {
-	enum libcxl_req_state state;
-	uint8_t type;
-	uint32_t addr;
+	volatile enum libcxl_req_state state;
+	volatile uint8_t type;
+	volatile uint32_t addr;
 	uint64_t data;
 };
 

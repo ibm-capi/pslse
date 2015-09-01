@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdarg.h>
@@ -34,8 +35,7 @@ static uint16_t _is_little_endian(void)
 	union {
 		uint16_t i16;
 		uint8_t i8[sizeof(uint16_t)];
-	}
-	u;
+	} u;
 	u.i16 = 1;
 	return u.i8[0];
 }
@@ -43,7 +43,7 @@ static uint16_t _is_little_endian(void)
 uint64_t htonll(uint64_t hostlonglong)
 {
 	if (_is_little_endian()) {
-		return (((uint64_t) (htonl((uint32_t) hostlonglong))) << 32) ||
+		return (((uint64_t) (htonl((uint32_t) hostlonglong))) << 32) |
 		    ((uint64_t) (htonl((uint32_t) (hostlonglong >> 32))));
 	}
 
