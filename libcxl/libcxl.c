@@ -302,7 +302,9 @@ static void _handle_ack(struct cxl_afu_h *afu)
 			afu->mmio.data = 0xFEEDB00FL;
 		} else {
 			memcpy(&(afu->mmio.data), data, sizeof(uint32_t));
+debug_msg("KEM:0x%08x", afu->mmio.data);
 			afu->mmio.data = ntohl(afu->mmio.data);
+debug_msg("KEM:0x%08x", afu->mmio.data);
 		}
 	}
 	afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -343,7 +345,7 @@ static void _pslse_attach(struct cxl_afu_h *afu)
 	buffer[0] = PSLSE_ATTACH;
 	offset = 1;
 	wed_ptr = (uint64_t *) & (buffer[offset]);
-	*wed_ptr = afu->attach.wed;
+	*wed_ptr = htonll(afu->attach.wed);
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
 		close_socket(&(afu->fd));

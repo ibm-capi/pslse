@@ -405,6 +405,8 @@ struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client)
 {
 	struct mmio_event *event;
+	uint64_t data64;
+	uint32_t data32;
 	uint8_t *buffer;
 	int fd = client->fd;
 
@@ -422,7 +424,8 @@ struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client)
 		if (event->dw) {
 			buffer = (uint8_t *) malloc(9);
 			buffer[0] = PSLSE_MMIO_ACK;
-			memcpy(&(buffer[1]), &(event->data), 8);
+			data64 = htonll(event->data);
+			memcpy(&(buffer[1]), &data64, 8);
 			if (put_bytes(fd, 9, buffer, mmio->dbg_fp, mmio->dbg_id,
 				      client->context) < 0) {
 				client_drop(client, PSL_IDLE_CYCLES,
@@ -431,7 +434,8 @@ struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client)
 		} else {
 			buffer = (uint8_t *) malloc(5);
 			buffer[0] = PSLSE_MMIO_ACK;
-			memcpy(&(buffer[1]), &(event->data), 4);
+			data32 = htonl(event->data);
+			memcpy(&(buffer[1]), &data32, 4);
 			if (put_bytes(fd, 5, buffer, mmio->dbg_fp, mmio->dbg_id,
 				      client->context) < 0) {
 				client_drop(client, PSL_IDLE_CYCLES,
