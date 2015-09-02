@@ -146,6 +146,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	struct cmd_event *cmd;
 	uint8_t buffer[MAX_LINE_CHARS];
 	int dw = 0;
+	uint8_t ack = PSLSE_DETACH;
 
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
@@ -168,8 +169,10 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
+			put_bytes(client->fd, 1, &ack, psl->dbg_fp, psl->dbg_id,
+				  client->context);
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
-			break;
+			return;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
 			break;
