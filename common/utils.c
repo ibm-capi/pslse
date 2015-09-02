@@ -215,6 +215,7 @@ int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 		}
 		bytes += count;
 	}
+
 #if DEBUG
 	DPRINTF("DEBUG:SOCKET IN:0x");
 	for (count = 0; count < bytes; count++)
@@ -242,10 +243,6 @@ int put_bytes_silent(int fd, int size, uint8_t * data)
 {
 	int count, bytes;
 
-#if DEBUG
-	int i;
-	DPRINTF("DEBUG:SOCKET OUT:0x");
-#endif				/* DEBUG */
 	bytes = 0;
 	while (data && (bytes < size)) {
 		count = write(fd, &(data[bytes]), size);
@@ -255,13 +252,15 @@ int put_bytes_silent(int fd, int size, uint8_t * data)
 			else
 				return -1;
 		}
-#if DEBUG
-		for (i = 0; i < count + bytes; i++)
-			DPRINTF("%02x", data[i]);
-#endif				/* DEBUG */
 		bytes += count;
 	}
+
+#if DEBUG
+	DPRINTF("DEBUG:SOCKET OUT:0x");
+	for (count = 0; count < bytes; count++)
+		DPRINTF("%02x", data[count]);
 	DPRINTF("\n");
+#endif	/* DEBUG */
 
 	return bytes;
 }
