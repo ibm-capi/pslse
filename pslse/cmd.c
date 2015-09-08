@@ -250,7 +250,7 @@ static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
 static int _aligned(addr, size)
 {
 	// Check valid size
-	if (size & (size - 1)) {
+	if ((size==0) || (size & (size - 1))) {
 		warn_msg("AFU issued command with invalid size %d", size);
 		return 0;
 	}
