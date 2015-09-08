@@ -35,7 +35,8 @@ static uint16_t _is_little_endian(void)
 	union {
 		uint16_t i16;
 		uint8_t i8[sizeof(uint16_t)];
-	} u;
+	}
+	u;
 	u.i16 = 1;
 	return u.i8[0];
 }
@@ -260,7 +261,7 @@ int put_bytes_silent(int fd, int size, uint8_t * data)
 	for (count = 0; count < bytes; count++)
 		DPRINTF("%02x", data[count]);
 	DPRINTF("\n");
-#endif	/* DEBUG */
+#endif				/* DEBUG */
 
 	return bytes;
 }
