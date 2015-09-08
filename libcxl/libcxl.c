@@ -75,6 +75,17 @@ static int _testmemaddr(uint8_t * memaddr)
 	return ret;
 }
 
+static void _all_idle(struct cxl_afu_h *afu)
+{
+	afu->int_req.state = LIBCXL_REQ_IDLE;
+	afu->open.state = LIBCXL_REQ_IDLE;
+	afu->attach.state = LIBCXL_REQ_IDLE;
+	afu->mmio.state = LIBCXL_REQ_IDLE;
+	afu->mapped = 0;
+	afu->attached = 0;
+	afu->opened = 0;
+}
+
 static int _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 {
 	uint16_t size;
@@ -118,8 +129,7 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 	DPRINTF("AFU INTERRUPT\n");
 	if (get_bytes_silent(afu->fd, sizeof(irq), data, 1000, 0) < 0) {
 		warn_msg("Socket failure getting IRQ");
-		afu->opened = 0;
-		afu->attached = 0;
+		_all_idle(afu);
 		return -1;
 	}
 	memcpy(&irq, data, sizeof(irq));
@@ -129,7 +139,7 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 	pthread_mutex_lock(&(afu->event_lock));
 	i = 0;
 	while (afu->events[i] != NULL) {
-		if (afu->events[i]->header.type -= CXL_EVENT_AFU_INTERRUPT) {
+		if (afu->events[i]->header.type == CXL_EVENT_AFU_INTERRUPT) {
 			pthread_mutex_unlock(&(afu->event_lock));
 			return 0;
 		}
@@ -163,8 +173,7 @@ static int _handle_afu_error(struct cxl_afu_h *afu)
 	DPRINTF("AFU ERROR\n");
 	if (get_bytes_silent(afu->fd, sizeof(error), data, 1000, 0) < 0) {
 		warn_msg("Socket failure getting AFU ERROR");
-		afu->opened = 0;
-		afu->attached = 0;
+		_all_idle(afu);
 		return -1;
 	}
 	memcpy(&error, data, sizeof(error));
@@ -285,8 +294,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 1000, 0) <
 		    0) {
 			warn_msg("Socket failure getting MMIO Ack");
-			afu->opened = 0;
-			afu->attached = 0;
+			_all_idle(afu);
 			afu->mmio.data = 0xFEEDB00FFEEDB00FL;
 		} else {
 			memcpy(&(afu->mmio.data), data, sizeof(uint64_t));
@@ -297,14 +305,13 @@ static void _handle_ack(struct cxl_afu_h *afu)
 		if (get_bytes_silent(afu->fd, sizeof(uint32_t), data, 1000, 0) <
 		    0) {
 			warn_msg("Socket failure getting MMIO Read 32 data");
-			afu->opened = 0;
-			afu->attached = 0;
 			afu->mmio.data = 0xFEEDB00FL;
+			_all_idle(afu);
 		} else {
 			memcpy(&(afu->mmio.data), data, sizeof(uint32_t));
-debug_msg("KEM:0x%08x", afu->mmio.data);
+			debug_msg("KEM:0x%08x", afu->mmio.data);
 			afu->mmio.data = ntohl(afu->mmio.data);
-debug_msg("KEM:0x%08x", afu->mmio.data);
+			debug_msg("KEM:0x%08x", afu->mmio.data);
 		}
 	}
 	afu->mmio.state = LIBCXL_REQ_IDLE;
@@ -324,10 +331,8 @@ static void _req_max_int(struct cxl_afu_h *afu)
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
 		free(buffer);
 		close_socket(&(afu->fd));
-		afu->opened = 0;
-		afu->attached = 0;
 		afu->int_req.max = 0;
-		afu->int_req.state = LIBCXL_REQ_IDLE;
+		_all_idle(afu);
 		return;
 	}
 	free(buffer);
@@ -505,16 +510,12 @@ static void *_psl_loop(void *ptr)
 		if (rc == 0)
 			continue;
 		if (rc < 0) {
-			afu->mapped = 0;
-			afu->attached = 0;
-			afu->opened = 0;
+			_all_idle(afu);
 			break;
 		}
 		if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
 			warn_msg("Socket failure getting PSL event");
-			afu->mapped = 0;
-			afu->attached = 0;
-			afu->opened = 0;
+			_all_idle(afu);
 			break;
 		}
 		DPRINTF("PSL EVENT\n");
@@ -522,8 +523,7 @@ static void *_psl_loop(void *ptr)
 		case PSLSE_OPEN:
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
 				warn_msg("Socket failure getting OPEN context");
-				afu->opened = 0;
-				afu->open.state = LIBCXL_REQ_IDLE;
+				_all_idle(afu);
 				break;
 			}
 			afu->context = (uint8_t) buffer[0];
@@ -543,7 +543,7 @@ static void *_psl_loop(void *ptr)
 			    0) {
 				warn_msg
 				    ("Socket failure getting max interrupt acknowledge");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			memcpy((char *)&value, (char *)buffer,
@@ -556,7 +556,7 @@ static void *_psl_loop(void *ptr)
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
 			    0) {
 				warn_msg("Socket failure getting PSLSE query");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			memcpy((char *)&value, (char *)&(buffer[1]), 2);
@@ -569,7 +569,7 @@ static void *_psl_loop(void *ptr)
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
 				warn_msg
 				    ("Socket failure getting memory read size");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			size = (uint8_t) buffer[0];
@@ -577,7 +577,7 @@ static void *_psl_loop(void *ptr)
 					     -1, 0) < 0) {
 				warn_msg
 				    ("Socket failure getting memory read addr");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
@@ -589,13 +589,13 @@ static void *_psl_loop(void *ptr)
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
 				warn_msg
 				    ("Socket failure getting memory write size");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			size = (uint8_t) buffer[0];
 			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
 					     -1, 0) < 0) {
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
@@ -604,7 +604,7 @@ static void *_psl_loop(void *ptr)
 			    0) {
 				warn_msg
 				    ("Socket failure getting memory write data");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			_handle_write(afu, addr, size, buffer);
@@ -614,7 +614,7 @@ static void *_psl_loop(void *ptr)
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
 				warn_msg
 				    ("Socket failure getting memory touch size");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			size = buffer[0];
@@ -622,7 +622,7 @@ static void *_psl_loop(void *ptr)
 					     -1, 0) < 0) {
 				warn_msg
 				    ("Socket failure getting memory touch addr");
-				afu->opened = 0;
+				_all_idle(afu);
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
@@ -822,10 +822,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 	afu->adapter = major;
 	afu->position = position;
 	afu->id = calloc(7, sizeof(char));
-	afu->int_req.state = LIBCXL_REQ_IDLE;
-	afu->open.state = LIBCXL_REQ_IDLE;
-	afu->attach.state = LIBCXL_REQ_IDLE;
-	afu->mmio.state = LIBCXL_REQ_IDLE;
+	_all_idle(afu);
 	sprintf(afu->id, "afu%d.%d", major, minor);
 
 	return afu;
