@@ -10,3 +10,4 @@ common/misc
 debug/debug
 libcxl/include
 pslse/pslse
+gprof.out
