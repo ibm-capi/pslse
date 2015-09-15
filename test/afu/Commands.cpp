@@ -30,9 +30,9 @@ buffer_read_parity(buff_read_par)
 {
 }
 
-bool Command::is_completed() const const const {
+bool Command::is_completed() const {
 	return completed;
-} uint32_t Command::get_tag() const const const {
+} uint32_t Command::get_tag() const {
 	return tag;
 } OtherCommand::OtherCommand(uint16_t c, bool comm_addr_par, bool comm_code_par,
 			     bool comm_tag_par, bool buff_read_par):Command(c,
@@ -98,7 +98,7 @@ void OtherCommand::process_response(AFU_EVENT * afu_event, uint8_t *)
 	}
 }
 
-bool OtherCommand::is_restart() const const const {
+bool OtherCommand::is_restart() const {
 	return (Command::code == 0x0001);
 } LoadCommand::LoadCommand(uint16_t c, bool comm_addr_par, bool comm_code_par,
 			   bool comm_tag_par, bool buff_read_par):Command(c,
@@ -212,7 +212,7 @@ void LoadCommand::process_buffer_write(AFU_EVENT * afu_event,
 	info_msg("LoadCommand: processed_buffer_write");
 }
 
-bool LoadCommand::is_restart() const const const {
+bool LoadCommand::is_restart() const {
 	return false;
 } StoreCommand::StoreCommand(uint16_t c, bool comm_addr_par, bool comm_code_par,
 			     bool comm_tag_par, bool buff_read_par):Command(c,
@@ -313,6 +313,6 @@ void StoreCommand::process_buffer_read(AFU_EVENT * afu_event,
 	info_msg("StoreCommand: processed_buffer_read");
 }
 
-bool StoreCommand::is_restart() const const const {
+bool StoreCommand::is_restart() const {
 	return false;
 }

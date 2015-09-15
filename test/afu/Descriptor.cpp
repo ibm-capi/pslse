@@ -118,37 +118,54 @@ void Descriptor::parse_descriptor_file(string filename)
 	}
 }
 
-uint32_t Descriptor::to_vector_index(uint32_t byte_address) const const const {
+uint32_t Descriptor::to_vector_index(uint32_t byte_address) const {
 	return byte_address >> 3;
-} uint64_t Descriptor::get_reg(uint32_t word_address) const const const {
+}
+
+uint64_t Descriptor::get_reg(uint32_t word_address) const {
 	return regs[to_vector_index(word_address << 2)];
 }
-// reg0x00 uint16_t Descriptor::get_num_ints_per_process() const const const {
-	return (uint16_t) ((regs[to_vector_index(0x00)] >> 48) & 0xFFFF);
-} uint16_t Descriptor::get_num_of_process() const const const {
+
+// reg0x00 uint16_t Descriptor::get_num_ints_per_process() const {
+//	return (uint16_t) ((regs[to_vector_index(0x00)] >> 48) & 0xFFFF);
+//}
+
+uint16_t Descriptor::get_num_of_process() const {
 	return (uint16_t) ((regs[to_vector_index(0x00)] >> 32) & 0xFFFF);
-} uint16_t Descriptor::get_num_of_afu_CRs() const const const {
+}
+
+uint16_t Descriptor::get_num_of_afu_CRs() const {
 	return (uint16_t) ((regs[to_vector_index(0x00)] >> 16) & 0xFFFF);
-} uint16_t Descriptor::get_reg_prog_model() const const const {
+}
+
+uint16_t Descriptor::get_reg_prog_model() const {
 	return (uint16_t) (regs[to_vector_index(0x00)] & 0xFFFF);
 }
-// reg0x20 uint64_t Descriptor::get_AFU_CR_len() const const const {
-	return regs[to_vector_index(0x20)] & 0xFFFFFFFFFFFFFF;
-}
-// reg0x28 uint64_t Descriptor::get_AFU_CR_offset() const const const {
-	return regs[to_vector_index(0x28)];
-}
-// reg0x30 uint8_t Descriptor::get_PerProcessPSA_control() const const const {
-	return (uint8_t) ((regs[to_vector_index(0x30)] >> 56) & 0xFF);
-} uint64_t Descriptor::get_PerProcessPSA_length() const const const {
+
+// reg0x20 uint64_t Descriptor::get_AFU_CR_len() const {
+//	return regs[to_vector_index(0x20)] & 0xFFFFFFFFFFFFFF;
+//}
+
+// reg0x28 uint64_t Descriptor::get_AFU_CR_offset() const {
+//	return regs[to_vector_index(0x28)];
+//}
+
+// reg0x30 uint8_t Descriptor::get_PerProcessPSA_control() const {
+//	return (uint8_t) ((regs[to_vector_index(0x30)] >> 56) & 0xFF);
+//}
+
+uint64_t Descriptor::get_PerProcessPSA_length() const {
 	return regs[to_vector_index(0x30)] & 0xFFFFFFFFFFFFFF;
 }
-// reg0x38 uint64_t Descriptor::get_PerProcessPSA_offset() const const const {
-	return regs[to_vector_index(0x38)];
-}
-// reg0x40 uint64_t Descriptor::get_AFU_EB_len() const const const {
-	return regs[to_vector_index(0x40)] & 0xFFFFFFFFFFFFFF;
-}
-// reg0x48 uint64_t Descriptor::get_AFU_EB_offset() const const const {
-	return regs[to_vector_index(0x48)];
-}
+
+// reg0x38 uint64_t Descriptor::get_PerProcessPSA_offset() const {
+//	return regs[to_vector_index(0x38)];
+//}
+
+// reg0x40 uint64_t Descriptor::get_AFU_EB_len() const {
+//	return regs[to_vector_index(0x40)] & 0xFFFFFFFFFFFFFF;
+//}
+
+// reg0x48 uint64_t Descriptor::get_AFU_EB_offset() const {
+//	return regs[to_vector_index(0x48)];
+//}

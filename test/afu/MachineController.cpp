@@ -164,7 +164,7 @@ void MachineController::reset()
 		machines[i]->reset();
 }
 
-bool MachineController::is_enabled() const const const {
+bool MachineController::is_enabled() const {
 	for (uint32_t i = 0; i < machines.size(); ++i)
 		if (machines[i]->is_enabled())
 {
@@ -175,14 +175,14 @@ return true;
 	return false;
 }
 
-bool MachineController::all_machines_completed() const const const {
-	for (uint32_t i = 0; i < machines.size(); ++i)
-{
-if (!machines[i]->is_completed()) {
-	//info_msg("machine %d is not completed", i);
-	return false;
-}
-} return true;
+bool MachineController::all_machines_completed() const {
+	for (uint32_t i = 0; i < machines.size(); ++i) {
+		if (!machines[i]->is_completed()) {
+			//info_msg("machine %d is not completed", i);
+			return false;
+		}
+	}
+	return true;
 }
 
 void MachineController::disable_all_machines()

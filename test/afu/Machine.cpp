@@ -156,13 +156,13 @@ void MachineController::Machine::clear_response()
 	info_msg("Machine: clearing response");
 }
 
-uint8_t MachineController::Machine::get_command_address_parity() const const const {
+uint8_t MachineController::Machine::get_command_address_parity() const {
 	return (uint8_t) ((config[1] & 0x800000000000) >> 47);
-} uint8_t MachineController::Machine::get_command_code_parity() const const const {
+} uint8_t MachineController::Machine::get_command_code_parity() const {
 	return (uint8_t) ((config[1] & 0x400000000000) >> 46);
-} uint8_t MachineController::Machine::get_command_tag_parity() const const const {
+} uint8_t MachineController::Machine::get_command_tag_parity() const {
 	return (uint8_t) ((config[1] & 0x200000000000) >> 45);
-} uint8_t MachineController::Machine::get_buffer_read_parity() const const const {
+} uint8_t MachineController::Machine::get_buffer_read_parity() const {
 	return (uint8_t) ((config[1] & 0x100000000000) >> 44);
 } void MachineController::Machine::change_machine_config(uint32_t offset,
 							 uint32_t data)
@@ -301,28 +301,27 @@ void MachineController::Machine::disable()
 	delay = 0;
 }
 
-bool MachineController::Machine::is_enabled() const const const {
+bool MachineController::Machine::is_enabled() const {
 	bool enable_always = ((config[0] >> 63) == 0x1) ? true : false;
 	bool enable_once = (((config[0] >> 62) & 0x1) == 0x1) ? true : false;
 
 	return enable_always || enable_once;
-} bool MachineController::Machine::is_enabled_once() const const const {
+} bool MachineController::Machine::is_enabled_once() const {
 	bool enable_once = ((config[0] >> 62) & 0x1) ? true : false;
 
 	return enable_once;
-} bool MachineController::Machine::is_completed() const const const {
+} bool MachineController::Machine::is_completed() const {
 	if (!command || command->is_completed())
 		return true;
 
 	return false;
 
-} bool MachineController::Machine::is_restart() const const const {
+} bool MachineController::Machine::is_restart() const {
 	if (!command)
-{
-error_msg
-    ("MachineController::Machine: calling command->is_restart() when command is not defined");
-return false;
-}
+	{
+		error_msg("MachineController::Machine: calling command->is_restart() when command is not defined");
+		return false;
+	}
 	return command->is_restart();
 }
 
