@@ -37,14 +37,14 @@ class MachineController {
 	/* Machine class is made private inside Machine Controller so AFU only access machines through MachineController */
 	class Machine;
 
-	 std::vector < Machine * >machines;
-	 std::map < uint32_t, Machine * >tag_to_machine;
+	std::vector < Machine * >machines;
+	std::map < uint32_t, Machine * >tag_to_machine;
 
 	bool flushed_state;
 
- public:
+	public:
 
-	 MachineController();
+	MachineController();
 
 	/* call this function every cylce (i.e. each iteration of while loop) in AFU.cpp 
 	 * to send command from the first machine that has a command ready to be sent,

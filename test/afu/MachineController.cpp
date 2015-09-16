@@ -25,38 +25,29 @@
 
 #include <stdlib.h>
 
- MachineController::MachineController():machines(NUM_MACHINES),
-tag_to_machine()
-{
+MachineController::MachineController() : machines(NUM_MACHINES), tag_to_machine(){
 	flushed_state = false;
 
-	for (uint32_t i = 0; i < machines.size(); ++i)
+	for(uint32_t i = 0; i < machines.size(); ++i)
 		machines[i] = new Machine();
 }
 
-void MachineController::send_command(AFU_EVENT * afu_event, uint32_t cycle)
-{
+void MachineController::send_command(AFU_EVENT* afu_event, uint32_t cycle){
 	bool try_send = true;
 
 	uint32_t tag;
-	if (!TagManager::request_tag(&tag)) {
-		info_msg
-		    ("MachineController::send_command: no more tags available");
+	if(!TagManager::request_tag(&tag)){
+		info_msg("MachineController::send_command: No more tags available");
 		try_send = false;
 	}
 
-	for (uint32_t i = 0; i < machines.size(); ++i) {
-		if (machines[i]->is_enabled()) {
+	for(uint32_t i = 0; i < machines.size(); ++i){
+		if(machines[i]->is_enabled()){
 			// TODO debug message
-			info_msg("machine id %d is enabled", i);
-			if (try_send
-			    && machines[i]->attempt_new_command(afu_event, tag,
-								flushed_state,
-								(uint16_t)
-								(cycle &
-								 0x7FFF))) {
+			info_msg("Machine id %d is enabled", i);
+			if(try_send && machines[i]->attempt_new_command(afu_event, tag, flushed_state, (uint16_t) (cycle & 0x7FFF))){
 				// TODO debug message
-				info_msg("machine id %d sent new command", i);
+				info_msg("Machine id %d sent new command", i);
 				try_send = false;
 				tag_to_machine[tag] = machines[i];
 			}
@@ -66,78 +57,56 @@ void MachineController::send_command(AFU_EVENT * afu_event, uint32_t cycle)
 	}
 
 	// tag was not used by any machine if try_send is still true therefore return it
-	if (try_send)
+	if(try_send)
 		TagManager::release_tag(&tag);
 }
 
-void MachineController::process_response(AFU_EVENT * afu_event, uint32_t cycle)
-{
-	if (tag_to_machine.find(afu_event->response_tag) ==
-	    tag_to_machine.end())
-		error_msg
-		    ("MachineController::process_response: Does not find corresponding machine for respone_tag");
+void MachineController::process_response(AFU_EVENT* afu_event, uint32_t cycle){
+	if(tag_to_machine.find(afu_event->response_tag) == tag_to_machine.end())
+		error_msg("MachineController::process_response: Does not find corresponding machine for respone_tag");
 
-	if (flushed_state
-	    && (afu_event->response_code == PSL_RESPONSE_AERROR
-		|| afu_event->response_code == PSL_RESPONSE_PAGED))
-		error_msg
-		    ("MachineController::process_response: another AERROR or PAGED response when the AFU is already in flush state");
+	if(flushed_state && (afu_event->response_code == PSL_RESPONSE_AERROR || afu_event->response_code == PSL_RESPONSE_PAGED)) 
+		error_msg("MachineController::process_response: another AERROR or PAGED response when the AFU is already in flush state");
 
-	info_msg("MachineController: response_code %d",
-		 afu_event->response_code);
-	if (afu_event->response_code == PSL_RESPONSE_AERROR
-	    || afu_event->response_code == PSL_RESPONSE_DERROR
-	    || afu_event->response_code == PSL_RESPONSE_PAGED) {
+	info_msg("MachineController: Response code %d", afu_event->response_code);
+	if(afu_event->response_code == PSL_RESPONSE_AERROR ||
+			afu_event->response_code == PSL_RESPONSE_DERROR ||
+			afu_event->response_code == PSL_RESPONSE_PAGED ){
 
 		flushed_state = true;
 		info_msg("MachineController: AFU in flushed state");
-		for (uint32_t i = 0; i < machines.size(); ++i)
+		for(uint32_t i = 0; i < machines.size(); ++i)
 			machines[i]->disable();
-	} else if (afu_event->response_code == PSL_RESPONSE_DONE
-		   && tag_to_machine[afu_event->response_tag]->is_restart()) {
+	}
+	else if(afu_event->response_code == PSL_RESPONSE_DONE && tag_to_machine[afu_event->response_tag]->is_restart()){
 		flushed_state = false;
-	} else if (afu_event->response_code == PSL_RESPONSE_FLUSHED
-		   && !flushed_state) {
-		error_msg
-		    ("MachineController: received FLUSHED response when AFU is not in flushed state");
+	}
+	else if(afu_event->response_code == PSL_RESPONSE_FLUSHED && !flushed_state){
+		error_msg("MachineController: received FLUSHED response when AFU is not in flushed state");
 	}
 
-	tag_to_machine[afu_event->response_tag]->process_response(afu_event,
-								  flushed_state,
-								  (uint16_t)
-								  (cycle &
-								   0x7FFF));
+	tag_to_machine[afu_event->response_tag]->process_response(afu_event, flushed_state, (uint16_t) (cycle & 0x7FFF));
 	TagManager::release_tag(&(afu_event->response_tag), afu_event->credits);
 }
 
-void MachineController::process_buffer_write(AFU_EVENT * afu_event)
-{
-	if (tag_to_machine.find(afu_event->buffer_write_tag) ==
-	    tag_to_machine.end())
-		error_msg
-		    ("MachineController::process_buffer_write: Does not find corresponding machine for buffer_write_tag");
+void MachineController::process_buffer_write(AFU_EVENT* afu_event){
+	if(tag_to_machine.find(afu_event->buffer_write_tag) == tag_to_machine.end())
+		error_msg("MachineController::process_buffer_write: Does not find corresponding machine for buffer_write_tag");
 
-	tag_to_machine[afu_event->
-		       buffer_write_tag]->process_buffer_write(afu_event);
+	tag_to_machine[afu_event->buffer_write_tag]->process_buffer_write(afu_event);
 }
 
-void MachineController::process_buffer_read(AFU_EVENT * afu_event)
-{
-	if (tag_to_machine.find(afu_event->buffer_read_tag) ==
-	    tag_to_machine.end())
-		error_msg
-		    ("MachineController::process_buffer_read: Does not find corresponding machine for buffer_read_tag");
+void MachineController::process_buffer_read(AFU_EVENT* afu_event){
+	if(tag_to_machine.find(afu_event->buffer_read_tag) == tag_to_machine.end())
+		error_msg("MachineController::process_buffer_read: Does not find corresponding machine for buffer_read_tag");
 
-	tag_to_machine[afu_event->
-		       buffer_read_tag]->process_buffer_read(afu_event);
+	tag_to_machine[afu_event->buffer_read_tag]->process_buffer_read(afu_event);
 }
 
-void MachineController::change_machine_config(uint32_t word_address,
-					      uint32_t data)
-{
+void MachineController::change_machine_config(uint32_t word_address, uint32_t data){
 	// TODO modify to support double reads?
 	uint32_t i = word_address / (SIZE_CONFIG_TABLE * 2);
-	if (i >= NUM_MACHINES)
+	if(i >= NUM_MACHINES)
 		//error_msg("MachineController::change_machine_config: word address exceeded machine configuration space");
 		return;
 
@@ -145,10 +114,9 @@ void MachineController::change_machine_config(uint32_t word_address,
 	machines[i]->change_machine_config(offset, data);
 }
 
-uint32_t MachineController::get_machine_config(uint32_t word_address)
-{
+uint32_t MachineController::get_machine_config(uint32_t word_address){
 	uint32_t i = word_address / (SIZE_CONFIG_TABLE * 2);
-	if (i >= NUM_MACHINES)
+	if(i >= NUM_MACHINES)
 		//error_msg("MachineController::change_machine_config: word address exceeded machine configuration space");
 		return 0xFFFFFFFF;
 
@@ -156,44 +124,42 @@ uint32_t MachineController::get_machine_config(uint32_t word_address)
 	return machines[i]->get_machine_config(offset);
 }
 
-void MachineController::reset()
-{
+void MachineController::reset(){
 	TagManager::reset();
 	flushed_state = false;
-	for (uint32_t i = 0; i < machines.size(); ++i)
+	for(uint32_t i = 0; i < machines.size(); ++i)
 		machines[i]->reset();
 }
 
-bool MachineController::is_enabled() const {
-	for (uint32_t i = 0; i < machines.size(); ++i)
-		if (machines[i]->is_enabled())
-{
-info_msg("machine %d is still enabled", i);
-return true;
-}
+bool MachineController::is_enabled() const{
+	for(uint32_t i = 0; i < machines.size(); ++i)
+		if(machines[i]->is_enabled()){
+			info_msg("Machine %d is still enabled", i);
+			return true;
+		}
 
 	return false;
 }
 
-bool MachineController::all_machines_completed() const {
-	for (uint32_t i = 0; i < machines.size(); ++i) {
-		if (!machines[i]->is_completed()) {
-			//info_msg("machine %d is not completed", i);
+bool MachineController::all_machines_completed() const{
+	for(uint32_t i = 0; i < machines.size(); ++i){
+		if(!machines[i]->is_completed()){
+			//info_msg("Machine %d is not completed", i);
 			return false;
 		}
 	}
+
 	return true;
 }
 
-void MachineController::disable_all_machines()
-{
-	for (uint32_t i = 0; i < machines.size(); ++i)
+void MachineController::disable_all_machines() {
+	for(uint32_t i = 0; i < machines.size(); ++i)
 		machines[i]->disable();
 }
 
-MachineController::~MachineController()
-{
-	for (uint32_t i = 0; i < machines.size(); ++i)
-		if (machines[i])
+MachineController::~MachineController(){
+	for(uint32_t i = 0; i < machines.size(); ++i)
+		if(machines[i])
 			delete machines[i];
 }
+

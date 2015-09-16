@@ -33,46 +33,46 @@ extern "C" {
 #include <string>
 #include <vector>
 class AFU {
- private:
-	enum AFU_State { IDLE, RESET, READY, RUNNING,
-		WAITING_FOR_LAST_RESPONSES
-	};
+	private:
+		enum AFU_State { IDLE, RESET, READY, RUNNING,
+			WAITING_FOR_LAST_RESPONSES
+		};
 
-	AFU_EVENT afu_event;
-	Descriptor descriptor;
+		AFU_EVENT afu_event;
+		Descriptor descriptor;
 
-	MachineController machine_controller;
+		MachineController machine_controller;
 
-	AFU_State state;
+		AFU_State state;
 
-	uint64_t mmio_regs[3];	// stores MMIO registers starting from address 0x200
-	bool mmio_read_parity;	// AFU generates parity error if true
+		uint64_t mmio_regs[3];	// stores MMIO registers starting from address 0x200
+		bool mmio_read_parity;	// AFU generates parity error if true
 
-	int reset_delay;
+		int reset_delay;
 
-	void resolve_aux1_event();
-	void resolve_control_event();
-	void resolve_mmio_descriptor_event();
-	void resolve_mmio_event();
-	void resolve_response_event(uint32_t cycle);
-	void resolve_buffer_write_event();
-	void resolve_buffer_read_event();
+		void resolve_aux1_event();
+		void resolve_control_event();
+		void resolve_mmio_descriptor_event();
+		void resolve_mmio_event();
+		void resolve_response_event(uint32_t cycle);
+		void resolve_buffer_write_event();
+		void resolve_buffer_read_event();
 
-	void set_seed();
-	void set_seed(uint32_t);
+		void set_seed();
+		void set_seed(uint32_t);
 
-	void reset();
+		void reset();
 
- public:
-	/* constructor sets up descriptor from config file, establishes server socket connection 
-	   and waits for client to connect */
-	 AFU(int port, std::string filename, bool parity);
+	public:
+		/* constructor sets up descriptor from config file, establishes server socket connection 
+		   and waits for client to connect */
+		AFU(int port, std::string filename, bool parity);
 
-	/* starts the main loop of the afu test platform */
-	void start();
+		/* starts the main loop of the afu test platform */
+		void start();
 
-	/* destrutor close the socket connection */
-	~AFU();
+		/* destrutor close the socket connection */
+		~AFU();
 
 };
 

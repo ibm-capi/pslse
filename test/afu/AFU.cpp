@@ -35,20 +35,15 @@ using std::vector;
 
 #define MACHINE_CONFIG_OFFSET 0x400
 
-AFU::AFU(int port, string filename, bool parity):descriptor(filename),
-machine_controller()
-{
+AFU::AFU(int port, string filename, bool parity) : descriptor(filename), machine_controller(){
 
 	// initializes AFU socket connection as server
-	if (psl_serv_afu_event(&afu_event, port) == PSL_BAD_SOCKET)
-		error_msg("AFU: unable to create socket");
+	if(psl_serv_afu_event(&afu_event, port) == PSL_BAD_SOCKET)
+		error_msg("AFU: Unable to create socket");
 
-	int parity_enable = (parity) ? 1 : 0;
-	if (psl_afu_aux2_change
-	    (&afu_event, afu_event.job_running, afu_event.job_done,
-	     afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield,
-	     afu_event.timebase_request, parity_enable, 1) != PSL_SUCCESS) {
-		error_msg("AFU: failed to set parity_enable and latency");
+	int parity_enable = (parity)? 1:0;
+	if(psl_afu_aux2_change(&afu_event, afu_event.job_running, afu_event.job_done, afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield, afu_event.timebase_request, parity_enable, 1) != PSL_SUCCESS){
+		error_msg("AFU: Failed to set parity_enable and latency");
 	}
 
 	set_seed();
@@ -56,16 +51,15 @@ machine_controller()
 	state = IDLE;
 	mmio_read_parity = false;
 
-	for (uint32_t i = 0; i < 3; ++i)
+	for(uint32_t i = 0; i < 3; ++i)
 		mmio_regs[i] = 0;
 
 	reset_delay = 0;
 }
 
-void AFU::start()
-{
+void AFU::start(){
 	uint32_t cycle = 0;
-	while (1) {
+	while(1){
 		fd_set watchset;
 		FD_ZERO(&watchset);
 		FD_SET(afu_event.sockfd, &watchset);
@@ -75,196 +69,158 @@ void AFU::start()
 		//info_msg("Cycle: %d", cycle);        
 		++cycle;
 
-		if (rc < 0) {	// connection dropped
-			info_msg("AFU: connection lost");
+		if(rc < 0){ // connection dropped
+			info_msg("AFU: Connection lost");
 			break;
 		}
 
-		if (rc <= 0)	// no events to be processed
+		if (rc <= 0) // no events to be processed
 			continue;
 
 		// job done should only be asserted for one cycle
-		if (afu_event.job_done)
+		if(afu_event.job_done)
 			afu_event.job_done = 0;
 
 		// process event 
-		if (afu_event.job_valid == 1) {
+		if(afu_event.job_valid == 1){
 			info_msg("AFU: Received control event");
 			resolve_control_event();
 			afu_event.job_valid = 0;
 		}
 
-		if (afu_event.response_valid == 1) {
-			if (state != RUNNING
-			    && state != WAITING_FOR_LAST_RESPONSES
-			    && state != RESET)
-				error_msg
-				    ("AFU: received response event when AFU is not running");
+		if(afu_event.response_valid == 1){
+			if(state != RUNNING && state != WAITING_FOR_LAST_RESPONSES && state != RESET)
+				error_msg("AFU: Received response event when AFU is not running"); 
 
 			info_msg("AFU: Received response event");
 			resolve_response_event(cycle);
 			afu_event.response_valid = 0;
 		}
 
-		if (afu_event.mmio_valid == 1) {
-			if (afu_event.mmio_afudescaccess) {
-				if (state == IDLE || state == RESET)
-					error_msg
-					    ("AFU: Error MMIO descriptor access before AFU is done resetting");
+		if(afu_event.mmio_valid == 1){
+			if(afu_event.mmio_afudescaccess){
+				if(state == IDLE || state == RESET)
+					error_msg("AFU: Error MMIO descriptor access before AFU is done resetting");
 
 				info_msg("AFU: Received MMIO descriptor event");
 				resolve_mmio_descriptor_event();
-			} else {
-				if (state != RUNNING
-				    && state != WAITING_FOR_LAST_RESPONSES)
-					error_msg
-					    ("AFU: received MMIO non-descriptor access when AFU is not running");
+			}
+			else{
+				if(state != RUNNING && state != WAITING_FOR_LAST_RESPONSES)
+					error_msg("AFU: Received MMIO non-descriptor access when AFU is not running"); 
 
-				info_msg
-				    ("AFU: Received MMIO non-descriptor event");
+				info_msg("AFU: Received MMIO non-descriptor event");
 				resolve_mmio_event();
 			}
 			afu_event.mmio_valid = 0;
-		}
+		} 
 
-		if (afu_event.buffer_write == 1) {
-			if (state != RUNNING
-			    && state != WAITING_FOR_LAST_RESPONSES
-			    && state != RESET)
-				error_msg
-				    ("AFU: received buffer write when AFU is not running");
+		if(afu_event.buffer_write == 1){
+			if(state != RUNNING && state != WAITING_FOR_LAST_RESPONSES && state != RESET)
+				error_msg("AFU: Received buffer write when AFU is not running"); 
 
 			info_msg("AFU: Received buffer write event");
 			resolve_buffer_write_event();
 			afu_event.buffer_write = 0;
 		}
 
-		if (afu_event.buffer_read == 1) {
-			if (state != RUNNING
-			    && state != WAITING_FOR_LAST_RESPONSES
-			    && state != RESET)
-				error_msg
-				    ("AFU: received buffer read event when AFU is not running");
+		if(afu_event.buffer_read == 1){
+			if(state != RUNNING && state != WAITING_FOR_LAST_RESPONSES && state != RESET)
+				error_msg("AFU: Received buffer read event when AFU is not running"); 
 
 			info_msg("AFU: Received buffer read event");
 			resolve_buffer_read_event();
 			afu_event.buffer_read = 0;
 		}
 
-		if (afu_event.aux1_change == 1) {
+		if(afu_event.aux1_change == 1){
 			info_msg("AFU: aux1 change");
 			resolve_aux1_event();
 			afu_event.aux1_change = 0;
 		}
+
 		// generate commands
-		if (state == RUNNING) {
+		if(state == RUNNING){
 			machine_controller.send_command(&afu_event, cycle);
-		} else if (state == RESET) {
-			if (reset_delay == 0) {
+		}
+		else if(state == RESET){
+			if(reset_delay == 0){
 				state = READY;
 				reset();
-				info_msg("AFU: sending job_done after reset");
+				info_msg("AFU: Sending job_done after reset");
 
-				if (psl_afu_aux2_change
-				    (&afu_event, afu_event.job_running, 1,
-				     afu_event.job_cack_llcmd,
-				     afu_event.job_error, afu_event.job_yield,
-				     afu_event.timebase_request,
-				     afu_event.parity_enable,
-				     afu_event.buffer_read_latency) !=
-				    PSL_SUCCESS) {
-					error_msg
-					    ("AFU: failed to assert job_done");
+				if(psl_afu_aux2_change(&afu_event, afu_event.job_running, 1, afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield, afu_event.timebase_request, afu_event.parity_enable, afu_event.buffer_read_latency) != PSL_SUCCESS){
+					error_msg("AFU: Failed to assert job_done");
 				}
-			} else {
+			}
+			else{
 				//info_msg("AFU reset delay %d", reset_delay);
-				if (reset_delay > 0)
+				if(reset_delay > 0)
 					--reset_delay;
 			}
-		} else if (state == WAITING_FOR_LAST_RESPONSES) {
-			//info_msg("AFU: waiting for last responses");
-			if (machine_controller.all_machines_completed()) {
-				info_msg("AFU: machine completed");
+		}
+		else if(state == WAITING_FOR_LAST_RESPONSES){
+			//info_msg("AFU: Waiting for last responses");
+			if(machine_controller.all_machines_completed()){
+				info_msg("AFU: All machines completed");
 				machine_controller.reset();
-				if (psl_afu_aux2_change
-				    (&afu_event, 0, 1, afu_event.job_cack_llcmd,
-				     afu_event.job_error, afu_event.job_yield,
-				     afu_event.timebase_request,
-				     afu_event.parity_enable,
-				     afu_event.buffer_read_latency) !=
-				    PSL_SUCCESS)
-					error_msg("AFU: asserting done failed");
+				if(psl_afu_aux2_change(&afu_event, 0, 1, afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield, afu_event.timebase_request, afu_event.parity_enable, afu_event.buffer_read_latency) != PSL_SUCCESS)
+					error_msg("AFU: Asserting done failed");
 				state = IDLE;
 			}
 		}
 	}
 }
 
-AFU::~AFU()
-{
+AFU::~AFU(){
 	// close socket connection
 	psl_close_afu_event(&afu_event);
 }
 
-void AFU::resolve_aux1_event()
-{
-	if (state == RUNNING)
-		error_msg("AFU: changing \"room\" when AFU is running");
+void AFU::resolve_aux1_event(){
+	if(state == RUNNING)
+		error_msg("AFU: Changing \"room\" when AFU is running");
 
 	TagManager::set_max_credits(afu_event.room);
 }
 
-void AFU::reset()
-{
+void AFU::reset(){
 	machine_controller.reset();
 
-	for (uint32_t i = 0; i < 3; ++i)
+	for(uint32_t i = 0; i < 3; ++i)
 		mmio_regs[i] = 0;
 	mmio_read_parity = false;
 }
 
-void AFU::resolve_control_event()
-{
+void AFU::resolve_control_event(){
 	// Check for job code parity
-	if (afu_event.parity_enable)
-		if (afu_event.job_code_parity !=
-		    generate_parity(afu_event.job_code, ODD_PARITY))
+	if(afu_event.parity_enable)
+		if(afu_event.job_code_parity != generate_parity(afu_event.job_code, ODD_PARITY))
 			error_msg("AFU: Parity error in job_address");
 
-	if (afu_event.job_code == PSL_JOB_RESET) {
-		info_msg("AFU: received RESET");
-		if (psl_afu_aux2_change
-		    (&afu_event, 0, afu_event.job_done,
-		     afu_event.job_cack_llcmd, afu_event.job_error,
-		     afu_event.job_yield, afu_event.timebase_request,
-		     afu_event.parity_enable,
-		     afu_event.buffer_read_latency) != PSL_SUCCESS) {
-			error_msg("AFU: failed to de-assert job_running");
+	if(afu_event.job_code == PSL_JOB_RESET){
+		info_msg("AFU: Received RESET");
+		if(psl_afu_aux2_change(&afu_event, 0, afu_event.job_done, afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield, afu_event.timebase_request, afu_event.parity_enable, afu_event.buffer_read_latency) != PSL_SUCCESS){
+			error_msg("AFU: Failed to de-assert job_running");
 		}
 		machine_controller.disable_all_machines();
 		state = RESET;
 		reset_delay = 1000;
-	} else if (afu_event.job_code == PSL_JOB_START) {
-		info_msg("AFU: start signal received in state %d", state);
-		if (state != READY)
-			error_msg
-			    ("AFU: start signal detected outside of READY state");
+	}
+	else if(afu_event.job_code == PSL_JOB_START){
+		info_msg("AFU: Start signal received in state %d", state);
+		if(state != READY)
+			error_msg("AFU: Start signal detected outside of READY state");
 		mmio_regs[1] = afu_event.job_address;
 
 		// Check for jea parity
-		if (afu_event.parity_enable)
-			if (afu_event.job_address_parity !=
-			    generate_parity(afu_event.job_address, ODD_PARITY))
+		if(afu_event.parity_enable)
+			if(afu_event.job_address_parity != generate_parity(afu_event.job_address, ODD_PARITY))
 				error_msg("AFU: Parity error in job_address");
 
 		// assert job_running
-		if (psl_afu_aux2_change
-		    (&afu_event, 1, afu_event.job_done,
-		     afu_event.job_cack_llcmd, afu_event.job_error,
-		     afu_event.job_yield, afu_event.timebase_request,
-		     afu_event.parity_enable,
-		     afu_event.buffer_read_latency) != PSL_SUCCESS) {
-			error_msg("AFU: failed to assert job_running");
+		if(psl_afu_aux2_change(&afu_event, 1, afu_event.job_done, afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield, afu_event.timebase_request, afu_event.parity_enable, afu_event.buffer_read_latency) != PSL_SUCCESS){
+			error_msg("AFU: Failed to assert job_running");
 		}
 
 		state = RUNNING;
@@ -272,181 +228,138 @@ void AFU::resolve_control_event()
 	}
 }
 
-void AFU::resolve_mmio_descriptor_event()
-{
-	if (afu_event.mmio_read) {
+void AFU::resolve_mmio_descriptor_event(){
+	if(afu_event.mmio_read){
 		uint64_t data = 0;
 
 		// double, 64 bits
-		if (afu_event.mmio_double == 1) {
-			if (afu_event.mmio_address & 0x1)	// address not even
-				error_msg
-				    ("AFU: reading double word with non-even word address");
+		if(afu_event.mmio_double == 1){
+			if(afu_event.mmio_address & 0x1) // address not even
+				error_msg("AFU: Reading double word with non-even word address");
 
 			data = descriptor.get_reg(afu_event.mmio_address);
 		}
 		// 32 bits
-		else {
-			data =
-			    descriptor.get_reg(afu_event.mmio_address & ~0x1);
+		else{ 
+			data = descriptor.get_reg(afu_event.mmio_address & ~0x1);
 
 			// duplicate the desired 32-bit data in both top and bottom 32 bits
 			data = (data & 0xFFFFFFFF) | (data << 32);
 		}
 
-		uint32_t parity = (mmio_read_parity) ? generate_parity(data + 1,
-								       1) :
-		    generate_parity(data, 1);
-		if (psl_afu_mmio_ack(&afu_event, data, parity) != PSL_SUCCESS)
-			error_msg("AFU: mmio_ack failed");
-	} else {
-		error_msg("AFU: descriptor write is not supported");
+		uint32_t parity = (mmio_read_parity)? generate_parity(data + 1, 1):generate_parity(data, 1);
+		if(psl_afu_mmio_ack(&afu_event, data, parity) != PSL_SUCCESS)
+			error_msg("AFU: MMIO acknowledge failed");
+	}
+	else{
+		error_msg("AFU: Descriptor write is not supported");
 	}
 }
 
-void AFU::resolve_mmio_event()
-{
+void AFU::resolve_mmio_event(){
 
 	// MMIO READ
-	if (afu_event.mmio_read) {
+	if(afu_event.mmio_read){
 		uint64_t data = 0;
 
 		// for driving parity
-		if (afu_event.mmio_address == 0x4) {
-			if (afu_event.mmio_double)
+		if(afu_event.mmio_address == 0x4){
+			if(afu_event.mmio_double)
 				data = mmio_regs[2];
 			else
-				data =
-				    (mmio_regs[2] & 0xFFFFFFFF00000000) |
-				    (mmio_regs[2] >> 32);
-			info_msg("mmio read parity data 0x%lx", data);
-		} else if (afu_event.mmio_address == 0x2) {
+				data = (mmio_regs[2] & 0xFFFFFFFF00000000) | (mmio_regs[2] >> 32);
+			info_msg("MMIO read parity data 0x%lx", data);
+		}
+		else if(afu_event.mmio_address == 0x2){
 			data = mmio_regs[1];
-		} else {
-			if (afu_event.mmio_double) {
-				if (afu_event.mmio_address & 0x1)	// address not even
-					error_msg
-					    ("AFU: reading double word with non-even word address");
+		}
+		else{
+			if(afu_event.mmio_double){
+				if(afu_event.mmio_address & 0x1) // address not even
+					error_msg("AFU: Reading double word with non-even word address");
 
-				data =
-				    machine_controller.get_machine_config
-				    (afu_event.mmio_address -
-				     MACHINE_CONFIG_OFFSET);
-				data =
-				    (data << 32) |
-				    machine_controller.get_machine_config
-				    (afu_event.mmio_address -
-				     MACHINE_CONFIG_OFFSET + 1);
-				info_msg
-				    ("AFU: read mmio data 64 address 0x%x, data %016lx",
-				     afu_event.mmio_address, data);
-			} else {
-				data =
-				    machine_controller.get_machine_config
-				    (afu_event.mmio_address -
-				     MACHINE_CONFIG_OFFSET);
+				data = machine_controller.get_machine_config(afu_event.mmio_address - MACHINE_CONFIG_OFFSET);
+				data = (data << 32) | machine_controller.get_machine_config(afu_event.mmio_address-MACHINE_CONFIG_OFFSET+1);
+				info_msg("AFU: Read mmio data 64 address 0x%x, data %016lx", afu_event.mmio_address, data);
+			}
+			else{
+				data = machine_controller.get_machine_config(afu_event.mmio_address - MACHINE_CONFIG_OFFSET);
 
 				// duplicate the desired 32-bit data in both top and bottom 32 bits
 				data = (data & 0xFFFFFFFF) | (data << 32);
 
-				info_msg
-				    ("AFU: read mmio data 32 address 0x%x, data %08lx",
-				     afu_event.mmio_address, data);
+				info_msg("AFU: Read mmio data 32 address 0x%x, data %08lx", afu_event.mmio_address, data);
 
 			}
 		}
-		uint32_t parity = (mmio_read_parity) ? generate_parity(data + 1,
-								       1) :
-		    generate_parity(data, 1);
-		if (psl_afu_mmio_ack(&afu_event, data, parity) != PSL_SUCCESS)
-			error_msg("AFU: mmio_ack failed");
+		uint32_t parity = (mmio_read_parity)? generate_parity(data + 1, 1):generate_parity(data, 1);
+		if(psl_afu_mmio_ack(&afu_event, data, parity) != PSL_SUCCESS)
+			error_msg("AFU: MMIO acknowledge failed");
 	}
 	// MMIO WRITE
-	else {
-		if (afu_event.mmio_address == 0x0) {
-			if (machine_controller.is_enabled())
-				error_msg
-				    ("AFU: attempt to turn off AFU when one or more machines are still enabled");
+	else{
+		if(afu_event.mmio_address == 0x0){
+			if(machine_controller.is_enabled())
+				error_msg("AFU: Attempt to turn off AFU when one or more machines are still enabled");
 
 			state = WAITING_FOR_LAST_RESPONSES;
-			info_msg("AFU: preparing to shut down machine");
-		} else if (afu_event.mmio_address == 0x2) {
+			info_msg("AFU: Preparing to shut down machine");
+		}
+		else if (afu_event.mmio_address == 0x2){
 			error_msg("AFU should not write to this address");
-		} else if (afu_event.mmio_address == 0x4) {
+		}
+		else if (afu_event.mmio_address == 0x4){
 			// TODO fix setting mmio_read_parity to false
-			if ((afu_event.mmio_double
-			     && (afu_event.mmio_wdata & 0x8000000000000000))
-			    || ((afu_event.mmio_double != 1)
-				&& (afu_event.mmio_wdata & 0x80000000))) {
+			if( (afu_event.mmio_double && (afu_event.mmio_wdata & 0x8000000000000000)) || ((afu_event.mmio_double != 1) && (afu_event.mmio_wdata & 0x80000000))){
 				mmio_read_parity = true;
 				mmio_regs[2] = 0x8000000000000000;
-				info_msg("setting mmio read parity to 1");
-			}
-		} else {
-			info_msg("MMIO write address 0x%lx",
-				 afu_event.mmio_address);
-			if (afu_event.mmio_double == 1) {
-				machine_controller.change_machine_config
-				    (afu_event.mmio_address -
-				     MACHINE_CONFIG_OFFSET + 1,
-				     afu_event.mmio_wdata & 0xFFFFFFFF);
-				machine_controller.change_machine_config
-				    (afu_event.mmio_address -
-				     MACHINE_CONFIG_OFFSET,
-				     (afu_event.mmio_wdata & 0xFFFFFFFF00000000)
-				     >> 32);
-				info_msg
-				    ("AFU: write mmio data 64 address 0x%x, data %016lx",
-				     afu_event.mmio_address,
-				     afu_event.mmio_wdata);
-			} else {
-				machine_controller.change_machine_config
-				    (afu_event.mmio_address -
-				     MACHINE_CONFIG_OFFSET,
-				     (afu_event.mmio_wdata & 0xFFFFFFFF));
-
-				info_msg
-				    ("AFU: write mmio data 32 address 0x%x, data %08lx",
-				     afu_event.mmio_address,
-				     afu_event.mmio_wdata);
+				info_msg("Setting MMIO read parity to 1");
 			}
 		}
-		if (psl_afu_mmio_ack(&afu_event, 0, 0) != PSL_SUCCESS)
-			error_msg("AFU: mmio_ack failed");
+		else{
+			info_msg("MMIO Write address 0x%lx", afu_event.mmio_address);
+			if(afu_event.mmio_double == 1){
+				machine_controller.change_machine_config(afu_event.mmio_address - MACHINE_CONFIG_OFFSET+1, afu_event.mmio_wdata & 0xFFFFFFFF);
+				machine_controller.change_machine_config(afu_event.mmio_address - MACHINE_CONFIG_OFFSET, (afu_event.mmio_wdata & 0xFFFFFFFF00000000) >> 32);
+				info_msg("AFU: Write MMIO data 64 address 0x%x, data %016lx", afu_event.mmio_address, afu_event.mmio_wdata);
+			}
+			else{
+				machine_controller.change_machine_config(afu_event.mmio_address - MACHINE_CONFIG_OFFSET, (afu_event.mmio_wdata & 0xFFFFFFFF));
+
+				info_msg("AFU: Write MMIO data 32 address 0x%x, data %08lx", afu_event.mmio_address, afu_event.mmio_wdata);
+			}
+		}
+		if(psl_afu_mmio_ack(&afu_event, 0, 0) != PSL_SUCCESS)
+			error_msg("AFU: MMIO acknowledge failed");
 	}
 
 }
 
-void AFU::resolve_response_event(uint32_t cycle)
-{
-	if (!TagManager::is_in_use(&(afu_event.response_tag)))
-		error_msg("AFU: received tag not in use");
+void AFU::resolve_response_event(uint32_t cycle){
+	if(!TagManager::is_in_use(&(afu_event.response_tag)))
+		error_msg("AFU: Received tag not in use");
 
 	machine_controller.process_response(&afu_event, cycle);
 }
 
-void AFU::resolve_buffer_write_event()
-{
-	if (!TagManager::is_in_use(&(afu_event.buffer_write_tag)))
-		error_msg("AFU: received tag not in use");
+void AFU::resolve_buffer_write_event(){
+	if(!TagManager::is_in_use(&(afu_event.buffer_write_tag)))
+		error_msg("AFU: Received tag not in use");
 
 	machine_controller.process_buffer_write(&afu_event);
 }
 
-void AFU::resolve_buffer_read_event()
-{
-	if (!TagManager::is_in_use(&(afu_event.buffer_read_tag)))
-		error_msg("AFU: received tag not in use");
+void AFU::resolve_buffer_read_event(){
+	if(!TagManager::is_in_use(&(afu_event.buffer_read_tag)))
+		error_msg("AFU: Received tag not in use");
 
 	machine_controller.process_buffer_read(&afu_event);
 }
 
-void AFU::set_seed()
-{
+void AFU::set_seed(){
 	srand(time(NULL));
 }
 
-void AFU::set_seed(uint32_t seed)
-{
+void AFU::set_seed(uint32_t seed){
 	srand(seed);
 }

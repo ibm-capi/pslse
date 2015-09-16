@@ -28,11 +28,9 @@
 using std::string;
 using std::stringstream;
 
-int main(int argc, char *argv[])
-{
-	if (argc < 3) {
-		fprintf(stderr,
-			"Not enough arguments. Usage: ./afu port_number descriptor_file [parity]\n");
+int main(int argc, char* argv[]){
+	if(argc < 3){
+		fprintf(stderr, "Not enough arguments. Usage: ./afu port_number descriptor_file [parity]\n");
 		exit(1);
 	}
 
@@ -44,7 +42,7 @@ int main(int argc, char *argv[])
 	ss << argv[1];
 	ss >> port;
 
-	if (argc == 4 && string(argv[3]) == "parity") {
+	if(argc == 4 && string(argv[3]) == "parity"){
 		printf("MAIN: AFU parity enabled\n");
 		parity = true;
 	}
