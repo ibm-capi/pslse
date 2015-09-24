@@ -21,6 +21,7 @@
 
 enum client_state {
 	CLIENT_NONE,
+	CLIENT_INIT,
 	CLIENT_VALID
 };
 

@@ -214,7 +214,7 @@ static struct client *_client_connect(int *fd, char *ip)
 	client->pending = 1;
 	client->timeout = timeout;
 	client->flushing = FLUSH_NONE;
-	client->state = CLIENT_NONE;
+	client->state = CLIENT_INIT;
 
 	// Return acknowledge to client
 	ack[0] = PSLSE_CONNECT;
