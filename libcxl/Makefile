@@ -3,7 +3,8 @@ COMMON_DIR=../common
 include Makefile.vars
 include Makefile.rules
 
-OBJS = debug.o libcxl.o utils.o
+SRCS = $(wildcard *.c)
+OBJS = $(subst .c,.o,$(SRCS))
 
 all: $(COMMON_DIR)/misc/cxl.h libcxl.so libcxl.a
 
