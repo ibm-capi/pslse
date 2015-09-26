@@ -1,0 +1,375 @@
+#!/usr/bin/python
+
+#
+# Copyright 2015 International Business Machines
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+#
+# Description : mmio.c
+#
+# This test performs basic mmio test using the Test AFU for validating pslse
+#
+
+import getopt
+import os
+import re
+import select
+import signal
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+def usage():
+	print ''
+	print 'regress.py [-h] [-c] [-b]'
+	print '\t-h	Display this help message'
+	print '\t-c	Force clean compile of all code'
+	print '\t-b	Bypass code compile'
+	print ''
+	sys.exit(2)
+
+# Register stdout pipe to poll for data in ready
+def register_poller(out):
+	# Configure poller to trigger on data in, hangup or error
+	READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
+	poller = select.poll()
+	poller.register(out, READ_ONLY)
+	return poller
+
+# Returns true when previously registers stdout pipe has data in pending
+def poller_ready(poller):
+	# Poll for data ready and timeout in 50ms
+	events = poller.poll(50)
+	# Check to see if data in or priority data in is ready
+	for fd, flag in events:
+		if flag & (select.POLLIN | select.POLLPRI):
+			return True
+		if flag & select.POLLERR:
+			print "Data pipe error"
+			sys.exit(1)
+		if flag & select.POLLHUP:
+			return None
+	return False
+
+# Compile code in current directory
+def build(file, clean):
+	print('REGRESS: Building %s' % file)
+	# Call 'make' to clean
+	if clean:
+		try:
+			subprocess.call(['make', 'clean'])
+		except:
+			print 'Build failed'
+			sys.exit(1)
+	# Call 'make' to build
+	try:
+		subprocess.call(['make', 'DEBUG=1', '-j'])
+	except:
+		print 'Build failed'
+		sys.exit(1)
+
+# Compile code and test for successful file build
+def build_and_test(dir, file, clean):
+	# Save current directory
+	cwd = os.getcwd()
+	# Change directory
+	os.chdir(dir)
+	# Compile
+	build(file, clean)
+	# Test for compile success
+	if not os.path.isfile(file):
+		print('Failed to build:%s/%s' % (os.path.dirname(os.path.realpath(__file__)), file))
+		sys.exit(1)
+	# Return to previous directory
+	os.chdir(cwd)
+
+# Compile code and test for successful build for all .c files in directory
+def build_and_test_all(dir, name, clean):
+	# Save current directory
+	cwd = os.getcwd()
+	# Change directory
+	os.chdir(dir)
+	# Compile
+	build(name, clean)
+	# Test for compile success
+	for filename in os.listdir('.'):
+		if filename.endswith('.c'):
+			if not os.path.isfile(re.sub('.c$', '', filename)):
+				print('Failed to build:%s/%s' % (os.path.dirname(os.path.realpath(__file__)), filename))
+				sys.exit(1)
+	# Return to previous directory
+	os.chdir(cwd)
+
+# Start AFU devid based on desc_list attributes
+def start_afu(path, afu, devid, desc_list, shim, log):
+	# Initialize variables
+	port = 32768
+	descriptor = 'afu' + devid + '.cfg'
+	running = False
+	cwd = os.getcwd()
+
+	# Create descriptor file
+	desc = open (descriptor, 'w')
+	for field, value in desc_list.iteritems():
+		desc.write ( '%s : %s\n' % (field, value))
+	desc.close();
+
+	# Start AFU capturing stdout and stderr in pipes
+	while not running and (port < 65535):
+		command = [afu, str(port), cwd + '/' + descriptor]
+		try:
+			process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={'PATH': path})
+		except:
+			print('REGRESS: Failed to start afu%s' % devid)
+			sys.exit(1)
+		# Open log file for afu
+		logname = 'afu' + devid + '.log'
+		log[devid] = open (logname, 'w')
+		# Iterate through port numbers until successful
+		poller = register_poller(process.stdout)
+		while True:
+			if poller_ready(poller) is False:
+				# stdout pipe has no data ready yet
+				time.sleep(0.1)
+				continue
+			out = process.stdout.readline()
+			started = re.match('.*connection on .*:(.*)', out) 
+			log[devid].write(out)
+			if started:
+				port = int(started.group(1))
+				print('REGRESS: Started afu%s' % devid)
+				running = True
+				break
+			if (poller_ready(poller) is None) and process.poll():
+				# AFU process failed to open port and stopped
+				log[devid].close()
+				port += 1
+				break
+	# Remove no longer needed descriptor file
+	os.remove(descriptor)
+	# Check for unsuccessful AFU start
+	if (port == 65535):
+		print('REGRESS: Failed to start afu%s' % devid)
+		sys.exit(1)
+	# Save device id and port to shim_host.dat
+	shim.write ('afu' + devid + ',localhost:' + str(port) + '\n')
+	return process
+
+# Start pslse
+def start_pslse(path, pslse, port, parm_list, log):
+	# Initialize variables
+	parms = 'pslse.parms'
+	cwd = os.getcwd()
+
+	# Create parms file
+	parm = open (parms, 'w')
+	for field, value in parm_list.iteritems():
+		parm.write ( '%s:%s\n' % (field, value))
+	parm.close();
+
+	# Start pslse capturing stdout and stderr in pipes
+	try:
+		process = subprocess.Popen(pslse, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={'PATH': path})
+	except:
+		print "Failed to start pslse"
+		sys.exit(1)
+	poller = register_poller(process.stdout)
+	while True:
+		if poller_ready(poller) is None:
+			# stdout pipe has closed
+			print "Failed to start pslse"
+			flush_stdout(process, log)
+			sys.exit(1)
+		if poller_ready(poller) is False:
+			# stdout pipe has no data ready yet
+			time.sleep(0.1)
+			continue
+		out = process.stdout.readline()
+		started = re.match( 'INFO:Started PSLSE server, listening on .*:(.*)', out) 
+		log.write(out)
+		if started:
+			port[0] = int(started.group(1))
+			print 'REGRESS: Started pslse'
+			break
+	os.remove(parms)
+	return process
+
+def flush_stdout(process, log):
+	poller = register_poller(process.stdout)
+	while poller_ready(poller) is True:
+		# Read next line of stdout from pslse
+			out = process.stdout.readline()
+			log.write(out)
+	log.close()
+
+def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_dir):
+	### Start AFUs
+	# Open shim_host.dat
+	shim = open ('shim_host.dat', 'w')
+	# Parse xml test file for each afu
+	root = tree.getroot()
+	afu_process = {}
+	afu_log = {}
+	for afu in root.findall('afu'):
+		# Build desciptor hash for each afu
+		desc_hash = {}
+		for parm in afu:
+			desc_hash[parm.tag] = parm.text
+		# Get device id for afu
+		afu_device = afu.get('name')
+		# Start this afu
+		afu_process[afu_device] = start_afu(test_afu_dir, test_afu_exec, afu_device, desc_hash, shim, afu_log)
+	# Close shim_host.dat
+	shim.close()
+
+	### Start PSLSE
+	# Open pslse_server.dat
+	pslse_server = open ('pslse_server.dat', 'w')
+	pslse_log = open ('pslse.log', 'w')
+	# Parse xml test file for pslse data
+	psl = root.find('pslse')
+	# Build pslse parms hash
+	parm_hash = {}
+	pslse_port = [0]
+	pslse_fail = []
+	for parm in psl:
+		if parm.tag == 'fail':
+			# Store fail conditions seperate from other parms
+			pslse_fail = parm.text.split('|')
+		else:
+			# Store pslse parm in hash
+			parm_hash[parm.tag] = parm.text
+	# Start pslse with parms from xml test file
+	pslse = start_pslse(pslse_dir, pslse_exec, pslse_port, parm_hash, pslse_log)
+	# Update and close pslse_server.dat file with pslse port
+	pslse_server.write ('localhost:' + str(pslse_port[0]) + '\n')
+	pslse_server.close()
+	# Remove shim_host.dat that is no longer needed
+	os.remove('shim_host.dat')
+	poller = register_poller(pslse.stdout)
+
+	### Run all tests in xml test file
+	for test in root.findall('test'):
+		print("REGRESS: Running test '%s'" % test.get('name'))
+		# Start test and capture stdout and stderr in pipes
+		passed = False
+		failed = False
+		try:
+			output = subprocess.check_output(test.get('name') , stderr=subprocess.PIPE, env={'PATH': tests_dir})
+		except:
+			failed = True
+		# Search stdout for PASSED or FAILED messages
+		test_log_name = test.get('name') + '.log'
+		test_log = open (test_log_name, 'w')
+		if not failed:
+			for line in output.split('\n'):
+				failed = re.match( 'FAILED.*', line) 
+				passed = re.match( 'PASSED', line) 
+				test_log.write("%s\n" % line)
+				if passed or failed:
+					if failed:
+						print line
+					break
+		# Explicit FAILED message not found, check pslse stdout
+		if not failed:
+			while poller_ready(poller) is True:
+				# Read next line of stdout from pslse
+				pslse_out = pslse.stdout.readline()
+				pslse_log.write(pslse_out)
+				# Check all possible fail conditions for match
+				for fail in pslse_fail:
+					pattern = '.*' + fail + '.*'
+					failed = re.match(pattern, pslse_out) 
+					if failed:
+						# Fail found, exit for loop
+						break
+				if failed:
+					# Fail found, exit while loop
+					break
+
+		# Close test log file
+		test_log.close()
+
+		# Report fail and exit if failed or not explicit success
+		if failed or not passed:
+			print("REGRESS: Test '%s' failed" % test.get('name'))
+			flush_stdout(pslse, pslse_log)
+			for dev, log in afu_log.iteritems():
+				flush_stdout(afu_process[dev], log)
+			os.kill(pslse.pid, signal.SIGTERM)
+			sys.exit(1)
+
+		# Test passed
+		print("REGRESS: '%s' passed" % test.get('name'))
+		os.remove(test_log_name)
+
+	# Final clean up
+	for dev, log in afu_log.iteritems():
+		log.close()
+		logname = 'afu' + dev + '.log'
+		os.remove(logname)
+	pslse_log.close()
+	os.remove('pslse.log')
+	os.remove('pslse_server.dat')
+	os.kill(pslse.pid, signal.SIGTERM)
+
+def main(argv):
+	### Default parameters
+	test_afu_dir = '../afu'
+	test_afu_exec = 'afu'
+	pslse_dir = '../../pslse'
+	pslse_exec = 'pslse'
+	libcxl_dir = '../../libcxl'
+	libcxl_a = 'libcxl.a'
+	tests_dir = '../tests'
+	bypass= 0
+	clean = 0
+
+	### Parse command line
+	try:
+		opts, args = getopt.getopt(argv,'bch')
+	except getopt.getoptError:
+		usage()
+	for opt, arg in opts:
+		if opt == '-h':
+			usage()
+		elif opt == '-b':
+			bypass = 1;
+		elif opt == '-c':
+			clean = 1;
+
+	### Compile all code
+	if not bypass:
+		# Compile Test AFU
+		build_and_test(test_afu_dir, test_afu_exec, clean)
+		# Compile PSLSE
+		build_and_test(pslse_dir, pslse_exec, clean)
+		# Compile libcxl library
+		build_and_test(libcxl_dir, libcxl_a, clean)
+		# Compile regression tests
+		build_and_test_all(tests_dir, 'regression tests', clean)
+
+	### Run through all xml file in directory
+	for filename in os.listdir('.'):
+		if filename.endswith('.xml'):
+			tree = ET.parse(filename)
+			print ("REGRESS: Running tests in '%s'" % filename)
+			run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_dir)
+
+	# All tests passed
+	print 'REGRESS: All tests passed'
+
+if __name__ == '__main__': main(sys.argv[1:])
