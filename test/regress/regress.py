@@ -24,6 +24,7 @@
 
 import getopt
 import os
+import random
 import re
 import select
 import signal
@@ -33,11 +34,14 @@ import time
 import xml.etree.ElementTree as ET
 
 def usage():
+	print 'Usage: regress.py [OPTION]...'
 	print ''
-	print 'regress.py [-h] [-c] [-b]'
-	print '\t-h	Display this help message'
-	print '\t-c	Force clean compile of all code'
-	print '\t-b	Bypass code compile'
+	print '  -c         \tforce clean compile of all code'
+	print '  -b         \tbypass code compile'
+	print '  -s SEED    \tseed for random number generation'
+	print '  -t TEST    \tsingle test to run (Requires -x also)'
+	print '  -x XML_FILE\tsingle test list file to use'
+	print '  -h         \tdisplay this help message and exit'
 	print ''
 	sys.exit(2)
 
@@ -72,13 +76,13 @@ def build(file, clean):
 		try:
 			subprocess.call(['make', 'clean'])
 		except:
-			print 'Build failed'
+			print sys.exc_info()[1]
 			sys.exit(1)
 	# Call 'make' to build
 	try:
 		subprocess.call(['make', 'DEBUG=1', '-j'])
 	except:
-		print 'Build failed'
+		print sys.exc_info()[1]
 		sys.exit(1)
 
 # Compile code and test for successful file build
@@ -133,6 +137,7 @@ def start_afu(path, afu, devid, desc_list, shim, log):
 		try:
 			process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={'PATH': path})
 		except:
+			print sys.exc_info()[1]
 			print('REGRESS: Failed to start afu%s' % devid)
 			sys.exit(1)
 		# Open log file for afu
@@ -184,6 +189,7 @@ def start_pslse(path, pslse, port, parm_list, log):
 	try:
 		process = subprocess.Popen(pslse, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={'PATH': path})
 	except:
+		print sys.exc_info()[1]
 		print "Failed to start pslse"
 		sys.exit(1)
 	poller = register_poller(process.stdout)
@@ -215,7 +221,7 @@ def flush_stdout(process, log):
 			log.write(out)
 	log.close()
 
-def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_dir):
+def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_dir, test_file, seed):
 	### Start AFUs
 	# Open shim_host.dat
 	shim = open ('shim_host.dat', 'w')
@@ -262,14 +268,22 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 	poller = register_poller(pslse.stdout)
 
 	### Run all tests in xml test file
+	test_count = 0
 	for test in root.findall('test'):
-		print("REGRESS: Running test '%s'" % test.get('name'))
+		if (test_file != '') and (test.get('name') != test_file):
+			continue
+		if test_file == '':
+			seed = random.randint(0, 0xFFFFFFFF)
+		random.seed(seed)
+		print("REGRESS: Running test '%s' with seed %d" % (test.get('name'), seed))
 		# Start test and capture stdout and stderr in pipes
+		test_count += 1
 		passed = False
 		failed = False
 		try:
-			output = subprocess.check_output(test.get('name') , stderr=subprocess.PIPE, env={'PATH': tests_dir})
+			output = subprocess.check_output([test.get('name'), "-s", str(seed)] , stderr=subprocess.PIPE, env={'PATH': tests_dir})
 		except:
+			print sys.exc_info()[1]
 			failed = True
 		# Search stdout for PASSED or FAILED messages
 		test_log_name = test.get('name') + '.log'
@@ -325,6 +339,7 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 	os.remove('pslse.log')
 	os.remove('pslse_server.dat')
 	os.kill(pslse.pid, signal.SIGTERM)
+	return test_count
 
 def main(argv):
 	### Default parameters
@@ -337,10 +352,13 @@ def main(argv):
 	tests_dir = '../tests'
 	bypass= 0
 	clean = 0
+	test_file = ''
+	xml_file = ''
+	seed = int(time.time())
 
 	### Parse command line
 	try:
-		opts, args = getopt.getopt(argv,'bch')
+		opts, args = getopt.getopt(argv,'bchs:t:x:')
 	except getopt.getoptError:
 		usage()
 	for opt, arg in opts:
@@ -350,6 +368,19 @@ def main(argv):
 			bypass = 1;
 		elif opt == '-c':
 			clean = 1;
+		elif opt == '-s':
+			seed = int(arg);
+		elif opt == '-t':
+			test_file = arg;
+		elif opt == '-x':
+			xml_file = arg;
+	if (test_file != '') and (xml_file == ''):
+		print '\nERROR: Can not specify -t without -x!\n'
+		usage()
+
+	if xml_file == '':
+		print 'REGRESS: master seed = ' + str(seed)
+		random.seed(seed)
 
 	### Compile all code
 	if not bypass:
@@ -363,13 +394,19 @@ def main(argv):
 		build_and_test_all(tests_dir, 'regression tests', clean)
 
 	### Run through all xml file in directory
+	test_count = 0
 	for filename in os.listdir('.'):
 		if filename.endswith('.xml'):
+			if (xml_file != '') and (filename != (xml_file + '.xml')):
+				continue
 			tree = ET.parse(filename)
-			print ("REGRESS: Running tests in '%s'" % filename)
-			run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_dir)
+			if xml_file == '':
+				seed = random.randint(0, 0xFFFFFFFF)
+			random.seed(seed)
+			print ("REGRESS: Running tests in '%s' with seed %d" % (filename, seed))
+			test_count += run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_dir, test_file, seed)
 
 	# All tests passed
-	print 'REGRESS: All tests passed'
+	print 'REGRESS: %d tests passed' % test_count
 
 if __name__ == '__main__': main(sys.argv[1:])
