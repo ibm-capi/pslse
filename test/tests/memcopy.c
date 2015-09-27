@@ -20,6 +20,7 @@
  */
 
 #include <errno.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,13 @@
 #define READ_CL_NA 0x0A00
 #define WRITE_NA   0x0D00
 
+void usage(char *name)
+{
+	printf("Usage: %s [OPTION]...\n\n", name);
+	printf("  -s, --seed\t\tseed for random number generation\n");
+	printf("      --help\tdisplay this help and exit\n\n");
+}
+
 int main(int argc, char *argv[])
 {
 	MachineConfig machine;
@@ -39,9 +47,43 @@ int main(int argc, char *argv[])
 	uint64_t wed;
 	int i, quadrant, byte;
 	uint8_t response;
+	unsigned seed;
+	int opt, option_index;
+	char *name;
 
-	// Seed random numbers
-	srand(time(NULL));
+	name = strrchr(argv[0], '/');
+	if (name)
+		name++;
+	else
+		name = argv[0];
+
+	static struct option long_options[] = {
+		{"help",	no_argument,		0,		'h'},
+		{"seed",	required_argument,	0,		's'},
+		{NULL, 0, 0, 0}
+	};
+
+	option_index = 0;
+	seed = time(NULL);
+	while ((opt = getopt_long (argc, argv, "hs:",
+				   long_options, &option_index)) >= 0) {
+		switch (opt)
+		{
+		case 0:
+			break;
+		case 's':
+			seed = strtoul(optarg, NULL, 0);
+			break;
+		case 'h':
+		default:
+			usage(name);
+			return 0;
+		}
+	}
+
+	// Seed random number generator
+	srand(seed);
+	printf("%s: seed=%d\n", name, seed);
 
 	// Open first AFU found
 	struct cxl_afu_h *afu_h;
@@ -95,7 +137,7 @@ int main(int argc, char *argv[])
 	// Check for valid response
 	if (response != 0)
 	{
-		printf("FAILED: Unexpected response code 0x%x", response);
+		printf("FAILED: Unexpected response code 0x%x\n", response);
 		goto done;
 	}
 
@@ -111,7 +153,7 @@ int main(int argc, char *argv[])
 	// Check for valid response
 	if (response != 0)
 	{
-		printf("FAILED: Unexpected response code 0x%x", response);
+		printf("FAILED: Unexpected response code 0x%x\n", response);
 		goto done;
 	}
 
