@@ -54,7 +54,7 @@ def register_poller(out):
 	return poller
 
 # Returns true when previously registers stdout pipe has data in pending
-def poller_ready(poller):
+def poller_ready(poller, process):
 	# Poll for data ready and timeout in 50ms
 	events = poller.poll(50)
 	# Check to see if data in or priority data in is ready
@@ -63,6 +63,8 @@ def poller_ready(poller):
 			return True
 		if flag & select.POLLERR:
 			print "Data pipe error"
+			if process:
+				os.kill(process.pid, signal.SIGTERM)
 			sys.exit(1)
 		if flag & select.POLLHUP:
 			return None
@@ -146,7 +148,7 @@ def start_afu(path, afu, devid, desc_list, shim, log):
 		# Iterate through port numbers until successful
 		poller = register_poller(process.stdout)
 		while True:
-			if poller_ready(poller) is False:
+			if poller_ready(poller, None) is False:
 				# stdout pipe has no data ready yet
 				time.sleep(0.1)
 				continue
@@ -158,7 +160,7 @@ def start_afu(path, afu, devid, desc_list, shim, log):
 				print('REGRESS: Started afu%s' % devid)
 				running = True
 				break
-			if (poller_ready(poller) is None) and process.poll():
+			if (poller_ready(poller, None) is None) and process.poll():
 				# AFU process failed to open port and stopped
 				log[devid].close()
 				port += 1
@@ -194,12 +196,12 @@ def start_pslse(path, pslse, port, parm_list, log):
 		sys.exit(1)
 	poller = register_poller(process.stdout)
 	while True:
-		if poller_ready(poller) is None:
+		if poller_ready(poller, None) is None:
 			# stdout pipe has closed
 			print "Failed to start pslse"
 			flush_stdout(process, log)
 			sys.exit(1)
-		if poller_ready(poller) is False:
+		if poller_ready(poller, None) is False:
 			# stdout pipe has no data ready yet
 			time.sleep(0.1)
 			continue
@@ -215,7 +217,7 @@ def start_pslse(path, pslse, port, parm_list, log):
 
 def flush_stdout(process, log):
 	poller = register_poller(process.stdout)
-	while poller_ready(poller) is True:
+	while poller_ready(poller, None) is True:
 		# Read next line of stdout from pslse
 			out = process.stdout.readline()
 			log.write(out)
@@ -305,7 +307,7 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 					break
 		# Explicit FAILED message not found, check pslse stdout
 		if not failed:
-			while poller_ready(poller) is True:
+			while poller_ready(poller, pslse) is True:
 				# Read next line of stdout from pslse
 				pslse_out = pslse.stdout.readline()
 				pslse_log.write(pslse_out)
@@ -342,8 +344,6 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 		logname = 'afu' + dev + '.log'
 		os.remove(logname)
 	pslse_log.close()
-	os.remove('pslse.log')
-	os.remove('pslse_server.dat')
 	os.kill(pslse.pid, signal.SIGTERM)
 	return test_count
 
@@ -414,5 +414,13 @@ def main(argv):
 
 	# All tests passed
 	print 'REGRESS: %d tests passed' % test_count
+	if os.path.isfile('pslse_server.dat'):
+		os.remove('pslse_server.dat')
+	if os.path.isfile('pslse.log'):
+		os.remove('pslse.log')
+	if os.path.isfile('debug.log'):
+		os.remove('debug.log')
+	if os.path.isfile('gmon.out'):
+		os.remove('gmon.out')
 
 if __name__ == '__main__': main(sys.argv[1:])
