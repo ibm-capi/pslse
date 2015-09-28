@@ -276,12 +276,18 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 			seed = random.randint(0, 0xFFFFFFFF)
 		random.seed(seed)
 		print("REGRESS: Running test '%s' with seed %d" % (test.get('name'), seed))
+		# Parse parms for test
+		test_parms = [test.get('name'), '-s', str(seed)]
+		for parm in test:
+			test_parms.append('-' + parm.tag)
+			if parm.text:
+				test_parms.append(parm.text)
 		# Start test and capture stdout and stderr in pipes
 		test_count += 1
 		passed = False
 		failed = False
 		try:
-			output = subprocess.check_output([test.get('name'), "-s", str(seed)] , stderr=subprocess.PIPE, env={'PATH': tests_dir})
+			output = subprocess.check_output(test_parms, stderr=subprocess.PIPE, env={'PATH': tests_dir})
 		except:
 			print sys.exc_info()[1]
 			failed = True
