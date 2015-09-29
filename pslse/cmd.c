@@ -444,7 +444,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	    ("%s:COMMAND tag=0x%02x code=0x%04x size=0x%02x abt=%d cch=0x%04x",
 	     cmd->afu_name, tag, command, size, abort, handle);
 	debug_msg("%s:COMMAND tag=0x%02x addr=0x%016" PRIx64, cmd->afu_name,
-		  address);
+		  tag, address);
 
 	// Is AFU running?
 	if (*(cmd->psl_state) != PSLSE_RUNNING) {
