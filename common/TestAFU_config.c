@@ -101,21 +101,27 @@ int config_and_enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uin
 	return 0;
 }
 
-// Function to set most commonly used elements, write to AFU MMIO space and
-// wait for command completion
-int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size)
+// Wait for response from AFU machine
+int get_response(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num)
 {
 	uint8_t response;
 
-	if (config_and_enable_machine(afu, machine, mach_num, context, command,
-				      command_size, min_delay, max_delay,
-				      memory_base_address, memory_size, 0) < 0)
-		return -1;
 	do {
 		poll_machine(afu, machine, mach_num);
 		get_machine_config_response_code(machine, &response);
 	} while (response == 0xFF);
 	return response;
+}
+
+// Function to set most commonly used elements, write to AFU MMIO space and
+// wait for command completion
+int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size)
+{
+	if (config_and_enable_machine(afu, machine, mach_num, context, command,
+				      command_size, min_delay, max_delay,
+				      memory_base_address, memory_size, 0) < 0)
+		return -1;
+	return get_response(afu, machine, mach_num);
 }
 
 //////////////////////////////////
@@ -132,6 +138,11 @@ void set_machine_config_enable_always(MachineConfig* machine) {
 void set_machine_config_enable_once(MachineConfig* machine) {
 	machine->config[0] &= ~0x8000000000000000LL;
 	machine->config[0] |=  0x4000000000000000LL;
+}
+
+// Disable machine
+void set_machine_config_disable(MachineConfig* machine) {
+	machine->config[0] &= ~0xC000000000000000LL;
 }
 
 // Command code field is bits[3:15] of double-word 0

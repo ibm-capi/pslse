@@ -43,6 +43,9 @@ int config_and_enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uin
 // Function to read config from AFU
 int poll_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index);
 
+// Wait for response from AFU machine
+int get_response(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num);
+
 // Function to set most commonly used elements, write to AFU MMIO space and
 // wait for command completion
 int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size);
@@ -52,6 +55,9 @@ void set_machine_config_enable_always(MachineConfig* machine);
 
 // Enable once field is bits[1] of double-word 0
 void set_machine_config_enable_once(MachineConfig* machine);
+
+// Disable machine
+void set_machine_config_disable(MachineConfig* machine);
 
 // Command code field is bits[3:15] of double-word 0
 void set_machine_config_command_code(MachineConfig* machine, uint16_t code);
