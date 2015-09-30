@@ -214,7 +214,7 @@ static struct client *_client_connect(int *fd, char *ip)
 	client->pending = 1;
 	client->timeout = timeout;
 	client->flushing = FLUSH_NONE;
-	client->state = CLIENT_NONE;
+	client->state = CLIENT_INIT;
 
 	// Return acknowledge to client
 	ack[0] = PSLSE_CONNECT;
@@ -296,6 +296,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		close_socket(&(client->fd));
 		return -1;
 	}
+
 	// Attach to PSL
 	rc[0] = PSLSE_OPEN;
 	rc[1] = context;
@@ -419,7 +420,7 @@ static int _start_server()
 				perror("bind");
 				return -1;
 			}
-			info_msg("_start_server: Bumping port count");
+			debug_msg("_start_server: Bumping port count");
 			++port;
 			continue;
 		}

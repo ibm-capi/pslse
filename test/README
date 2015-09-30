@@ -1,0 +1,11 @@
+This directory contains the infrastructure to do regression testing of pslse.
+The "Test AFU" is a C++ based AFU used for testing the pslse and libcxl
+components of PSLSE.  It excludes the afu_driver code from test.
+
+Directories:
+
+afu - Contains the code for the "Test AFU"
+
+tests - Contains the code for all the regression tests that use "Test AFU"
+
+regress - Contains regress.py script used to run all the regression tests

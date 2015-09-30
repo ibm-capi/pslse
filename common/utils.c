@@ -162,10 +162,10 @@ int bytes_ready(int fd, int timeout, int *abort)
 	while ((rc < 0) && (errno == EINTR));
 	if ((abort != NULL) && (*abort != 0))
 		return -1;
-	if (rc > 0)
-		return 1;
 	if (rc == 0)
 		return 0;
+	if ((rc > 0) && !(pfd.revents & POLLHUP))
+		return 1;
 	warn_msg("Socket disconnect on poll");
 	return -1;
 }
@@ -189,16 +189,11 @@ int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 			break;
 		}
 
-		if ((bytes =
-		     recv(fd, data, size, MSG_PEEK | MSG_DONTWAIT)) == 0) {
-			if (bytes <= 0) {
-				if (errno != EINTR) {
-					perror("recv");
-					warn_msg("Socket disconnect on recv");
-					return -1;
-				} else
-					continue;
-			}
+		bytes = recv(fd, data, size - bytes, MSG_PEEK | MSG_DONTWAIT);
+		if ((bytes <= 0) && (errno != EINTR)) {
+			perror("recv");
+			warn_msg("Socket disconnect on recv");
+			return -1;
 		}
 	}
 
