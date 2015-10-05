@@ -1017,7 +1017,8 @@ void handle_response(struct cmd *cmd)
 
  drive_resp:
 	// Check for pending buffer activity
-	if (event == cmd->buffer_read) {
+	if ((client != NULL) && (client->state != CLIENT_NONE) &&
+	    (event == cmd->buffer_read)) {
 		fatal_msg("Driving response when buffer read still active");
 		_print_event(event);
 		assert(event != cmd->buffer_read);
