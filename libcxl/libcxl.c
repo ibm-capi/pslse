@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <malloc.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
