@@ -1017,8 +1017,12 @@ void handle_response(struct cmd *cmd)
 
  drive_resp:
 	// Check for pending buffer activity
-	if ((client != NULL) && (client->state != CLIENT_NONE) &&
-	    (event == cmd->buffer_read)) {
+	if (event == cmd->buffer_read) {
+		// If client has disconnected then allow pending buffer read
+		// to complete before allowing response to drive to AFU
+		if ((client == NULL) || (client->state == CLIENT_NONE))
+			return;
+		// If we got here then something really went wrong!
 		fatal_msg("Driving response when buffer read still active");
 		_print_event(event);
 		assert(event != cmd->buffer_read);
