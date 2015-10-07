@@ -185,12 +185,12 @@ int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 			break;
 		}
 		if (rc < 0) {
-			perror("bytes_ready");
+			warn_msg("bytes_ready:Socket disconnect");
 			break;
 		}
 
 		bytes = recv(fd, data, size - bytes, MSG_PEEK | MSG_DONTWAIT);
-		if ((bytes <= 0) && (errno != EINTR)) {
+		if (((bytes < 0) && (errno != EINTR)) || !bytes) {
 			perror("recv");
 			warn_msg("Socket disconnect on recv");
 			return -1;
