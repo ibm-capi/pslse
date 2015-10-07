@@ -272,7 +272,7 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 	pslse_server.close()
 	# Remove shim_host.dat that is no longer needed
 	os.remove('shim_host.dat')
-	poller = register_poller(pslse.stdout)
+	pslse_poller = register_poller(pslse.stdout)
 
 	### Run all tests in xml test file
 	test_count = 0
@@ -336,7 +336,7 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 
 		# Explicit FAILED message not found, check pslse stdout
 		if not failed:
-			while poller_ready(poller, pslse) is True:
+			while poller_ready(pslse_poller, pslse) is True:
 				# Read next line of stdout from pslse
 				pslse_out = pslse.stdout.readline()
 				pslse_log.write(pslse_out)
