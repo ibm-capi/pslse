@@ -592,6 +592,8 @@ void handle_buffer_write(struct cmd *cmd)
 		addr = (uint64_t *) & (buffer[2]);
 		*addr = htonll(event->addr);
 		event->abort = &(client->abort);
+		debug_msg("%s:MEMORY READ tag=0x%02x size=%d addr=0x%016"PRIx64,
+			  cmd->afu_name, event->tag, event->size, event->addr);
 		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
 			      cmd->dbg_id, event->context) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
@@ -631,6 +633,8 @@ void handle_buffer_read(struct cmd *cmd)
 	// Send buffer read request to AFU.  Setting cmd->buffer_read
 	// will block any more buffer read requests until buffer read
 	// data is returned and handled in handle_buffer_data().
+	debug_msg("%s:BUFFER READ tag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
+		  event->tag, event->addr);
 	if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
 			    CACHELINE_BYTES) == PSL_SUCCESS) {
 		cmd->buffer_read = event;
@@ -677,6 +681,8 @@ void handle_touch(struct cmd *cmd)
 	addr = (uint64_t *) & (buffer[2]);
 	*addr = htonll(event->addr & CACHELINE_MASK);
 	event->abort = &(client->abort);
+	debug_msg("%s:MEMORY TOUCH tag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
+		  event->tag, event->addr);
 	if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
@@ -718,6 +724,7 @@ void handle_interrupt(struct cmd *cmd)
 	irq = htons(cmd->irq);
 	memcpy(&(buffer[1]), &irq, 2);
 	event->abort = &(client->abort);
+	debug_msg("%s:INTERRUPT irq=%d", cmd->afu_name, cmd->irq);
 	if (put_bytes(client->fd, 3, buffer, cmd->dbg_fp, cmd->dbg_id,
 		      event->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
@@ -823,6 +830,8 @@ void handle_mem_write(struct cmd *cmd)
 	*addr = htonll(event->addr);
 	memcpy(&(buffer[10]), &(event->data[offset]), event->size);
 	event->abort = &(client->abort);
+	debug_msg("%s:MEMORY WRITE tag=0x%02x size=%d addr=0x%016"PRIx64,
+		  cmd->afu_name, event->tag, event->size, event->addr);
 	if (put_bytes(client->fd, event->size + 10, buffer, cmd->dbg_fp,
 		      cmd->dbg_id, client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
@@ -934,6 +943,9 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
+	debug_msg("%s:MEMORY ACK tag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
+		  event->tag, event->addr);
+
 	// Randomly cause paged response
 	if (((event->type != CMD_WRITE) || (event->state != MEM_REQUEST)) &&
 	    (client->flushing == FLUSH_NONE) && !_page_cached(cmd, event->addr)
@@ -1017,15 +1029,17 @@ void handle_response(struct cmd *cmd)
 
  drive_resp:
 	// Check for pending buffer activity
-	if (event == cmd->buffer_read) {
-		// If client has disconnected then allow pending buffer read
-		// to complete before allowing response to drive to AFU
-		if ((client == NULL) || (client->state == CLIENT_NONE))
-			return;
-		// If we got here then something really went wrong!
-		fatal_msg("Driving response when buffer read still active");
-		_print_event(event);
-		assert(event != cmd->buffer_read);
+	while (event == cmd->buffer_read) {
+		if (cmd->afu_event->buffer_rdata_valid) {
+			warn_msg("Flushing buffer read data");
+			_print_event(event);
+			cmd->afu_event->buffer_rdata_valid = 0;
+			cmd->buffer_read = NULL;
+		}
+		else {
+			psl_signal_afu_model(cmd->afu_event);
+			psl_get_afu_events(cmd->afu_event);
+		}
 	}
 
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
