@@ -78,6 +78,8 @@ static int _testmemaddr(uint8_t * memaddr)
 
 static void _all_idle(struct cxl_afu_h *afu)
 {
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_all_idle");
 	afu->int_req.state = LIBCXL_REQ_IDLE;
 	afu->open.state = LIBCXL_REQ_IDLE;
 	afu->attach.state = LIBCXL_REQ_IDLE;
@@ -92,6 +94,8 @@ static int _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 	uint16_t size;
 	int i;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_dsi");
 	// Only track a single DSI at a time
 	pthread_mutex_lock(&(afu->event_lock));
 	i = 0;
@@ -127,6 +131,8 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 	uint8_t data[sizeof(irq)];
 	int i;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_interrupt");
 	DPRINTF("AFU INTERRUPT\n");
 	if (get_bytes_silent(afu->fd, sizeof(irq), data, 1000, 0) < 0) {
 		warn_msg("Socket failure getting IRQ");
@@ -171,6 +177,8 @@ static int _handle_afu_error(struct cxl_afu_h *afu)
 	uint8_t data[sizeof(error)];
 	int i;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_afu_error");
 	DPRINTF("AFU ERROR\n");
 	if (get_bytes_silent(afu->fd, sizeof(error), data, 1000, 0) < 0) {
 		warn_msg("Socket failure getting AFU ERROR");
@@ -212,6 +220,8 @@ static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 {
 	uint8_t buffer[MAX_LINE_CHARS];
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_read");
 	if (!_testmemaddr((uint8_t *) addr)) {
 		if (_handle_dsi(afu, addr) < 0) {
 			perror("DSI Failure");
@@ -239,6 +249,8 @@ static void _handle_write(struct cxl_afu_h *afu, uint64_t addr, uint8_t size,
 {
 	uint8_t buffer;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_write");
 	if (!_testmemaddr((uint8_t *) addr)) {
 		if (_handle_dsi(afu, addr) < 0) {
 			perror("DSI Failure");
@@ -265,6 +277,8 @@ static void _handle_touch(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 {
 	uint8_t buffer;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_touch");
 	if (!_testmemaddr((uint8_t *) addr)) {
 		if (_handle_dsi(afu, addr) < 0) {
 			perror("DSI Failure");
@@ -290,6 +304,8 @@ static void _handle_ack(struct cxl_afu_h *afu)
 {
 	uint8_t data[sizeof(uint64_t)];
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_ack");
 	DPRINTF("MMIO ACK\n");
 	if (afu->mmio.type == PSLSE_MMIO_READ64) {
 		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 1000, 0) <
@@ -324,6 +340,8 @@ static void _req_max_int(struct cxl_afu_h *afu)
 	int size;
 	uint16_t value;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_req_max_int");
 	size = 1 + sizeof(uint16_t);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MAX_INT;
@@ -346,6 +364,8 @@ static void _pslse_attach(struct cxl_afu_h *afu)
 	uint64_t *wed_ptr;
 	int size, offset;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_pslse_attach");
 	size = 1 + sizeof(uint64_t);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_ATTACH;
@@ -371,6 +391,8 @@ static void _mmio_map(struct cxl_afu_h *afu)
 	uint32_t flags;
 	int size;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_mmio_map");
 	size = 1 + sizeof(uint32_t);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MMIO_MAP;
@@ -396,6 +418,8 @@ static void _mmio_write64(struct cxl_afu_h *afu)
 	uint32_t addr;
 	int size, offset;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_mmio_write64");
 	size = 1 + sizeof(addr) + sizeof(data);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MMIO_WRITE64;
@@ -424,6 +448,8 @@ static void _mmio_write32(struct cxl_afu_h *afu)
 	uint32_t addr;
 	int size, offset;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_mmio_write32");
 	size = 1 + sizeof(addr) + sizeof(data);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_MMIO_WRITE32;
@@ -451,6 +477,8 @@ static void _mmio_read(struct cxl_afu_h *afu)
 	uint32_t addr;
 	int size, offset;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_mmio_read");
 	size = 1 + sizeof(addr);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = afu->mmio.type;
@@ -479,6 +507,8 @@ static void *_psl_loop(void *ptr)
 	uint16_t value;
 	int rc;
 
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_psl_loop");
 	afu->opened = 1;
 	while (afu->opened) {
 		_delay_1ms();
@@ -863,6 +893,8 @@ static void _release_adapters(struct cxl_adapter_h *adapter)
 	struct cxl_adapter_h *current;
 	uint8_t rc = PSLSE_DETACH;
 
+	if (!adapter)
+		fatal_msg("NULL adapter passed to libcxl.c:_release_adapters");
 	_release_afus(adapter->afu_list);
 	current = adapter;
 	while (current != NULL) {
@@ -885,6 +917,8 @@ static struct cxl_afu_h *_pslse_open(int *fd, uint16_t afu_map, uint8_t major,
 	uint8_t *buffer;
 	uint16_t position;
 
+	if (!fd)
+		fatal_msg("NULL fd passed to libcxl.c:_pslse_open");
 	position = 0x8000;
 	position >>= 4 * major;
 	position >>= minor;
@@ -1140,6 +1174,10 @@ struct cxl_afu_h *cxl_afu_next(struct cxl_afu_h *afu)
 
 char *cxl_afu_dev_name(struct cxl_afu_h *afu)
 {
+	if (!afu) {
+		errno = EINVAL;
+		return NULL;
+	}
 	return afu->id;
 }
 
@@ -1151,6 +1189,8 @@ struct cxl_afu_h *cxl_afu_open_dev(char *path)
 	char afu_type;
 	int fd;
 
+	if (!path)
+		return NULL;
 	if (_pslse_connect(&afu_map, &fd) < 0)
 		return NULL;
 
@@ -1181,7 +1221,7 @@ struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 	char afu_type;
 
 	if (afu == NULL) {
-		errno = ENODEV;
+		errno = EINVAL;
 		return NULL;
 	}
 	// Query PSLSE
@@ -1223,6 +1263,10 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	uint8_t buffer;
 	int rc;
 
+	if (!afu) {
+		warn_msg("cxl_afu_free: No AFU given");
+		goto free_done_no_afu;
+	}
 	if (!afu->opened)
 		goto free_done;
 
@@ -1240,17 +1284,26 @@ void cxl_afu_free(struct cxl_afu_h *afu)
  free_done:
 	if (afu->id != NULL)
 		free(afu->id);
+ free_done_no_afu:
 	pthread_mutex_destroy(&(afu->event_lock));
 	free(afu);
 }
 
 int cxl_afu_opened(struct cxl_afu_h *afu)
 {
+	if (!afu) {
+		errno = EINVAL;
+		return -1;
+	}
 	return afu->opened;
 }
 
 int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 {
+	if (!afu) {
+		errno = EINVAL;
+		return -1;
+	}
 	DPRINTF("AFU ATTACH\n");
 	if (!afu->opened) {
 		warn_msg("cxl_afu_attach: Must open AFU first");
@@ -1276,6 +1329,10 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 			__u64 amr)
 {
+	if (!afu) {
+		errno = EINVAL;
+		return -1;
+	}
 	// Request maximum interrupts
 	afu->int_req.max = num_interrupts;
 
@@ -1284,6 +1341,11 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
 
 int cxl_afu_fd(struct cxl_afu_h *afu)
 {
+	if (!afu) {
+		warn_msg("cxl_afu_attach_full: No AFU given");
+		errno = ENODEV;
+		return -1;
+	}
 	return afu->pipe[0];
 }
 
@@ -1360,6 +1422,8 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
 			    __u32 type, __u16 irq)
 {
+	if (!afu)
+		return -1;
 	if (cxl_read_event(afu, event) < 0)
 		return -1;
 
