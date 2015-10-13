@@ -300,7 +300,7 @@ static void *_psl_loop(void *ptr)
 					    ("Client dropped context before AFU completed");
 					reset = 0;
 				}
-				warn_msg("Dumping command tag=0x%02x",
+				info_msg("Dumping command tag=0x%02x",
 					 event->tag);
 				if (event->data) {
 					free(event->data);

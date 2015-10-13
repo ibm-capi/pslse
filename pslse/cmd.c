@@ -1031,7 +1031,7 @@ void handle_response(struct cmd *cmd)
 	// Check for pending buffer activity
 	while (event == cmd->buffer_read) {
 		if (cmd->afu_event->buffer_rdata_valid) {
-			warn_msg("Flushing buffer read data");
+			warn_msg("Application terminated while AFU write still active");
 			_print_event(event);
 			cmd->afu_event->buffer_rdata_valid = 0;
 			cmd->buffer_read = NULL;
