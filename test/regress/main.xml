@@ -1,4 +1,6 @@
 <?xml version="1.0"?>
+<!-- This test suite contains the main set of basic function test with no
+     error scenarios. -->
 <pslse_regress>
 	<afu name="0.0">
 		<num_of_processes>1</num_of_processes>
