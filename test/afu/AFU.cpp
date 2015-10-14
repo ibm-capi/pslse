@@ -41,7 +41,7 @@ AFU::AFU(int port, string filename, bool parity) : descriptor(filename), machine
 	if(psl_serv_afu_event(&afu_event, port) == PSL_BAD_SOCKET)
 		error_msg("AFU: Unable to create socket");
 
-	int parity_enable = (parity)? 1:0;
+	int parity_enable = parity;
 	if(psl_afu_aux2_change(&afu_event, afu_event.job_running, afu_event.job_done, afu_event.job_cack_llcmd, afu_event.job_error, afu_event.job_yield, afu_event.timebase_request, parity_enable, 1) != PSL_SUCCESS){
 		error_msg("AFU: Failed to set parity_enable and latency");
 	}

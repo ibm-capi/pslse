@@ -42,9 +42,16 @@ void OtherCommand::send_command(AFU_EVENT *afu_event, uint32_t new_tag, uint64_t
 
 	Command::completed = false;
 
-	uint32_t tag_parity = (command_tag_parity)? generate_parity(new_tag + 1, ODD_PARITY) : generate_parity(new_tag, ODD_PARITY);
-	uint32_t code_parity = (command_code_parity)? generate_parity(Command::code + 1, ODD_PARITY) : generate_parity(Command::code, ODD_PARITY);
-	uint32_t address_parity = (command_address_parity)? generate_parity(address + 1, ODD_PARITY) : generate_parity(address, ODD_PARITY);
+	uint32_t tag_parity = generate_parity(new_tag, ODD_PARITY);
+	uint32_t code_parity = generate_parity(Command::code, ODD_PARITY);
+	uint32_t address_parity = generate_parity(address, ODD_PARITY);
+
+	if (command_tag_parity)
+		tag_parity = 1 - tag_parity;
+	if (command_code_parity)
+		code_parity = 1 - code_parity;
+	if (command_address_parity)
+		address_parity = 1 - address_parity;
 
 	if(psl_afu_command(afu_event, new_tag, tag_parity, Command::code, code_parity, address, address_parity, command_size, abort, context) != PSL_SUCCESS)
 		error_msg("OtherCommand: Failed to send command");
@@ -87,9 +94,16 @@ void LoadCommand::send_command(AFU_EVENT *afu_event, uint32_t new_tag, uint64_t 
 
 	Command::completed = false;
 
-	uint32_t tag_parity = (command_tag_parity)? generate_parity(new_tag + 1, ODD_PARITY) : generate_parity(new_tag, ODD_PARITY);
-	uint32_t code_parity = (command_code_parity)? generate_parity(Command::code + 1, ODD_PARITY) : generate_parity(Command::code, ODD_PARITY);
-	uint32_t address_parity = (command_address_parity)? generate_parity(address + 1, ODD_PARITY) : generate_parity(address, ODD_PARITY);
+	uint32_t tag_parity = generate_parity(new_tag, ODD_PARITY);
+	uint32_t code_parity = generate_parity(Command::code, ODD_PARITY);
+	uint32_t address_parity = generate_parity(address, ODD_PARITY);
+
+	if (command_tag_parity)
+		tag_parity = 1 - tag_parity;
+	if (command_code_parity)
+		code_parity = 1 - code_parity;
+	if (command_address_parity)
+		address_parity = 1 - address_parity;
 
 	if(psl_afu_command(afu_event, new_tag, tag_parity, Command::code, code_parity, address, address_parity, command_size, abort, context) != PSL_SUCCESS)
 		error_msg("LoadCommand: Failed to send command");
@@ -179,9 +193,16 @@ void StoreCommand::send_command(AFU_EVENT *afu_event, uint32_t new_tag, uint64_t
 
 	Command::completed = false;
 
-	uint32_t tag_parity = (command_tag_parity)? generate_parity(new_tag + 1, ODD_PARITY) : generate_parity(new_tag, ODD_PARITY);
-	uint32_t code_parity = (command_code_parity)? generate_parity(Command::code + 1, ODD_PARITY) : generate_parity(Command::code, ODD_PARITY);
-	uint32_t address_parity = (command_address_parity)? generate_parity(address + 1, ODD_PARITY) : generate_parity(address, ODD_PARITY);
+	uint32_t tag_parity = generate_parity(new_tag, ODD_PARITY);
+	uint32_t code_parity = generate_parity(Command::code, ODD_PARITY);
+	uint32_t address_parity = generate_parity(address, ODD_PARITY);
+
+	if (command_tag_parity)
+		tag_parity = 1 - tag_parity;
+	if (command_code_parity)
+		code_parity = 1 - code_parity;
+	if (command_address_parity)
+		address_parity = 1 - address_parity;
 
 	if(psl_afu_command(afu_event, new_tag, tag_parity, Command::code, code_parity, address, address_parity, command_size, abort, context) != PSL_SUCCESS)
 		error_msg("StoreCommand: Failed to send command");

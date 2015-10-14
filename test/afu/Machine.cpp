@@ -60,18 +60,18 @@ void MachineController::Machine::read_machine_config(){
 
 	uint16_t command_code = (config[0] >> 48) & 0x1FFF;
 
-	bool command_address_parity = (get_command_address_parity())? true:false;
-	bool command_code_parity = (get_command_code_parity())? true:false;
-	bool command_tag_parity = (get_command_tag_parity())? true:false;
-	bool buffer_read_parity = (get_buffer_read_parity())? true:false;
+	bool command_address_parity = get_command_address_parity();
+	bool command_code_parity = get_command_code_parity();
+	bool command_tag_parity = get_command_tag_parity();
+	bool buffer_read_parity = get_buffer_read_parity();
 
-	if (get_command_address_parity())
+	if (command_address_parity)
 		info_msg("Command address parity inject");
-	if (get_command_code_parity()) 
+	if (command_code_parity) 
 		info_msg("Command code parity inject");
-	if (get_command_tag_parity()) 
+	if (command_tag_parity) 
 		info_msg("Command tag parity inject");
-	if (get_buffer_read_parity()) 
+	if (buffer_read_parity) 
 		info_msg("Buffer read parity");
 
 	if(command)
@@ -117,15 +117,17 @@ void MachineController::Machine::record_command(bool error_state, uint16_t cycle
 	info_msg("Command cycle count 0x%x", cycle);
 	uint16_t data = (error_state)? 1 << 15 : 0;
 	data |= cycle & 0x7FFF;
-	config[1] = (config[1] & 0xFFFFFFFFFFFF0000) | ((uint64_t) data);
+	config[1] &= 0xFFFFFFFFFFFF0000;
+	config[1] |= ((uint64_t) data);
 }
 
 void MachineController::Machine::record_response(bool error_state, uint16_t cycle, uint8_t response_code){
 	info_msg("Response cycle count 0x%x", cycle);
 	uint16_t data = (error_state)? 1 << 15 : 0;
 	data |= cycle & 0x7FFF;
-	config[1] = (config[1] & 0xFFFFFFFF0000FFFF) | ((uint64_t) data << 16);
-	config[1] = (config[1] & 0xFFFFFF00FFFFFFFF) | ((uint64_t) response_code << 32);
+	config[1] &= 0xFFFFFF000000FFFF;
+	config[1] |= ((uint64_t) data << 16);
+	config[1] |= ((uint64_t) response_code << 32);
 }
 
 void MachineController::Machine::clear_response(){
@@ -134,19 +136,19 @@ void MachineController::Machine::clear_response(){
 }
 
 uint8_t MachineController::Machine::get_command_address_parity() const{
-	return (uint8_t) ((config[1] & 0x800000000000) >> 47);
+	return (uint8_t) ((config[1] >> 47) & 0x1);
 }
 
 uint8_t MachineController::Machine::get_command_code_parity() const{
-	return (uint8_t) ((config[1] & 0x400000000000) >> 46);
+	return (uint8_t) ((config[1] >> 46) & 0x1);
 }
 
 uint8_t MachineController::Machine::get_command_tag_parity() const{
-	return (uint8_t) ((config[1] & 0x200000000000) >> 45);
+	return (uint8_t) ((config[1] >> 45) & 0x1);
 }
 
 uint8_t MachineController::Machine::get_buffer_read_parity() const{
-	return (uint8_t) ((config[1] & 0x100000000000) >> 44);
+	return (uint8_t) ((config[1] >> 44) & 0x1);
 }
 
 void MachineController::Machine::change_machine_config(uint32_t offset, uint32_t data){
@@ -159,14 +161,19 @@ void MachineController::Machine::change_machine_config(uint32_t offset, uint32_t
 	}
 	// lower 12 bits read only
 	else if(offset == 2){
-		config[offset/2] = (config[offset/2] & 0x00000FFFFFFFFFFF) | ((uint64_t) (data & 0xFFFFF000) << 32);
+		config[offset/2] &= 0x00000FFFFFFFFFFF;
+		config[offset/2] |= ((uint64_t) (data & 0xFFFFF000) << 32);
 		//info_msg("Writing to offset 2 0x%x", data);
 	}
 	else{
-		if(offset % 2 == 1)
-			config[offset/2] = (config[offset/2] & 0xFFFFFFFF00000000) | data;
-		else
-			config[offset/2] = (config[offset/2] & 0x00000000FFFFFFFF) | ((uint64_t) data << 32);
+		if(offset % 2 == 1){
+			config[offset/2] &= 0xFFFFFFFF00000000;
+			config[offset/2] |= (uint64_t) data;
+		}
+		else {
+			config[offset/2] &= 0x00000000FFFFFFFF;
+			config[offset/2] |= ((uint64_t) data << 32);
+		}
 	}
 }
 
@@ -175,9 +182,9 @@ uint32_t MachineController::Machine::get_machine_config(uint32_t offset){
 		error_msg("Machine::change_machine_config config table offset exceeded size of config table");
 
 	if(offset % 2 == 1)
-		return (uint32_t) (config[offset/2] & 0x00000000FFFFFFFF);
+		return (uint32_t) (config[offset/2] & 0xFFFFFFFFL);
 	else
-		return (uint32_t) ((config[offset/2] & 0xFFFFFFFF00000000) >> 32);
+		return (uint32_t) ((config[offset/2] >> 32) & 0xFFFFFFFFL);
 }
 
 bool MachineController::Machine::attempt_new_command(AFU_EVENT *afu_event, uint32_t tag, bool error_state, uint16_t cycle){
@@ -194,9 +201,13 @@ bool MachineController::Machine::attempt_new_command(AFU_EVENT *afu_event, uint3
 		read_machine_config();
 
 		//TODO randomly generates address within the range
-		uint64_t address_offset = (rand() % (memory_size - (command_size - 1))) & ~(command_size-1);
+		uint64_t address_offset;
+		address_offset = (rand() % (memory_size - (command_size - 1)));
+		address_offset &= ~(command_size-1);
 
-		command->send_command(afu_event, tag, memory_base_address + address_offset, command_size, abort, context);
+		command->send_command(afu_event, tag,
+				      memory_base_address + address_offset,
+				      command_size, abort, context);
 
 		record_command(error_state, cycle);
 		clear_response();
@@ -256,14 +267,14 @@ void MachineController::Machine::disable(){
 }
 
 bool MachineController::Machine::is_enabled() const{
-	bool enable_always = ((config[0] >> 63) == 0x1)? true:false;
-	bool enable_once = (((config[0] >> 62) & 0x1) == 0x1)? true:false;
+	bool enable_always = ((config[0] >> 63) == 0x1);
+	bool enable_once = (((config[0] >> 62) & 0x1) == 0x1);
 
 	return enable_always || enable_once;
 }
 
 bool MachineController::Machine::is_enabled_once() const{
-	bool enable_once = ((config[0] >> 62) & 0x1)? true:false;
+	bool enable_once = ((config[0] >> 62) & 0x1);
 
 	return enable_once;
 }
