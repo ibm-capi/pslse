@@ -14,6 +14,6 @@
 		<PAGED_PERCENT>0</PAGED_PERCENT>
 		<fail>WARNING|ERROR</fail>
 	</pslse>
-	<test name="mmio" timeout="30"/>
-	<test name="memcopy" timeout="30"/>
+	<test name="mmio"/>
+	<test name="memcopy"/>
 </pslse_regress>

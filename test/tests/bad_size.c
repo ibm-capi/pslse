@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 	unsigned seed;
 	int i, opt, option_index;
 	uint16_t size;
-	uint8_t response;
+	int response;
 
 	name = strrchr(argv[0], '/');
 	if (name)
