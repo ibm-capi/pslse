@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-/* Description : memcopy.c
+/* Description : bad_align.c
  *
- * This test performs memcopy using the Test AFU for validating pslse
+ * This test performs memcopy but uses a bad address alignment for the write
  */
 
 #include <errno.h>
@@ -42,9 +42,10 @@ int main(int argc, char *argv[])
 {
 	MachineConfig machine;
 	char *cacheline0, *cacheline1, *name;
-	uint64_t wed;
+	uint64_t wed, addr;
 	unsigned seed;
-	int i, quadrant, byte, opt, option_index;
+	int i, opt, option_index;
+	uint16_t size;
 	uint8_t response;
 
 	name = strrchr(argv[0], '/');
@@ -109,7 +110,7 @@ int main(int argc, char *argv[])
 
 	}
 
-	// Allocate aligned memory for two cachelines
+	// Allocate aligned memory for both cachelines
 	if (posix_memalign((void **)&cacheline0, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
 		perror("FAILED:posix_memalign");
 		goto done;
@@ -139,37 +140,26 @@ int main(int argc, char *argv[])
 
 	printf("Completed cacheline read\n");
 
+	// Generate bad command address
+	addr = (uint64_t) cacheline1;
+	size = 0x2 << (rand() % 6);
+	addr += rand() % size;
+
 	// Use AFU Machine 1 to write the data to the second cacheline
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES)) < 0)
+	printf("Address: 0x%016"PRIx64" Size: 0x%02x\n", addr, size);
+	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0,
+						      PSL_COMMAND_WRITE_NA,
+						      size, 0, 0, addr,
+						      size)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;
 	}
 
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
+	if (response != PSL_RESPONSE_FAILED)
 	{
 		printf("FAILED: Unexpected response code 0x%x\n", response);
-		goto done;
-	}
-
-	// Test if copy from cacheline0 to cacheline1 was successful
-	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
-		printf("FAILED:memcmp\n");
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Expected  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
-				printf("%02x", cacheline0[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Actual  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
-				printf("%02x", cacheline1[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
 		goto done;
 	}
 

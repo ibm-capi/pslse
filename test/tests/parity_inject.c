@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-/* Description : memcopy.c
+/* Description : parity_inject.c
  *
- * This test performs memcopy using the Test AFU for validating pslse
+ * This test is used to generate various parity error inject cases
  */
 
 #include <errno.h>

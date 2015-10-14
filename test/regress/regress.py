@@ -261,6 +261,8 @@ def check_for_pslse_fail(pslse, pslse_stdout, pslse_stderr, pslse_log, pslse_fai
 		for fail in pslse_fail:
 			pattern = '.*' + fail + '.*'
 			if re.match(pattern, pslse_out):
+				print "REGRESS:pslse fail"
+				print pslse_out
 				return True
 
 	# Explicit FAILED message not found, check pslse stderr
@@ -272,6 +274,8 @@ def check_for_pslse_fail(pslse, pslse_stdout, pslse_stderr, pslse_log, pslse_fai
 		for fail in pslse_fail:
 			pattern = '.*' + fail + '.*'
 			if re.match(pattern, pslse_out):
+				print "REGRESS:pslse fail"
+				print pslse_out
 				return True
 
 	return False

@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-/* Description : memcopy.c
+/* Description : bad_addr.c
  *
- * This test performs memcopy using the Test AFU for validating pslse
+ * This test performs memcopy but intentionally provides an invalid address
+ * for the destination of the data.
  */
 
 #include <errno.h>
@@ -44,7 +45,7 @@ int main(int argc, char *argv[])
 	char *cacheline0, *cacheline1, *name;
 	uint64_t wed;
 	unsigned seed;
-	int i, quadrant, byte, opt, option_index;
+	int i, opt, option_index;
 	uint8_t response;
 
 	name = strrchr(argv[0], '/');
@@ -109,15 +110,16 @@ int main(int argc, char *argv[])
 
 	}
 
-	// Allocate aligned memory for two cachelines
+	// Allocate aligned memory for first cacheline
 	if (posix_memalign((void **)&cacheline0, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
 		perror("FAILED:posix_memalign");
 		goto done;
 	}
-	if (posix_memalign((void **)&cacheline1, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
-		perror("FAILED:posix_memalign");
-		goto done;
-	}
+	// Allocate random address for second cacheline
+	wed = rand();
+	wed <<= 32;
+	wed |= rand() & !(CACHELINE_BYTES-1);
+	cacheline1 = (char *) wed;
 
 	// Pollute first cacheline with random values
 	for (i = 0; i < CACHELINE_BYTES; i++)
@@ -147,29 +149,9 @@ int main(int argc, char *argv[])
 	}
 
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
+	if (response != PSL_RESPONSE_AERROR)
 	{
 		printf("FAILED: Unexpected response code 0x%x\n", response);
-		goto done;
-	}
-
-	// Test if copy from cacheline0 to cacheline1 was successful
-	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
-		printf("FAILED:memcmp\n");
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Expected  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
-				printf("%02x", cacheline0[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Actual  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
-				printf("%02x", cacheline1[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
 		goto done;
 	}
 
