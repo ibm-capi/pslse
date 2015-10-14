@@ -39,6 +39,7 @@ def usage():
 	print 'Usage: regress.py [OPTION]...'
 	print ''
 	print '  -c         \tforce clean compile of all code'
+	print '  -d         \tforce debug compile of all code'
 	print '  -b         \tbypass code compile'
 	print '  -s SEED    \tseed for random number generation'
 	print '  -t TEST    \tsingle test to run (Requires -x also)'
@@ -76,30 +77,33 @@ def poller_ready(poller, process):
 	return False
 
 # Compile code in current directory
-def build(file, clean):
+def build(file, clean, debug):
 	print('REGRESS: Building %s' % file)
 	# Call 'make' to clean
-	if clean:
+	if clean or debug:
 		try:
 			subprocess.call(['make', 'clean'])
 		except:
 			print sys.exc_info()[1]
 			sys.exit(1)
 	# Call 'make' to build
+	make_list = ['make', '-j']
+	if debug:
+		make_list.append('DEBUG=1')
 	try:
-		subprocess.call(['make', '-j'])
+		subprocess.call(make_list)
 	except:
 		print sys.exc_info()[1]
 		sys.exit(1)
 
 # Compile code and test for successful file build
-def build_and_test(dir, file, clean):
+def build_and_test(dir, file, clean, debug):
 	# Save current directory
 	cwd = os.getcwd()
 	# Change directory
 	os.chdir(dir)
 	# Compile
-	build(file, clean)
+	build(file, clean, debug)
 	# Test for compile success
 	if not os.path.isfile(file):
 		print('Failed to build:%s/%s' % (os.path.dirname(os.path.realpath(__file__)), file))
@@ -108,13 +112,13 @@ def build_and_test(dir, file, clean):
 	os.chdir(cwd)
 
 # Compile code and test for successful build for all .c files in directory
-def build_and_test_all(dir, name, clean):
+def build_and_test_all(dir, name, clean, debug):
 	# Save current directory
 	cwd = os.getcwd()
 	# Change directory
 	os.chdir(dir)
 	# Compile
-	build(name, clean)
+	build(name, clean, debug)
 	# Test for compile success
 	for filename in os.listdir('.'):
 		if filename.endswith('.c'):
@@ -153,7 +157,7 @@ def start_afu(path, afu, devid, desc_list, shim, log):
 	# Start AFU capturing stdout and stderr in pipes
 	while not running and (port < 65535):
 		print ("REGRESS: Attempting to start afu%s on port %d" % (devid, port))
-		command = [afu, str(port), cwd + '/' + descriptor]
+		command = [afu, str(port), cwd + '/' + descriptor, 'parity']
 		try:
 			process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={'PATH': path})
 		except:
@@ -327,12 +331,11 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 		if test_file == '':
 			seed = random.randint(0, 0xFFFFFFFF)
 		random.seed(seed)
-		print("REGRESS: Running test '%s' with seed %d" % (test.get('name'), seed))
 
 		# Parse parms for test
-		test_parms = [test.get('name'), '-s', str(seed)]
+		test_parms = [test.get('name'), '--seed', str(seed)]
 		for parm in test:
-			test_parms.append('-' + parm.tag)
+			test_parms.append('--' + parm.tag)
 			if parm.text:
 				test_parms.append(parm.text)
 
@@ -340,11 +343,15 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 		test_count += 1
 		passed = False
 		failed = False
+		print "REGRESS: Running test:",
+		for parm in test_parms:
+			print parm,
+		print
 		try:
 			process = subprocess.Popen(test_parms, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={'PATH': tests_dir})
 		except:
 			print("REGRESS: Failed to start test '%s'" % test.get('name'))
-			failed = 1
+			failed = True
 			sys.exit(1)
 		test_start = time.time()
 		timeout = 30
@@ -365,6 +372,7 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 				print 'REGRESS: Timeout'
 				failed = True
 			if (poller_ready(test_stdout, None) is None) and process.poll():
+				print("REGRESS: test '%s' terminated" % test.get('name'))
 				failed = True
 				break
 			if poller_ready(test_stdout, None) is False:
@@ -383,8 +391,9 @@ def run_tests(tree, test_afu_dir, test_afu_exec, pslse_dir, pslse_exec, tests_di
 					print line
 			if poller_ready(test_stderr, None) is True:
 				line = process.stderr.readline()
-				failed = True
-				print line
+				failed = re.match( 'ERROR.*', line) 
+				if failed:
+					print line
 
 		if not failed:
 			failed = check_for_pslse_fail(pslse, pslse_stdout, pslse_stderr, pslse_log, pslse_fail)
@@ -428,13 +437,14 @@ def main(argv):
 	tests_dir = '../tests'
 	bypass= 0
 	clean = 0
+	debug = 0
 	test_file = ''
 	xml_file = ''
 	seed = int(time.time())
 
 	### Parse command line
 	try:
-		opts, args = getopt.getopt(argv,'bchs:t:x:')
+		opts, args = getopt.getopt(argv,'bcdhs:t:x:')
 	except getopt.getoptError:
 		usage()
 	for opt, arg in opts:
@@ -444,6 +454,8 @@ def main(argv):
 			bypass = 1;
 		elif opt == '-c':
 			clean = 1;
+		elif opt == '-d':
+			debug = 1;
 		elif opt == '-s':
 			seed = int(arg);
 		elif opt == '-t':
@@ -454,9 +466,12 @@ def main(argv):
 		print '\nERROR: Can not specify -t without -x!\n'
 		usage()
 
+	matched = re.match('^(.*)\.xml$', xml_file)
 	if xml_file == '':
 		print 'REGRESS: master seed = ' + str(seed)
 		random.seed(seed)
+	elif matched:
+		xml_file = matched.group(1)
 
 	### Register signal handler
 	signal.signal(signal.SIGINT, signal_handler)
@@ -464,11 +479,11 @@ def main(argv):
 	### Compile all code
 	if not bypass:
 		# Compile Test AFU
-		build_and_test(test_afu_dir, test_afu_exec, clean)
+		build_and_test(test_afu_dir, test_afu_exec, clean, debug)
 		# Compile PSLSE
-		build_and_test(pslse_dir, pslse_exec, clean)
+		build_and_test(pslse_dir, pslse_exec, clean, debug)
 		# Compile regression tests
-		build_and_test_all(tests_dir, 'regression tests', clean)
+		build_and_test_all(tests_dir, 'regression tests', clean, debug)
 
 	### Run through all xml file in directory
 	test_count = 0
@@ -487,8 +502,8 @@ def main(argv):
 	print 'REGRESS: %d tests passed' % test_count
 	if os.path.isfile('pslse_server.dat'):
 		os.remove('pslse_server.dat')
-	#if os.path.isfile('pslse.log'):
-	#	os.remove('pslse.log')
+	if os.path.isfile('pslse.log'):
+		os.remove('pslse.log')
 	if os.path.isfile('debug.log'):
 		os.remove('debug.log')
 	if os.path.isfile('gmon.out'):
