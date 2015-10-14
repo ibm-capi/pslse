@@ -30,8 +30,7 @@
 #include "libcxl_internal.h"
 #include "psl_interface_t.h"
 #include "TestAFU_config.h"
-
-#define CACHELINE_BYTES 128
+#include "utils.h"
 
 void usage(char *name)
 {

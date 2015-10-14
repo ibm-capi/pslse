@@ -27,11 +27,9 @@
 #include <time.h>
 
 #include "libcxl.h"
+#include "psl_interface_t.h"
 #include "TestAFU_config.h"
-
-#define CACHELINE_BYTES 128
-#define READ_CL_NA 0x0A00
-#define WRITE_NA   0x0D00
+#include "utils.h"
 
 void usage(char *name)
 {
@@ -128,7 +126,7 @@ int main(int argc, char *argv[])
 		cacheline0[i] = rand();
 
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES)) < 0)
+	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;
@@ -144,7 +142,7 @@ int main(int argc, char *argv[])
 	printf("Completed the first cacheline read and got the random data\n");
 
 	// Use AFU Machine 1 to write the data to the second cacheline
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES)) < 0)
+	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;

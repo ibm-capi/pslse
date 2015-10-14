@@ -425,8 +425,6 @@ def main(argv):
 	test_afu_exec = 'afu'
 	pslse_dir = '../../pslse'
 	pslse_exec = 'pslse'
-	libcxl_dir = '../../libcxl'
-	libcxl_a = 'libcxl.a'
 	tests_dir = '../tests'
 	bypass= 0
 	clean = 0
@@ -469,8 +467,6 @@ def main(argv):
 		build_and_test(test_afu_dir, test_afu_exec, clean)
 		# Compile PSLSE
 		build_and_test(pslse_dir, pslse_exec, clean)
-		# Compile libcxl library
-		build_and_test(libcxl_dir, libcxl_a, clean)
 		# Compile regression tests
 		build_and_test_all(tests_dir, 'regression tests', clean)
 
