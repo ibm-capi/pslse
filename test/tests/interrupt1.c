@@ -119,6 +119,9 @@ int main(int argc, char *argv[])
 
 	}
 
+	// Initialize machine configuration
+	init_machine(&machine);
+
 	// Use AFU Machine 1 to generate an interrupt
 	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0,
 						      PSL_COMMAND_INTREQ, 0, 0,

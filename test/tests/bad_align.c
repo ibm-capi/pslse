@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 {
 	MachineConfig machine;
 	char *cacheline0, *cacheline1, *name;
-	uint64_t wed, addr;
+	uint64_t wed, addr, offset;
 	unsigned seed;
 	int i, opt, option_index;
 	uint16_t size;
@@ -124,6 +124,9 @@ int main(int argc, char *argv[])
 	for (i = 0; i < CACHELINE_BYTES; i++)
 		cacheline0[i] = rand();
 
+	// Initialize machine configuration
+	init_machine(&machine);
+
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
 	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES)) < 0)
 	{
@@ -143,7 +146,10 @@ int main(int argc, char *argv[])
 	// Generate bad command address
 	addr = (uint64_t) cacheline1;
 	size = 0x2 << (rand() % 6);
-	addr += rand() % size;
+	do {
+		offset = rand() % size;
+	} while ((offset & (size-1))==0);
+	addr += offset;
 
 	// Use AFU Machine 1 to write the data to the second cacheline
 	printf("Address: 0x%016"PRIx64" Size: 0x%02x\n", addr, size);

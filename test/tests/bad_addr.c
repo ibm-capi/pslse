@@ -125,6 +125,9 @@ int main(int argc, char *argv[])
 	for (i = 0; i < CACHELINE_BYTES; i++)
 		cacheline0[i] = rand();
 
+	// Initialize machine configuration
+	init_machine(&machine);
+
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
 	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES)) < 0)
 	{

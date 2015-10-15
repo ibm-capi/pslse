@@ -30,6 +30,8 @@ typedef struct AFUConfig
 	uint64_t config[4];
 } MachineConfig;
 
+// Zero out all machine config registers
+void init_machine(MachineConfig *machine);
 
 // Function to set most commonly used elements
 int config_machine(MachineConfig *machine, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, uint8_t enable_always);

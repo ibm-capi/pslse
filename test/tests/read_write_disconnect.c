@@ -267,6 +267,9 @@ int main(int argc, char *argv[])
 	for (i = 0; i < 64*CACHELINE_BYTES; i++)
 		area[i] = rand();
 
+	// Initialize machine configuration
+	init_machine(&machine);
+
 	// Run test iterations
 	start_iteration(&machine, area, delay, 1);
 	start_iteration(&machine, area, delay, 0);
