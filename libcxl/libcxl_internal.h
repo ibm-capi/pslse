@@ -19,7 +19,6 @@
 
 #include <dirent.h>
 #include <inttypes.h>
-#include <linux/types.h>
 #include <poll.h>
 #include <pthread.h>
 

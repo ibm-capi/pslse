@@ -12,6 +12,6 @@ afu: $(OBJS) $(CPPOBJS) main.cpp
 	$(call Q,CC, g++ $(CFLAGS) -o $@ $^ -lpthread, $@)
 
 clean:
-	rm -rf *.[od] *.d-e *.dSYM afu
+	rm -rf *.[od] *.d-e afu
 
 .PHONY: clean all

@@ -18,7 +18,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <malloc.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -1298,7 +1297,7 @@ int cxl_afu_opened(struct cxl_afu_h *afu)
 	return afu->opened;
 }
 
-int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
+int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed)
 {
 	if (!afu) {
 		errno = EINVAL;
@@ -1326,8 +1325,8 @@ int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed)
 	return 0;
 }
 
-int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-			__u64 amr)
+int cxl_afu_attach_full(struct cxl_afu_h *afu, uint64_t wed,
+			uint16_t num_interrupts, uint64_t amr)
 {
 	if (!afu) {
 		errno = EINVAL;
@@ -1420,7 +1419,7 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 }
 
 int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
-			    __u32 type, __u16 irq)
+			    uint32_t type, uint16_t irq)
 {
 	if (!afu)
 		return -1;
@@ -1437,7 +1436,7 @@ int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
 	return 0;
 }
 
-int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags)
+int cxl_mmio_map(struct cxl_afu_h *afu, uint32_t flags)
 {
 	DPRINTF("MMIO MAP\n");
 	if (!afu->opened) {

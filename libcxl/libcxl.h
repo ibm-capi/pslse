@@ -92,9 +92,9 @@ int cxl_afu_opened(struct cxl_afu_h *afu);
 /*
  * Attach AFU context to this process
  */
-int cxl_afu_attach_full(struct cxl_afu_h *afu, __u64 wed, __u16 num_interrupts,
-			__u64 amr);
-int cxl_afu_attach(struct cxl_afu_h *afu, __u64 wed);
+int cxl_afu_attach_full(struct cxl_afu_h *afu, uint64_t wed,
+			uint16_t num_interrupts, uint64_t amr);
+int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed);
 
 /*
  * Get AFU process element
@@ -165,7 +165,7 @@ int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
 int cxl_event_pending(struct cxl_afu_h *afu);
 int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event);
 int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
-			    __u32 type, __u16 irq);
+			    uint32_t type, uint16_t irq);
 
 /*
  * fprint wrappers to print out CXL events - useful for debugging.
@@ -188,7 +188,7 @@ int cxl_read_expected_event(struct cxl_afu_h *afu, struct cxl_event *event,
 #define CXL_MMIO_HOST_ENDIAN 0x3
 #define CXL_MMIO_ENDIAN_MASK 0x3
 #define CXL_MMIO_FLAGS 0x3
-int cxl_mmio_map(struct cxl_afu_h *afu, __u32 flags);
+int cxl_mmio_map(struct cxl_afu_h *afu, uint32_t flags);
 int cxl_mmio_unmap(struct cxl_afu_h *afu);
 
 /* WARNING: Use of cxl_mmio_ptr not supported for PSL Simulation Engine.
