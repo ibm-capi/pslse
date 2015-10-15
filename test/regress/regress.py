@@ -433,6 +433,7 @@ def signal_handler(signal, frame):
 	abort = 1
 
 def main(argv):
+
 	### Default parameters
 	test_afu_dir = '../afu'
 	test_afu_exec = 'afu'
@@ -488,6 +489,11 @@ def main(argv):
 		build_and_test(pslse_dir, pslse_exec, clean, debug)
 		# Compile regression tests
 		build_and_test_all(tests_dir, 'regression tests', clean, debug)
+
+	# Detect Linux
+	if not re.match('^linux.*', sys.platform):
+		print("REGRESS: %s can only run tests on Linux" % sys.argv[0])
+		exit(-1)
 
 	### Run through all xml file in directory
 	test_count = 0
