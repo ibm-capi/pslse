@@ -29,7 +29,7 @@
 #define PSL_BUFFER_SIZE 200
 #define PROTOCOL_PRIMARY 0
 #define PROTOCOL_SECONDARY 9908
-#define PROTOCOL_TERTIARY 0
+#define PROTOCOL_TERTIARY 1
 
 /* Return codes for interface functions */
 

@@ -698,8 +698,8 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 	if (event->command_valid) {
 		event->tbuf[0] = event->tbuf[0] | 0x01;
 		event->tbuf[bp++] = event->command_tag;
-		event->tbuf[bp++] = (((event->command_abort) << 4) & 0x70) |
-		    (((event->command_code) >> 8) & 0x0F);
+		event->tbuf[bp++] = (((event->command_abort) << 5) & 0xE0) |
+		    (((event->command_code) >> 8) & 0x1F);
 		event->tbuf[bp++] = event->command_code & 0xFF;
 		event->tbuf[bp++] =
 		    (((event->command_tag_parity) << 6) & 0x40) |
@@ -841,8 +841,8 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 	if ((event->rbuf[0] & 0x01) != 0) {
 		event->command_valid = 1;
 		event->command_tag = event->rbuf[rbc++];
-		event->command_abort = (event->rbuf[rbc] >> 4) & 0x7;
-		event->command_code = (event->rbuf[rbc++] & 0x0F) << 8;
+		event->command_abort = (event->rbuf[rbc] >> 5) & 0x7;
+		event->command_code = (event->rbuf[rbc++] & 0x1F) << 8;
 		event->command_code = event->command_code | event->rbuf[rbc++];
 		event->command_tag_parity = (event->rbuf[rbc] >> 6) & 0x01;
 		event->command_code_parity = (event->rbuf[rbc] >> 5) & 0x01;
