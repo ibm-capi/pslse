@@ -14,7 +14,7 @@
 		<PAGED_PERCENT>0</PAGED_PERCENT>
 		<fail>ERROR</fail>
 	</pslse>
-	<test name="read_write_disconnect" timeout="300"/>
+	<test name="read_write_disconnect" timeout="60"/>
 	<test name="bad_addr"/>
 	<test name="bad_align"/>
 	<test name="bad_size"/>

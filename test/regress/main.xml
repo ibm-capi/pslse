@@ -16,4 +16,5 @@
 	</pslse>
 	<test name="mmio"/>
 	<test name="memcopy"/>
+	<test name="mem_commands" timeout="60"/>
 </pslse_regress>
