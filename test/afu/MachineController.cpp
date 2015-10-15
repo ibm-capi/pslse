@@ -43,8 +43,6 @@ void MachineController::send_command(AFU_EVENT* afu_event, uint32_t cycle){
 
 	for(uint32_t i = 0; i < machines.size(); ++i){
 		if(machines[i]->is_enabled()){
-			// TODO debug message
-			info_msg("Machine id %d is enabled", i);
 			if(try_send && machines[i]->attempt_new_command(afu_event, tag, flushed_state, (uint16_t) (cycle & 0x7FFF))){
 				// TODO debug message
 				info_msg("Machine id %d sent new command", i);
