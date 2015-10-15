@@ -52,7 +52,7 @@ static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
 	    (event->proto_tertiary != tertiary)) {
 		printf
 		    ("PSL_SOCKET:WARNING: Adjusting PSL interface protocol level!\n");
-		printf("PSL_SOCKET:\tPlease review changes betwen levels.\n");
+		printf("PSL_SOCKET:\tPlease review changes between levels.\n");
 		printf("PSL_SOCKET:\tSupported PSL protocol level: %d.%d.%d\n",
 		       event->proto_primary, event->proto_secondary,
 		       event->proto_tertiary);
@@ -138,6 +138,17 @@ static int establish_protocol(struct AFU_EVENT *event)
 		byte = event->rbuf[i];
 		tertiary <<= 8;
 		tertiary += (uint32_t) byte;
+	}
+
+	// Check for broken levels
+	if ((primary == 0) && (secondary == 9908) && (tertiary == 0)) {
+		printf("Remote psl_interface code using broken code level!\n");
+		printf("\tLocal psl_interface level:%d.%d.%d\n",
+		       event->proto_primary, event->proto_secondary,
+		       event->proto_tertiary);
+		printf("\tRemote psl_interface level:%d.%d.%d\n",
+		       primary, secondary, tertiary);
+		return PSL_BAD_SOCKET;
 	}
 
 	// Test if other side with adjust protocol level down
