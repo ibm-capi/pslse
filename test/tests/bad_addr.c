@@ -42,6 +42,7 @@ void usage(char *name)
 int main(int argc, char *argv[])
 {
 	MachineConfig machine;
+	struct cxl_event event;
 	char *cacheline0, *cacheline1, *name;
 	uint64_t wed;
 	unsigned seed;
@@ -155,6 +156,32 @@ int main(int argc, char *argv[])
 	if (response != PSL_RESPONSE_AERROR)
 	{
 		printf("FAILED: Unexpected response code 0x%x\n", response);
+		goto done;
+	}
+
+	if (!cxl_event_pending(afu_h)) {
+		printf("FAILED: Expected interrupt to be pending\n");
+		goto done;
+	}
+
+	if (cxl_read_event(afu_h, &event) < 0) {
+		perror("cxl_read_event");
+		goto done;
+	}
+
+	if (event.header.type != CXL_EVENT_DATA_STORAGE) {
+		printf("FAILED: Expected AFU interrupt type\n");
+		goto done;
+	}
+
+	if ((uint64_t)event.fault.addr != wed) {
+		printf("FAILED: Expected DSI address 0x%016"PRIx64, wed);
+		printf(" but got 0x%016"PRIx64"\n", (uint64_t)event.fault.addr);
+		goto done;
+	}
+
+	if (cxl_event_pending(afu_h)) {
+		printf("FAILED: Unexpected event pending\n");
 		goto done;
 	}
 

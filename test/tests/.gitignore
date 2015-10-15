@@ -1,0 +1,11 @@
+*
+!/**/
+!*.*
+*.a
+*.so
+*.d
+*.d-e
+*.o
+*.sl
+.*.swp
+pslse_server.dat

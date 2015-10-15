@@ -9,7 +9,6 @@ gmon.out
 debug.log
 common/misc
 debug/debug
-libcxl/include
 pslse/pslse
 test/afu/afu
 gprof.out
