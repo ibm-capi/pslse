@@ -50,7 +50,7 @@ void MachineController::Machine::read_machine_config(){
 	if(min_delay > max_delay)
 		error_msg("Machine: min_delay is larger than max_delay (min_delay = %d, max_delay = %d)", min_delay, max_delay);
 	delay = (max_delay == min_delay)? max_delay : rand() % (max_delay - min_delay) + min_delay;
-	info_msg("Random delay: %d", delay);
+	debug_msg("Random delay: %d", delay);
 
 	abort = (config[1] >> 60) & 0x7;
 	command_size = (config[1] >> 48) & 0xFFF;
@@ -66,13 +66,13 @@ void MachineController::Machine::read_machine_config(){
 	bool buffer_read_parity = get_buffer_read_parity();
 
 	if (command_address_parity)
-		info_msg("Command address parity inject");
+		debug_msg("Command address parity inject");
 	if (command_code_parity) 
-		info_msg("Command code parity inject");
+		debug_msg("Command code parity inject");
 	if (command_tag_parity) 
-		info_msg("Command tag parity inject");
+		debug_msg("Command tag parity inject");
 	if (buffer_read_parity) 
-		info_msg("Buffer read parity");
+		debug_msg("Buffer read parity");
 
 	if(command)
 		delete command;
@@ -114,7 +114,7 @@ void MachineController::Machine::read_machine_config(){
 }
 
 void MachineController::Machine::record_command(bool error_state, uint16_t cycle){
-	info_msg("Command cycle count 0x%x", cycle);
+	debug_msg("Command cycle count 0x%x", cycle);
 	uint16_t data = (error_state)? 1 << 15 : 0;
 	data |= cycle & 0x7FFF;
 	config[1] &= 0xFFFFFFFFFFFF0000;
@@ -122,7 +122,7 @@ void MachineController::Machine::record_command(bool error_state, uint16_t cycle
 }
 
 void MachineController::Machine::record_response(bool error_state, uint16_t cycle, uint8_t response_code){
-	info_msg("Response cycle count 0x%x", cycle);
+	debug_msg("Response cycle count 0x%x", cycle);
 	uint16_t data = (error_state)? 1 << 15 : 0;
 	data |= cycle & 0x7FFF;
 	config[1] &= 0xFFFFFF000000FFFF;
@@ -132,7 +132,7 @@ void MachineController::Machine::record_response(bool error_state, uint16_t cycl
 
 void MachineController::Machine::clear_response(){
 	config[1] |= 0xFF00000000;
-	info_msg("Machine: Clearing response");
+	debug_msg("Machine: Clearing response");
 }
 
 uint8_t MachineController::Machine::get_command_address_parity() const{
@@ -163,7 +163,6 @@ void MachineController::Machine::change_machine_config(uint32_t offset, uint32_t
 	else if(offset == 2){
 		config[offset/2] &= 0x00000FFFFFFFFFFF;
 		config[offset/2] |= ((uint64_t) (data & 0xFFFFF000) << 32);
-		//info_msg("Writing to offset 2 0x%x", data);
 	}
 	else{
 		if(offset % 2 == 1){
@@ -225,7 +224,7 @@ bool MachineController::Machine::attempt_new_command(AFU_EVENT *afu_event, uint3
 void MachineController::Machine::advance_cycle(){
 	if(is_enabled() && (!command || command->is_completed()) && delay > 0){
 		--delay;
-		info_msg("Delay %d", delay);
+		debug_msg("Delay %d", delay);
 	}
 
 	if(!is_enabled())

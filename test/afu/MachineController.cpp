@@ -37,7 +37,7 @@ void MachineController::send_command(AFU_EVENT* afu_event, uint32_t cycle){
 
 	uint32_t tag;
 	if(!TagManager::request_tag(&tag)){
-		info_msg("MachineController::send_command: No more tags available");
+		debug_msg("MachineController::send_command: No more tags available");
 		try_send = false;
 	}
 
@@ -45,7 +45,7 @@ void MachineController::send_command(AFU_EVENT* afu_event, uint32_t cycle){
 		if(machines[i]->is_enabled()){
 			if(try_send && machines[i]->attempt_new_command(afu_event, tag, flushed_state, (uint16_t) (cycle & 0x7FFF))){
 				// TODO debug message
-				info_msg("Machine id %d sent new command", i);
+				debug_msg("Machine id %d sent new command", i);
 				try_send = false;
 				tag_to_machine[tag] = machines[i];
 			}
@@ -66,13 +66,13 @@ void MachineController::process_response(AFU_EVENT* afu_event, uint32_t cycle){
 	if(flushed_state && (afu_event->response_code == PSL_RESPONSE_AERROR || afu_event->response_code == PSL_RESPONSE_PAGED)) 
 		error_msg("MachineController::process_response: another AERROR or PAGED response when the AFU is already in flush state");
 
-	info_msg("MachineController: Response code %d", afu_event->response_code);
+	debug_msg("MachineController: Response code %d", afu_event->response_code);
 	if(afu_event->response_code == PSL_RESPONSE_AERROR ||
 			afu_event->response_code == PSL_RESPONSE_DERROR ||
 			afu_event->response_code == PSL_RESPONSE_PAGED ){
 
 		flushed_state = true;
-		info_msg("MachineController: AFU in flushed state");
+		debug_msg("MachineController: AFU in flushed state");
 		for(uint32_t i = 0; i < machines.size(); ++i)
 			machines[i]->disable();
 	}
@@ -132,7 +132,7 @@ void MachineController::reset(){
 bool MachineController::is_enabled() const{
 	for(uint32_t i = 0; i < machines.size(); ++i)
 		if(machines[i]->is_enabled()){
-			info_msg("Machine %d is still enabled", i);
+			debug_msg("Machine %d is still enabled", i);
 			return true;
 		}
 
@@ -142,7 +142,6 @@ bool MachineController::is_enabled() const{
 bool MachineController::all_machines_completed() const{
 	for(uint32_t i = 0; i < machines.size(); ++i){
 		if(!machines[i]->is_completed()){
-			//info_msg("Machine %d is not completed", i);
 			return false;
 		}
 	}

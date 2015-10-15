@@ -58,7 +58,7 @@ void OtherCommand::send_command(AFU_EVENT *afu_event, uint32_t new_tag, uint64_t
 
 	// TODO may not need
 	if(afu_event->command_valid)
-		info_msg("OtherCommand: handle=0x%x address=0x%016lx code=0x%04x size=0x%02x", context, address, Command::code, command_size);
+		debug_msg("OtherCommand: handle=0x%x address=0x%016lx code=0x%04x size=0x%02x", context, address, Command::code, command_size);
 
 	Command::state = WAITING_RESPONSE;
 	Command::tag = new_tag;
@@ -108,7 +108,7 @@ void LoadCommand::send_command(AFU_EVENT *afu_event, uint32_t new_tag, uint64_t 
 	if(psl_afu_command(afu_event, new_tag, tag_parity, Command::code, code_parity, address, address_parity, command_size, abort, context) != PSL_SUCCESS)
 		error_msg("LoadCommand: Failed to send command");
 
-	info_msg("LoadCommand: handle=0x%x address=0x%016lx code=0x%04x size=0x%02x", context, address, Command::code, command_size);
+	debug_msg("LoadCommand: handle=0x%x address=0x%016lx code=0x%04x size=0x%02x", context, address, Command::code, command_size);
 	Command::state = WAITING_DATA;
 	Command::tag = new_tag;
 }
@@ -120,12 +120,12 @@ void LoadCommand::process_response(AFU_EVENT *afu_event, uint8_t *cache_line){
 			afu_event->buffer_write = 0;
 
 			Command::state = WAITING_RESPONSE;
-			info_msg("LoadCommand: Received buffer write in Waiting Data");
+			debug_msg("LoadCommand: Received buffer write in Waiting Data");
 		}
 		else if(afu_event->response_valid == 1 && afu_event->response_tag == Command::tag){
 			Command::completed = true;
 			Command::state = IDLE;
-			info_msg("LoadCommand: Received response");
+			debug_msg("LoadCommand: Received response");
 		}
 		else{
 			error_msg("LoadCommand: Input not recognized, state: %d", WAITING_DATA);
@@ -134,13 +134,13 @@ void LoadCommand::process_response(AFU_EVENT *afu_event, uint8_t *cache_line){
 	else if(Command::state == WAITING_RESPONSE){
 		if(afu_event->buffer_write == 1 && afu_event->buffer_write_tag == Command::tag){
 			process_buffer_write(afu_event, cache_line);
-			info_msg("LoadCommand: Received buffer write in Waiting response");
+			debug_msg("LoadCommand: Received buffer write in Waiting response");
 			afu_event->buffer_write = 0;
 		}
 		else if(afu_event->response_valid == 1 && afu_event->response_tag == Command::tag){
 			Command::completed = true;
 			Command::state = IDLE;
-			info_msg("LoadCommand: Received response");
+			debug_msg("LoadCommand: Received response");
 		}
 		else{
 			error_msg("LoadCommand: Input not recognized, state %d, WAITING_RESPONSE");
@@ -168,7 +168,8 @@ void LoadCommand::process_buffer_write(AFU_EVENT *afu_event, uint8_t *cache_line
 				error_msg("LoadCommand: Bad parity detected in buffer write");
 	}
 
-	info_msg("BUFFER_WRITE:");
+	debug_msg("BUFFER_WRITE:");
+#ifdef DEBUG
 	for(int i = 0; i < CACHELINE_BYTES; ++i) {
 		if ((i % (CACHELINE_BYTES / 4)) == 0) {
 			if (i > 0)
@@ -178,6 +179,7 @@ void LoadCommand::process_buffer_write(AFU_EVENT *afu_event, uint8_t *cache_line
 		printf("%02x", cache_line[i]);
 	}
 	printf("\n");
+#endif /* #ifdef DEBUG */
 }
 
 bool LoadCommand::is_restart() const{
@@ -207,7 +209,7 @@ void StoreCommand::send_command(AFU_EVENT *afu_event, uint32_t new_tag, uint64_t
 	if(psl_afu_command(afu_event, new_tag, tag_parity, Command::code, code_parity, address, address_parity, command_size, abort, context) != PSL_SUCCESS)
 		error_msg("StoreCommand: Failed to send command");
 
-	info_msg("StoreCommand: handle=0x%x address=0x%016lx code=0x%04x size=0x%02x", context, address, Command::code, command_size);
+	debug_msg("StoreCommand: handle=0x%x address=0x%016lx code=0x%04x size=0x%02x", context, address, Command::code, command_size);
 
 	Command::state = WAITING_READ;
 	Command::tag = new_tag;
@@ -261,7 +263,8 @@ void StoreCommand::process_buffer_read(AFU_EVENT *afu_event, uint8_t *cache_line
 		error_msg("StoreCommand; failed to build buffer read data");
 	}
 
-	info_msg("BUFFER_READ:");
+	debug_msg("BUFFER_READ:");
+#ifdef DEBUG
 	for(int i = 0; i < CACHELINE_BYTES; ++i) {
 		if ((i % (CACHELINE_BYTES / 4)) == 0) {
 			if (i > 0)
@@ -271,6 +274,7 @@ void StoreCommand::process_buffer_read(AFU_EVENT *afu_event, uint8_t *cache_line
 		printf("%02x", cache_line[i]);
 	}
 	printf("\n");
+#endif /* #ifdef DEBUG */
 }
 
 bool StoreCommand::is_restart() const{
