@@ -92,6 +92,18 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
+	printf("Attempt mapping AFU registers before attach\n");
+	if ((cxl_mmio_map(afu_h, CXL_MMIO_BIG_ENDIAN)) == 0) {
+		printf("FAILED:cxl_mmio_map");
+		goto done;
+	}
+
+	printf("Attempt mmio read before successful mapping\n");
+	if (cxl_mmio_read64(afu_h, 0x8, &wed_check) == 0) {
+		printf("FAILED:cxl_mmio_read64");
+		goto done;
+	}
+
 	// Generate random 64-bit value for WED
 	wed = rand();
 	wed <<= 32;
@@ -112,7 +124,7 @@ int main(int argc, char *argv[])
 	/////////////////////////////////////////////////////
 
 	// Read WED from AFU and verify
-	if (cxl_mmio_read64(afu_h, 0x8, &wed_check)) {
+	if (cxl_mmio_read64(afu_h, 0x8, &wed_check) < 0) {
 		perror("FAILED:cxl_mmio_read64");
 		goto done;
 	}
@@ -132,14 +144,20 @@ int main(int argc, char *argv[])
 	rand64 = rand();
 	rand64 <<= 32;
 	rand64 |= rand();
-	if (cxl_mmio_write64(afu_h, 0x17f0, rand64)) {
+	if (cxl_mmio_write64(afu_h, 0x17f0, rand64) < 0) {
 		perror("FAILED:cxl_mmio_write64");
 		goto done;
 	}
 
 	// Use two 32-bit read to check 64-bit value written
-	cxl_mmio_read32(afu_h, 0x17f0, &rand32_upper);
-	cxl_mmio_read32(afu_h, 0x17f4, &rand32_lower);
+	if (cxl_mmio_read32(afu_h, 0x17f0, &rand32_upper) < 0) {
+		perror("FAILED:cxl_mmio_read32");
+		goto done;
+	}
+	if (cxl_mmio_read32(afu_h, 0x17f4, &rand32_lower) < 0) {
+		perror("FAILED:cxl_mmio_read32");
+		goto done;
+	}
 	rand64_check = (uint64_t) rand32_upper;
 	rand64_check <<= 32;
 	rand64_check |= (uint64_t) rand32_lower;
@@ -157,12 +175,12 @@ int main(int argc, char *argv[])
 
 	// Write two random 32-bit values to a single 64-bit MMIO register
 	rand32_upper = rand();
-	if (cxl_mmio_write32(afu_h, 0x17f8, rand32_upper)) {
+	if (cxl_mmio_write32(afu_h, 0x17f8, rand32_upper) < 0) {
 		perror("FAILED:cxl_mmio_write32");
 		goto done;
 	}
 	rand32_lower = rand();
-	if (cxl_mmio_write32(afu_h, 0x17fc, rand32_lower)) {
+	if (cxl_mmio_write32(afu_h, 0x17fc, rand32_lower) < 0) {
 		perror("FAILED:cxl_mmio_write32");
 		goto done;
 	}
@@ -173,7 +191,10 @@ int main(int argc, char *argv[])
 	rand64 |= (uint64_t) rand32_lower;
 
 	// Check 32-bit writes with one 64-bit read
-	cxl_mmio_read64(afu_h, 0x17f8, &rand64_check);
+	if (cxl_mmio_read64(afu_h, 0x17f8, &rand64_check) < 0) {
+		perror("FAILED:cxl_mmio_read64");
+		goto done;
+	}
 	if (rand64 != rand64_check) {
 		printf("\nFAILED:32-bit writes => 64-bit read mismatch!\n");
 		printf("\tExpected:0x%016"PRIx64"\n", rand64);
