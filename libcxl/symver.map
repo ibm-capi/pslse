@@ -13,6 +13,7 @@ LIBCXL_1 {
 		cxl_afu_opened;
 		cxl_afu_attach_full;
 		cxl_afu_attach;
+		cxl_afu_get_process_element;
 		cxl_afu_fd;
 
 		cxl_get_api_version;

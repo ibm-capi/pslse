@@ -1338,6 +1338,23 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, uint64_t wed,
 	return cxl_afu_attach(afu, wed);
 }
 
+int cxl_afu_get_process_element(struct cxl_afu_h *afu)
+{
+	DPRINTF("AFU ATTACH\n");
+	if (!afu->opened) {
+		warn_msg("cxl_afu_get_process_element: Must open AFU first");
+		errno = ENODEV;
+		return -1;
+	}
+
+	if (!afu->attached) {
+		warn_msg("cxl_afu_get_process_element: Must attach AFU first");
+		errno = ENODEV;
+		return -1;
+	}
+	return afu->context;
+}
+
 int cxl_afu_fd(struct cxl_afu_h *afu)
 {
 	if (!afu) {

@@ -247,6 +247,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		close_socket(&(client->fd));
 		return -1;
 	}
+
 	// Check AFU type is valid for connection
 	switch (afu_type) {
 	case 'd':
@@ -276,7 +277,23 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		return -1;
 	}
 
+	// check to see if device is already open
+	// lgt - I think I can open any combination of m/s upto max
+	if ( afu_type == 'd' /* | afu_type == 'm' */ ) {
+		if (psl->client[0] != NULL) {
+			warn_msg
+			    ("afu%d.%d%c is already open\n",
+			     major, minor, afu_type);
+			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
+			// should I really close the socket in this case?
+			close_socket(&(client->fd));
+			return -1;
+		}
+	}
+
 	// Look for open client slot
+	// dedicated - client[0] is the only client.
+	// afu-directed - is client[0] the master? not necessarily
 	assert(psl->max_clients > 0);
 	clients = 0;
 	context = -1;

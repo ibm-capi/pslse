@@ -99,7 +99,7 @@ int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed);
 /*
  * Get AFU process element
  */
-//int cxl_afu_get_process_element(struct cxl_afu_h *afu);
+int cxl_afu_get_process_element(struct cxl_afu_h *afu);
 
 /*
  * Returns the file descriptor for the open AFU to use with event loops.

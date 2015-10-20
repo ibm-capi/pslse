@@ -172,7 +172,9 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 		return -1;
 	}
 	// Verify req_prog_model
-	if ((mmio->desc.req_prog_model & 0x7fffl) != 0x0010l) {
+	if ( ( (mmio->desc.req_prog_model & 0x7fffl) != 0x0010 ) && // dedicated
+	     ( (mmio->desc.req_prog_model & 0x7fffl) != 0x0004 ) && // afu-directed
+	     ( (mmio->desc.req_prog_model & 0x7fffl) != 0x0014 ) ) {// both
 		error_msg("AFU descriptor: Unsupported req_prog_model");
 		errno = ENODEV;
 		return -1;

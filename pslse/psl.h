@@ -51,6 +51,7 @@ struct psl {
 	int port;
 	int idle_cycles;
 	int max_clients;
+	int attached_clients;
 	int timeout;
 };
 

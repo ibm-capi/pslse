@@ -32,7 +32,6 @@ enum flush_state {
 };
 
 struct client {
-	struct job_event *job;
 	int pending;
 	int idle_cycles;
 	int fd;
@@ -43,6 +42,7 @@ struct client {
 	enum client_state state;
 	uint16_t max_irqs;
 	char type;
+	uint64_t wed;
 	uint32_t mmio_offset;
 	uint32_t mmio_size;
 	void *mem_access;

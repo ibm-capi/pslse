@@ -47,23 +47,76 @@ static void _attach(struct psl *psl, struct client *client)
 	size_t size;
 
 	// FIXME: This only works for dedicate mode
+	// might work for afu-directed now - lgt
 
 	// Get wed value from application
+	// always do the get
+        // pass the wed only for dedicated
 	ack = PSLSE_DETACH;
 	size = sizeof(uint64_t);
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
-		warn_msg("Failed to get WED value from client");
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
-		goto attach_done;
+	  warn_msg("Failed to get WED value from client");
+	  client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	  goto attach_done;
 	}
+
+	// but need to save wed if master|slave for future consumption
+	// interestingly, I can always save it
+	// add to client type.
 	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
-	wed = ntohll(wed);
+	client->wed = ntohll(wed);
 
 	// Send start to AFU
-	if (add_job(psl->job, PSL_JOB_START, wed) != NULL) {
-		psl->idle_cycles = PSL_IDLE_CYCLES;
-		ack = PSLSE_ATTACH;
+	// only add PSL_JOB_START for dedicated and master clients.
+	// send an empty wed in the case of master
+	// lgt - new idea:
+	// track number of clients in psl
+	// if number of clients = 0, then add the start job
+	// add llcmd add to client  (loop through clients in send_com)
+	// increment number of clients (decrement in _psl_loop when we process client_none)
+	if (psl->attached_clients == 0) {
+	  switch (client->type) {
+	  case 'd':
+	    if (add_job(psl->job, PSL_JOB_START, client->wed) != NULL) {
+	      // if dedicated, we can ack PSLSE_ATTACH
+	      // if master, we might want to wait until after the llcmd add is complete
+	      // can I wait here for the START to finish?
+	      psl->idle_cycles = PSL_IDLE_CYCLES;
+	      ack = PSLSE_ATTACH;
+	    }
+	    break;
+	  case 'm':
+	  case 's':
+	    if (add_job(psl->job, PSL_JOB_START, 0L) != NULL) {
+	      // if master, we might want to wait until after the llcmd add is complete
+	      // can I wait here for the START to finish?
+	      psl->idle_cycles = PSL_IDLE_CYCLES;
+	      ack = PSLSE_ATTACH;
+	    }
+	    // running will be set by send/handle_aux2 routines
+	    break;
+	  default:
+	    // error?
+	    break;
+	  }
+	}
+
+	psl->attached_clients++;
+	
+	// for master and slave send llcmd add
+        // master "wed" is 0x0005000000000000 can actually use client->context here as well since context = 0
+	// slave "wed" is 0x000500000000hhhh where hhhh is the "handle" from client->context
+	// now - about those llcmds :-)
+	// put these in a separate list associated with the job?  psl->pe maybe...  or another call to add_job?
+	// new routine to job.c?  add_cmd?
+	// should a slave know their master?
+	if (client->type == 'm' || client->type == 's') {
+	        wed = PSL_LLCMD_ADD;
+		wed = wed | (uint64_t)client->context;
+		// add_pe adds to the client
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) != NULL) {
+		}
 	}
 
  attach_done:
@@ -76,7 +129,24 @@ static void _attach(struct psl *psl, struct client *client)
 // Client release from AFU
 static void _free(struct psl *psl, struct client *client)
 {
+	uint64_t wed;
 	struct cmd_event *mem_access;
+
+	// if afu-directed mode
+	//   add llcmd terminate to psl->job->pe
+	//   add llcmd remove to psl->job->pe
+	// comment - check to see if send pe is called if the client state is CLIENT_NONE
+	// allow the socket to close and the client struct to be freed.
+	if (client->type == 'm' || client->type == 's') {
+	        wed = PSL_LLCMD_TERMINATE;
+		wed = wed | (uint64_t)client->context;
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) != NULL) {
+		}
+	        wed = PSL_LLCMD_REMOVE;
+		wed = wed | (uint64_t)client->context;
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) != NULL) {
+		}
+	}
 
 	// DEBUG
 	debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
@@ -96,9 +166,10 @@ static void _free(struct psl *psl, struct client *client)
 	}
 	client->mem_access = NULL;
 	client->mmio_access = NULL;
-	if (client->job)
-		client->job->state = PSLSE_DONE;
 	client->state = CLIENT_NONE;
+
+	psl->attached_clients--;
+	
 }
 
 // Handle events from AFU
@@ -113,6 +184,7 @@ static void _handle_afu(struct psl *psl)
 	reset_done = handle_aux2(psl->job, &(psl->parity_enabled),
 				 &(psl->latency), &error);
 	if (error && !directed_mode_support(psl->mmio)) {
+	        // what about directed mode support?
 		client = psl->client[0];
 		size = 1 + sizeof(uint64_t);
 		buffer = (uint8_t *) malloc(size);
@@ -248,6 +320,7 @@ static void *_psl_loop(void *ptr)
 
 			// Drive events to AFU
 			send_job(psl->job);
+			send_pe(psl->job);
 			send_mmio(psl->mmio);
 
 			if (psl->mmio->list == NULL)

@@ -287,6 +287,28 @@ static void _add_unlock(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		 PSL_RESPONSE_DONE, 0);
 }
 
+// format a read_pe command and add it to the command list
+static void _add_read_pe(struct cmd *cmd, uint32_t handle, uint32_t tag,
+		      uint32_t command, uint32_t abort, uint64_t addr,
+		      uint32_t size)
+{
+        // ultimately, this generates a return on the write buffer interface of the cacheline representing the pe
+        // pe struct is basically all 0 except for WED
+        // what parms does read_pe really need?
+        // maybe only the handle and the tag
+        // Check command size and address - not used in read_pe
+	// if (!_aligned(addr, size)) {
+	// 	_add_other(cmd, handle, tag, command, abort,
+	//		   PSL_RESPONSE_FAILED);
+	//	return;
+	// }
+	// Reads will be added to the list and will next be processed
+	// in the function handle_buffer_write()
+	// should this just call handle_buffer_write_pe???
+	_add_cmd(cmd, handle, tag, command, abort, CMD_READ_PE, addr, size,
+		 MEM_IDLE, PSL_RESPONSE_DONE, 0);
+}
+
 // Format and add memory read to command list
 static void _add_read(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		      uint32_t command, uint32_t abort, uint64_t addr,
@@ -403,6 +425,9 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_FLUSH:	/*fall through */
 		_add_touch(cmd, handle, tag, command, abort, addr, size,
 			   unlock);
+		break;
+	case PSL_COMMAND_READ_PE:	/*fall through */
+		_add_read_pe(cmd, handle, tag, command, abort, addr, size);
 		break;
 	default:
 		warn_msg("Unsupported command 0x%04x", cmd);
@@ -531,10 +556,10 @@ void handle_buffer_write(struct cmd *cmd)
 	if (cmd == NULL)
 		return;
 
-	// Randomly select a pending read (or none)
+	// Randomly select a pending read or read_pe (or none)
 	event = cmd->list;
 	while (event != NULL) {
-		if ((event->type == CMD_READ) &&
+	        if (((event->type == CMD_READ) || (event->type == CMD_READ_PE) )&&
 		    (event->state != MEM_DONE) &&
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
@@ -550,6 +575,7 @@ void handle_buffer_write(struct cmd *cmd)
 	// After the client returns data with a call to the function
 	// _handle_mem_read() issue buffer write with valid data and
 	// prepare for response.
+	// a read_pe generates it's own data so we don't go through the _handle_mem_read() routine
 	if (event->state == MEM_RECEIVED) {
 		if (psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				     CACHELINE_BYTES, event->data,
@@ -578,30 +604,49 @@ void handle_buffer_write(struct cmd *cmd)
 
 	if (!event->buffer_activity && allow_buffer(cmd->parms)) {
 		// Buffer write with bogus data, but only once
+	        // should I skip this in the case of read_pe?
 		debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				 CACHELINE_BYTES, event->data, event->parity);
 		event->buffer_activity = 1;
 	} else if (client->mem_access == NULL) {
+	        // if read:
 		// Send read request to client, set client->mem_access
 		// to point to this event blocking any other memory
 		// accesses to client until data is returned by call
 		// to the _handle_mem_read() function.
-		buffer[0] = (uint8_t) PSLSE_MEMORY_READ;
-		buffer[1] = (uint8_t) event->size;
-		addr = (uint64_t *) & (buffer[2]);
-		*addr = htonll(event->addr);
-		event->abort = &(client->abort);
-		debug_msg("%s:MEMORY READ tag=0x%02x size=%d addr=0x%016"PRIx64,
-			  cmd->afu_name, event->tag, event->size, event->addr);
-		if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
-			      cmd->dbg_id, event->context) < 0) {
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	        // if read_pe:
+		// build data and parity to represent pe
+	        // set event->state to mem_received
+                if (event->type == CMD_READ) {
+		  buffer[0] = (uint8_t) PSLSE_MEMORY_READ;
+		  buffer[1] = (uint8_t) event->size;
+		  addr = (uint64_t *) & (buffer[2]);
+		  *addr = htonll(event->addr);
+		  event->abort = &(client->abort);
+		  debug_msg("%s:MEMORY READ tag=0x%02x size=%d addr=0x%016"PRIx64,
+			    cmd->afu_name, event->tag, event->size, event->addr);
+		  if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
+				cmd->dbg_id, event->context) < 0) {
+		    client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		  }
+		  event->state = MEM_REQUEST;
+		  debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				   event->context);
+		  client->mem_access = (void *)event;
 		}
-		event->state = MEM_REQUEST;
-		debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
-				 event->context);
-		client->mem_access = (void *)event;
+                if (event->type == CMD_READ_PE) {
+		  // init data
+		  memset(event->data, 0x00, CACHELINE_BYTES);		  
+		  // set wed portion
+		  // event->data pointer to uint8
+		  // client->wed uint64
+		  // event->data[116:123] is wed portion
+		  memcpy((void *)&(event->data[116]),(void *)&(client->wed), 8);
+		  event->state = MEM_RECEIVED;
+		  debug_msg("%s:PROCESS ELEMENT READ tag=0x%02x handle=%d",
+			    cmd->afu_name, event->tag, event->context);
+		}
 	}
 }
 

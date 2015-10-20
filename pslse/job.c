@@ -50,6 +50,87 @@ struct job *job_init(struct AFU_EVENT *afu_event,
 	return job;
 }
 
+// Create new pe to send to AFU
+struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
+{
+	struct job_event **tail;
+	struct job_event *event;
+
+	// Find the end of the list
+	tail = &(job->pe);
+	while (*tail != NULL)
+		tail = &((*tail)->_next);
+
+	// Create new pe job event and add to end of list
+	event = (struct job_event *)calloc(1, sizeof(struct job_event));
+	if (!event)
+		return event;
+	event->code = code;
+	event->addr = addr;
+	event->state = PSLSE_IDLE;
+	*tail = event;
+
+	// DEBUG
+	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
+
+	return event;
+}
+
+void send_pe(struct job *job)
+{
+	struct job_event *event;
+
+	// this needs to block the send of the "next" pe until 
+	// the job is running
+	// and the previous pe is running
+
+	// Test for valid job
+	if ((job == NULL) || (job->job == NULL))
+		return;
+
+	// Client disconnected - free com event linked list
+	// fixme
+	/* if (job->com->state == PSLSE_DONE) { */
+	/* 	event = job->com; */
+	/* 	job->com = event->_next; */
+	/* 	free(event); */
+	/* 	return; */
+	/* } */
+
+	// Test for running job
+	// I think we need to make sure running is set upon receipt of the jrunning ack
+	if ( *(job->psl_state) != PSLSE_RUNNING )
+		return;
+
+	// Test for valid pe
+	// do this in a loop, checking each pe in the list
+	event = job->pe;
+	while (event != NULL) {
+	   switch (event->state) {
+	   case PSLSE_PENDING:
+	      // is event pending?  leave - we have to wait for this one to finish
+	      return;
+	   case PSLSE_IDLE:
+	      // is event idle? send it and return
+	      // is psl_job_control the right routine to use?
+	      if (psl_job_control(job->afu_event, event->code, event->addr) == PSL_SUCCESS) {
+	         event->state = PSLSE_PENDING;
+	         debug_msg("%s:JOB code=0x%02x ea=0x%016" PRIx64, job->afu_name,
+		          event->code, event->addr);
+
+	         // DEBUG
+	         debug_job_send(job->dbg_fp, job->dbg_id, event->code);
+	      }
+	      return;
+	   default:
+	      // error?
+	      return;
+	      break;
+           }  
+	}
+	return;
+}
+
 // Create new job to send to AFU
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr)
 {
@@ -92,7 +173,7 @@ void send_job(struct job *job)
 	if ((job == NULL) || (job->job == NULL))
 		return;
 
-	// Client disconnected
+	// Client disconnected - _free sets job->state, not job->job->state
 	if (job->job->state == PSLSE_DONE) {
 		event = job->job;
 		job->job = event->_next;
@@ -123,6 +204,7 @@ void send_job(struct job *job)
 int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 		uint64_t * error)
 {
+	struct job_event **_prev;
 	struct job_event *event;
 	uint32_t job_running;
 	uint32_t job_done;
@@ -172,6 +254,21 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 			dbg_aux2 |= DBG_AUX2_RUNNING;
 		}
 		if (job_cack_llcmd) {
+		        // remove the current pending pe from the list
+		        // loop through the pe's for the current pending one;
+		        // copy its _next to _prev's _next
+		        // remove the current pe
+		        _prev = &(job->pe);
+			while (*_prev != NULL) {
+			  if ((*_prev)->state == PSLSE_PENDING) {
+			      event = *_prev;
+			      _prev = &((*_prev)->_next);
+			      free(event);
+			   } else {
+			      _prev = &((*_prev)->_next);
+			   }
+			}
+		        debug_msg("%s:LLCMD running", job->afu_name);
 			dbg_aux2 |= DBG_AUX2_LLCACK;
 		}
 		if (tb_request) {
