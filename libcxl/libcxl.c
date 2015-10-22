@@ -566,6 +566,10 @@ static void *_psl_loop(void *ptr)
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
+			afu->open.state = LIBCXL_REQ_IDLE;
+			afu->attach.state = LIBCXL_REQ_IDLE;
+			afu->mmio.state = LIBCXL_REQ_IDLE;
+			afu->int_req.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_MAX_INT:
 			size = sizeof(uint16_t);
