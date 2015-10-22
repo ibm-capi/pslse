@@ -54,7 +54,7 @@ void Descriptor::parse_descriptor_file(string filename){
 		if(s_value.substr(0,2) == "0x"){
 			stringstream temp(s_value.substr(2));
 			temp >> std::hex >> value;
-			info_msg("Descriptor: Setting %s with value %x", field.c_str(), value);
+			info_msg("Descriptor: Setting %s with value 0x%x", field.c_str(), value);
 		}
 		else{
 			stringstream temp(s_value);
