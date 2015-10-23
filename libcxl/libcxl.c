@@ -1461,6 +1461,7 @@ int cxl_mmio_map(struct cxl_afu_h *afu, uint32_t flags)
 {
 	DPRINTF("MMIO MAP\n");
 	if (!afu->opened) {
+		printf("cxl_mmio_map: Must open first!\n");
 		goto map_fail;
 	}
 

@@ -75,22 +75,27 @@ static void _attach(struct psl *psl, struct client *client)
 	// if number of clients = 0, then add the start job
 	// add llcmd add to client  (loop through clients in send_com)
 	// increment number of clients (decrement in _psl_loop when we process client_none)
-	if (psl->attached_clients == 0) {
 	  switch (client->type) {
 	  case 'd':
-	    if (add_job(psl->job, PSL_JOB_START, client->wed) != NULL) {
-	      // if dedicated, we can ack PSLSE_ATTACH
-	      // if master, we might want to wait until after the llcmd add is complete
-	      // can I wait here for the START to finish?
-	      psl->idle_cycles = PSL_IDLE_CYCLES;
-	      ack = PSLSE_ATTACH;
+	    if (psl->attached_clients == 0) {
+	      if (add_job(psl->job, PSL_JOB_START, client->wed) != NULL) {
+		// if dedicated, we can ack PSLSE_ATTACH
+		// if master, we might want to wait until after the llcmd add is complete
+		// can I wait here for the START to finish?
+		psl->idle_cycles = PSL_IDLE_CYCLES;
+		ack = PSLSE_ATTACH;
+	      }
 	    }
 	    break;
 	  case 'm':
 	  case 's':
-	    if (add_job(psl->job, PSL_JOB_START, 0L) != NULL) {
-	      // if master, we might want to wait until after the llcmd add is complete
-	      // can I wait here for the START to finish?
+	    if (psl->attached_clients == 0) {
+	      if (add_job(psl->job, PSL_JOB_START, 0L) != NULL) {
+		// if master, we might want to wait until after the llcmd add is complete
+		// can I wait here for the START to finish?
+	      }
+	    }
+	    if (psl->attached_clients < psl->max_clients) {
 	      psl->idle_cycles = PSL_IDLE_CYCLES;
 	      ack = PSLSE_ATTACH;
 	    }
@@ -100,7 +105,6 @@ static void _attach(struct psl *psl, struct client *client)
 	    // error?
 	    break;
 	  }
-	}
 
 	psl->attached_clients++;
 	

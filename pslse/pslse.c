@@ -390,9 +390,11 @@ static void *_client_loop(void *ptr)
 					     &(client->abort)) < 0) {
 				client_drop(client, PSL_IDLE_CYCLES,
 					    CLIENT_NONE);
+				debug_msg("_client_loop: client associate failed; could not communicate with socket");
 				break;
 			}
 			_client_associate(client, data[0], (char)data[1]);
+			debug_msg("_client_loop: client associated");
 			break;
 		}
 		client->pending = 0;

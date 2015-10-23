@@ -137,10 +137,13 @@ int main(int argc, char *argv[])
 	}
 
 	// Start AFU passing random WED value
-	cxl_afu_attach(afu_s, wed);
+	if (cxl_afu_attach(afu_s, wed) < 0) {
+		perror("FAILED:cxl_afu_attach for slave");
+		goto done;
+	}
 
 	// Map AFU MMIO registers for slave
-	printf("Mapping AFU registers for master...\n");
+	printf("Mapping AFU registers for slave...\n");
 	if ((cxl_mmio_map(afu_s, CXL_MMIO_BIG_ENDIAN)) < 0) {
 		perror("FAILED:cxl_mmio_map for slave");
 		goto done;
