@@ -56,22 +56,25 @@ int config_machine(MachineConfig *machine, uint16_t context, uint16_t command, u
 }
 
 // Helper function to calculate AFU machine register MMIO space offset
-static int _machine_base_address_index(uint16_t index)
+static int _machine_base_address_index(uint16_t index, int dedicated)
 {
 	int machine_config_base_address;
 	machine_config_base_address = index << 5;
-	machine_config_base_address = machine_config_base_address | 0x1000;
+	if (dedicated)
+		machine_config_base_address += 0x1000;
 	return machine_config_base_address;
 }
 
 // Function to write config to AFU MMIO space
-int enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index)
+int enable_machine(struct cxl_afu_h *afu, MachineConfig *machine,
+		   uint16_t index, int dedicated)
 {
 	int i;
-	int machineConfig_baseaddress = _machine_base_address_index(index);
+	int machineConfig_baseaddress = _machine_base_address_index(index, dedicated);
 	for (i = 3; i >= 0; --i){
 		uint64_t data = machine->config[i];
-		if (cxl_mmio_write64(afu, machineConfig_baseaddress + (i * 8), data))
+		if (cxl_mmio_write64(afu, machineConfig_baseaddress + (i * 8),
+		    data))
 		{
 			printf("Failed to write data\n");
 			return -1;
@@ -82,12 +85,15 @@ int enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index
 }
 
 // Function to read config from AFU
-int poll_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index){
+int poll_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index,
+		 int dedicated){
 	int i;
-	int machineConfig_baseaddress = _machine_base_address_index(index);
+	int machineConfig_baseaddress = _machine_base_address_index(index,
+								    dedicated);
 	for (i = 0; i < 2; ++i){
 		uint64_t temp;
-		if (cxl_mmio_read64(afu, machineConfig_baseaddress + (i * 8), &temp))
+		if (cxl_mmio_read64(afu, machineConfig_baseaddress + (i * 8),
+				    &temp))
 		{
 			printf("Failed to read data\n");
 			return -1;
@@ -99,24 +105,25 @@ int poll_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index){
 }
 
 // Function to set most commonly used elements and write to AFU MMIO space
-int config_and_enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, uint8_t enable_always)
+int config_and_enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, uint8_t enable_always, int dedicated)
 {
 	if (config_machine(machine, context, command, command_size, min_delay,
 			   max_delay, memory_base_address, memory_size,
 			   enable_always))
 		return -1;
-	if (enable_machine(afu, machine, mach_num))
+	if (enable_machine(afu, machine, mach_num, dedicated))
 		return -1;
 	return 0;
 }
 
 // Wait for response from AFU machine
-int get_response(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num)
+int get_response(struct cxl_afu_h *afu, MachineConfig *machine,
+		 uint16_t mach_num, int dedicated)
 {
 	uint8_t response;
 
 	do {
-		if (poll_machine(afu, machine, mach_num) < 0)
+		if (poll_machine(afu, machine, mach_num, dedicated) < 0)
 			return 0xFF;
 		get_machine_config_response_code(machine, &response);
 	} while (response == 0xFF);
@@ -125,16 +132,17 @@ int get_response(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_nu
 
 // Function to set most commonly used elements, write to AFU MMIO space and
 // wait for command completion
-int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size)
+int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, int dedicated)
 {
 	int rc;
 
 	if (config_and_enable_machine(afu, machine, mach_num, context, command,
 				      command_size, min_delay, max_delay,
-				      memory_base_address, memory_size, 0) < 0)
+				      memory_base_address, memory_size, 0,
+				      dedicated) < 0)
 		return -1;
 
-	rc = get_response(afu, machine, mach_num);
+	rc = get_response(afu, machine, mach_num, dedicated);
 	if (rc==0xFF)
 		return -1;
 

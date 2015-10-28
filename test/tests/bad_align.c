@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
 	init_machine(&machine);
 
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES)) < 0)
+	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DEDICATED)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;
@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
 	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0,
 						      PSL_COMMAND_WRITE_NA,
 						      size, 0, 0, addr,
-						      size)) < 0)
+						      size, DEDICATED)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;

@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
 
 	// Find first AFU in system
 	afu_h = cxl_afu_next(NULL);
-	afu_m = NULL;
+	afu_m = afu_s = NULL;
 	if (!afu_h) {
 		fprintf(stderr, "FAILED:No AFU found!\n");
 		goto done;
@@ -123,7 +123,6 @@ int main(int argc, char *argv[])
 
 	// Find first AFU in system
 	afu_h = cxl_afu_next(NULL);
-	afu_s = NULL;
 	if (!afu_h) {
 		fprintf(stderr, "FAILED:No AFU found!\n");
 		goto done;

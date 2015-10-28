@@ -125,7 +125,8 @@ int main(int argc, char *argv[])
 	// Use AFU Machine 1 to generate an interrupt
 	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0,
 						      PSL_COMMAND_INTREQ, 0, 0,
-						      0, (uint64_t)irq, 1)) < 0)
+						      0, (uint64_t)irq, 1,
+						      DEDICATED)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;

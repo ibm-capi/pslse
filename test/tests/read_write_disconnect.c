@@ -70,7 +70,8 @@ struct cxl_afu_h *start_test(struct cxl_afu_h *afu_h, MachineConfig *machine, ch
 						      CACHELINE_BYTES, 0, 0,
 						      (uint64_t)area +
 						      CACHELINE_BYTES*i,
-						      CACHELINE_BYTES, 0) < 0)
+						      CACHELINE_BYTES, 0,
+						      DEDICATED) < 0)
 			{
 				printf("FAILED:config_and_enable_machine");
 				stop_afu(afu_h);
@@ -81,7 +82,8 @@ struct cxl_afu_h *start_test(struct cxl_afu_h *afu_h, MachineConfig *machine, ch
 
 	// Check for valid response
 	for (i = 0; i < 64; i++) {
-		if ((response = get_response(afu_h, machine, i)) != 0) {
+		if ((response = get_response(afu_h, machine, i, DEDICATED))!=0)
+		{
 			printf("FAILED: Unexpected response code 0x%x\n", response);
 			stop_afu(afu_h);
 			exit(-1);
@@ -119,7 +121,7 @@ struct cxl_afu_h *start_test(struct cxl_afu_h *afu_h, MachineConfig *machine, ch
 		}
 		set_machine_config_command_code(machine, command);
 		set_machine_config_command_size(machine, 0x1 << (rand() % 8));
-		if (enable_machine(afu_h, machine, i) < 0) {
+		if (enable_machine(afu_h, machine, i, DEDICATED) < 0) {
 			printf("FAILED: enable_machine\n");
 			stop_afu(afu_h);
 			exit(-1);
@@ -137,7 +139,7 @@ void stop_test(struct cxl_afu_h *afu_h, MachineConfig *machine)
 	// Stop AFU machines
 	set_machine_config_disable(machine);
 	for (i = 0; i < 64; i++) {
-		if(enable_machine(afu_h, machine, i) < 0) {
+		if(enable_machine(afu_h, machine, i, DEDICATED) < 0) {
 			stop_afu(afu_h);
 			exit(-1);
 		}
@@ -145,7 +147,7 @@ void stop_test(struct cxl_afu_h *afu_h, MachineConfig *machine)
 
 	// Wait for all AFU machines to complete last command
 	for (i = 0; i < 64; i++) {
-		if ((response = get_response(afu_h, machine, i)) != 0)
+		if ((response = get_response(afu_h, machine, i, DEDICATED))!=0)
 		{
 			printf("FAILED: Unexpected response code 0x%x\n", response);
 			stop_afu(afu_h);
