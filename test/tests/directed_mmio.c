@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
 
 	// Find first AFU in system
 	afu_h = cxl_afu_next(NULL);
-	afu_m = NULL;
+	afu_s = NULL;
 	if (!afu_h) {
 		fprintf(stderr, "FAILED:No AFU found!\n");
 		goto done;
@@ -150,8 +150,8 @@ int main(int argc, char *argv[])
 	}
 
 	// Write WED value to slave MMIO space
-	if (cxl_mmio_write64(afu_m, 0x7f8, wed)) {
-		perror("FAILED:cxl_mmio_read64");
+	if (cxl_mmio_write64(afu_s, 0x7f8, wed)) {
+		perror("FAILED:cxl_mmio_write64 to slave mmio space");
 		goto done;
 	}
 
@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
 	context = cxl_afu_get_process_element(afu_s);
 	printf("Slave context handle = %d\n", context);
 	if (cxl_mmio_read64(afu_m, (context * 0x1000) + 0x7f8, &wed_check)) {
-		perror("FAILED:cxl_mmio_read64");
+		perror("FAILED:cxl_mmio_read64 of slave via master");
 		goto done;
 	}
 
@@ -174,6 +174,12 @@ int main(int argc, char *argv[])
 	// Report test as passing
 	printf("PASSED\n");
 done:
+	if (afu_s) {
+		// Unmap AFU MMIO registers
+		cxl_mmio_unmap(afu_s);
+		// Free AFU     
+		cxl_afu_free(afu_s);
+	}
 	if (afu_m) {
 		// Unmap AFU MMIO registers
 		cxl_mmio_unmap(afu_m);

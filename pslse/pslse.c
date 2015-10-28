@@ -305,6 +305,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			client->state = CLIENT_VALID;
 			client->pending = 0;
 			psl->client[i] = client;
+			break;
 		}
 	}
 	if (context < 0) {
@@ -315,6 +316,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	}
 
 	// Attach to PSL
+	// i should point to an open slot
 	rc[0] = PSLSE_OPEN;
 	rc[1] = context;
 	mmio_offset = 0;
@@ -366,6 +368,7 @@ static void *_client_loop(void *ptr)
 		if (data[0] == PSLSE_QUERY) {
 			if (get_bytes_silent(client->fd, 1, data, timeout,
 					     &(client->abort)) < 0) {
+			        debug_msg("_client_loop failed PSLSE_QUERY");
 				client_drop(client, PSL_IDLE_CYCLES,
 					    CLIENT_NONE);
 				break;

@@ -895,6 +895,8 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 	// Client is returning data from memory read
 	if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
 			     event->abort) < 0) {
+	        debug_msg("%s:_handle_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
+			  cmd->afu_name, event->tag, event->size, event->addr);
 		event->resp = PSL_RESPONSE_DERROR;
 		event->state = MEM_DONE;
 		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,

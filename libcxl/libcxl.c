@@ -485,6 +485,7 @@ static void _mmio_read(struct cxl_afu_h *afu)
 	addr = htonl(afu->mmio.addr);
 	memcpy((char *)&(buffer[offset]), (char *)&addr, sizeof(addr));
 	if (put_bytes_silent(afu->fd, size, buffer) != size) {
+	        warn_msg("_mmio_read: put_bytes_silent failed");
 		free(buffer);
 		close_socket(&(afu->fd));
 		afu->opened = 0;
@@ -563,6 +564,7 @@ static void *_psl_loop(void *ptr)
 			afu->attach.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_DETACH:
+		        info_msg("detach response from from pslse");
 			afu->mapped = 0;
 			afu->attached = 0;
 			afu->opened = 0;
@@ -1344,7 +1346,7 @@ int cxl_afu_attach_full(struct cxl_afu_h *afu, uint64_t wed,
 
 int cxl_afu_get_process_element(struct cxl_afu_h *afu)
 {
-	DPRINTF("AFU ATTACH\n");
+	DPRINTF("AFU GET PROCESS ELEMENT\n");
 	if (!afu->opened) {
 		warn_msg("cxl_afu_get_process_element: Must open AFU first");
 		errno = ENODEV;
