@@ -26,6 +26,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "TestAFU_config.h"
 #include "libcxl.h"
 
 void usage(char *name)
@@ -157,16 +158,17 @@ int main(int argc, char *argv[])
 	// Use master to verify slave context
 	context = cxl_afu_get_process_element(afu_s);
 	printf("Slave context handle = %d\n", context);
-	if (cxl_mmio_read64(afu_m, (context * 0x1000) + 0x7f8, &wed_check)) {
+	if (cxl_mmio_read64(afu_m, PPPSA_OFFSET+(context*PPPSA_SIZE)+0x7f8,
+			    &wed_check)) {
 		perror("FAILED:cxl_mmio_read64 of slave via master");
 		goto done;
 	}
 
 	// Check WED is found
 	if (wed_check != wed) {
-		printf("FAILED: WED value mismatch!\n");
-		printf("\tExpected: 0x%016"PRIx64, wed);
-		printf("\tActual  : 0x%016"PRIx64, wed_check);
+		printf("\nFAILED: WED value mismatch!\n");
+		printf("\tExpected: 0x%016"PRIx64"\n", wed);
+		printf("\tActual  : 0x%016"PRIx64"\n", wed_check);
 		goto done;
 	}
 

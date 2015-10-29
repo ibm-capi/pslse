@@ -6,8 +6,8 @@
 		<num_of_processes>4</num_of_processes>
 		<reg_prog_model>0x8004</reg_prog_model>
 		<PerProcessPSA_control>0x03</PerProcessPSA_control>
-		<PerProcessPSA_length>0x1000</PerProcessPSA_length>
-		<PerProcessPSA_offset>0x1000</PerProcessPSA_offset>
+		<PerProcessPSA_length>0x1</PerProcessPSA_length>
+		<PerProcessPSA_offset>0x1</PerProcessPSA_offset>
 	</afu>
 	<pslse>
 		<RESPONSE_PERCENT>10,20</RESPONSE_PERCENT>
