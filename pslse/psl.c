@@ -352,8 +352,12 @@ static void *_psl_loop(void *ptr)
 					  psl->dbg_fp, psl->dbg_id,
 					  psl->client[i]->context);
 				_free(psl, psl->client[i]);
+				// only allow reset if we are in dedicated mode
+				// there should be only one of these
+				if (psl->client[i]->type == 'd') {
+				  reset = 1;
+				}
 				psl->client[i] = NULL;
-				reset = 1;
 				continue;
 			}
 			if (psl->state == PSLSE_RESET)
