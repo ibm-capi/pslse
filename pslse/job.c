@@ -53,13 +53,30 @@ struct job *job_init(struct AFU_EVENT *afu_event,
 // Create new pe to send to AFU
 struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
 {
-	struct job_event **tail;
+        struct job_event **tail;
+	struct job_event *this;
 	struct job_event *event;
 
 	// Find the end of the list
-	tail = &(job->pe);
-	while (*tail != NULL)
-		tail = &((*tail)->_next);
+	// tail = &(job->pe);
+	// while (*tail != NULL)
+	// 	tail = &((*tail)->_next);
+
+	if (job->pe == NULL) {
+	  debug_msg("%s,%d:add_pe, first pe, code=0x%02x addr=0x%16"PRIx64, job->afu_name, job->dbg_id, code, addr );
+	  tail = &(job->pe);
+	} else {
+	  debug_msg("%s,%d:add_pe, subsequent pe, code=0x%02x addr=0x%16"PRIx64, job->afu_name, job->dbg_id, code, addr );
+	  this = job->pe;
+	  debug_msg("%s,%d:add_pe this=0x%16"PRIx64, job->afu_name, job->dbg_id, this );
+	  while (this->_next != NULL) {
+	    debug_msg("%s,%d:add_pe this=0x%16"PRIx64, job->afu_name, job->dbg_id, this );
+	    debug_msg("%s,%d:add_pe _next=0x%16"PRIx64, job->afu_name, job->dbg_id, this->_next );
+	    this = this->_next;
+	  }
+	  tail = &(this->_next);
+	}
+	debug_msg("%s,%d:add_pe (first) tail=0x%16"PRIx64, job->afu_name, job->dbg_id, tail );
 
 	// Create new pe job event and add to end of list
 	event = (struct job_event *)calloc(1, sizeof(struct job_event));
@@ -68,6 +85,7 @@ struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
 	event->code = code;
 	event->addr = addr;
 	event->state = PSLSE_IDLE;
+	event->_next = NULL;
 	*tail = event;
 
 	// DEBUG
@@ -115,7 +133,7 @@ void send_pe(struct job *job)
 	      // is psl_job_control the right routine to use?
 	      if (psl_job_control(job->afu_event, event->code, event->addr) == PSL_SUCCESS) {
 	         event->state = PSLSE_PENDING;
-	         debug_msg("%s:JOB code=0x%02x ea=0x%016" PRIx64, job->afu_name,
+	         debug_msg("%s:LLCMD code=0x%02x ea=0x%016" PRIx64, job->afu_name,
 		          event->code, event->addr);
 
 	         // DEBUG

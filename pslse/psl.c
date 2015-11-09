@@ -244,6 +244,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
+			debug_msg("DETACH from client context 0x%02x", client->context);
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 			break;
 		case PSLSE_ATTACH:

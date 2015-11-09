@@ -26,6 +26,8 @@
 #include <string.h>
 #include <time.h>
 
+#include <unistd.h>
+
 #include "TestAFU_config.h"
 #include "libcxl.h"
 
@@ -163,6 +165,8 @@ int main(int argc, char *argv[])
 		perror("FAILED:cxl_mmio_read64 of slave via master");
 		goto done;
 	}
+
+	sleep(60); // pause to let me run another version of this...
 
 	// Check WED is found
 	if (wed_check != wed) {
