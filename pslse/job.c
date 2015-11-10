@@ -63,15 +63,15 @@ struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
 	// 	tail = &((*tail)->_next);
 
 	if (job->pe == NULL) {
-	  debug_msg("%s,%d:add_pe, first pe, code=0x%02x addr=0x%16"PRIx64, job->afu_name, job->dbg_id, code, addr );
+	  debug_msg("%s,%d:add_pe, first pe, code=0x%02x addr=0x%016"PRIx64, job->afu_name, job->dbg_id, code, addr );
 	  tail = &(job->pe);
 	} else {
-	  debug_msg("%s,%d:add_pe, subsequent pe, code=0x%02x addr=0x%16"PRIx64, job->afu_name, job->dbg_id, code, addr );
+	  debug_msg("%s,%d:add_pe, subsequent pe, code=0x%02x addr=0x%016"PRIx64, job->afu_name, job->dbg_id, code, addr );
 	  this = job->pe;
-	  debug_msg("%s,%d:add_pe this=0x%16"PRIx64, job->afu_name, job->dbg_id, this );
+	  debug_msg("%s,%d:add_pe this=0x%016"PRIx64, job->afu_name, job->dbg_id, this );
 	  while (this->_next != NULL) {
-	    debug_msg("%s,%d:add_pe this=0x%16"PRIx64, job->afu_name, job->dbg_id, this );
-	    debug_msg("%s,%d:add_pe _next=0x%16"PRIx64, job->afu_name, job->dbg_id, this->_next );
+	    debug_msg("%s,%d:add_pe this=0x%016"PRIx64, job->afu_name, job->dbg_id, this );
+	    debug_msg("%s,%d:add_pe _next=0x%016"PRIx64, job->afu_name, job->dbg_id, this->_next );
 	    this = this->_next;
 	  }
 	  tail = &(this->_next);
@@ -222,7 +222,8 @@ void send_job(struct job *job)
 int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 		uint64_t * error)
 {
-	struct job_event **_prev;
+	struct job_event *_prev;
+	struct job_event *cacked_pe;
 	struct job_event *event;
 	uint32_t job_running;
 	uint32_t job_done;
@@ -276,17 +277,41 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 		        // loop through the pe's for the current pending one;
 		        // copy its _next to _prev's _next
 		        // remove the current pe
-		        _prev = &(job->pe);
-			while (*_prev != NULL) {
-			  if ((*_prev)->state == PSLSE_PENDING) {
-			      event = *_prev;
-			      _prev = &((*_prev)->_next);
-			      free(event);
-			   } else {
-			      _prev = &((*_prev)->_next);
-			   }
+		        debug_msg("%s,%d:handle_aux2, jcack, remove pe", 
+				  job->afu_name, job->dbg_id );
+			cacked_pe = NULL;
+			if (job->pe != NULL) {		  
+			  if (job->pe->state == PSLSE_PENDING) {
+			    // remove the first entry in the list
+			    debug_msg("%s,%d:handle_aux2, jcack, first pe is pending, job=0x%016, pe=0x%016"PRIx64, 
+				      job->afu_name, job->dbg_id, job, job->pe );
+			    cacked_pe = job->pe;
+			    job->pe = job->pe->_next;
+			  } else {
+			    _prev = job->pe;
+			    while (_prev->_next != NULL) {
+			      debug_msg("%s,%d:handle_aux2, jcack, looking for pending pe, _prev=0x%016, _next=0x%016"PRIx64, 
+					job->afu_name, job->dbg_id, _prev, _prev->_next );
+			      if (_prev->_next->state == PSLSE_PENDING) {
+				debug_msg("%s,%d:handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
+					job->afu_name, job->dbg_id, _prev->_next );
+				cacked_pe = _prev->_next;
+				_prev->_next = _prev->_next->_next;
+			      } else {
+				_prev = _prev->_next;
+			      }
+			    }
+			  }
 			}
-		        debug_msg("%s:LLCMD running", job->afu_name);
+			if (cacked_pe != NULL) {
+			  debug_msg("%s,%d:handle_aux2, jcack, remove pe, addr=0x%016"PRIx64, 
+				      job->afu_name, job->dbg_id, cacked_pe );
+			  free( cacked_pe );
+			} else {
+			  debug_msg("%s,%d:handle_aux2, jcack, no pe's to remove - why???", 
+				    job->afu_name, job->dbg_id );	  
+			}
+		        debug_msg("%s,%d:LLCMD running", job->afu_name, job->dbg_id );
 			dbg_aux2 |= DBG_AUX2_LLCACK;
 		}
 		if (tb_request) {
