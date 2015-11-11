@@ -63,20 +63,18 @@ struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
 	// 	tail = &((*tail)->_next);
 
 	if (job->pe == NULL) {
-	  debug_msg("%s,%d:add_pe, first pe, code=0x%02x addr=0x%016"PRIx64, job->afu_name, job->dbg_id, code, addr );
+	  debug_msg( "%s,%d:add_pe, first pe, code=0x%02x addr=0x%016"PRIx64, job->afu_name, job->dbg_id, code, addr );
 	  tail = &(job->pe);
 	} else {
-	  debug_msg("%s,%d:add_pe, subsequent pe, code=0x%02x addr=0x%016"PRIx64, job->afu_name, job->dbg_id, code, addr );
+	  debug_msg( "%s,%d:add_pe, subsequent pe, code=0x%02x addr=0x%016"PRIx64, job->afu_name, job->dbg_id, code, addr );
 	  this = job->pe;
-	  debug_msg("%s,%d:add_pe this=0x%016"PRIx64, job->afu_name, job->dbg_id, this );
 	  while (this->_next != NULL) {
-	    debug_msg("%s,%d:add_pe this=0x%016"PRIx64, job->afu_name, job->dbg_id, this );
-	    debug_msg("%s,%d:add_pe _next=0x%016"PRIx64, job->afu_name, job->dbg_id, this->_next );
+	    debug_msg( "%s,%d:add_pe this=0x%016"PRIx64, job->afu_name, job->dbg_id, this );
+	    debug_msg( "%s,%d:add_pe _next=0x%016"PRIx64, job->afu_name, job->dbg_id, this->_next );
 	    this = this->_next;
 	  }
 	  tail = &(this->_next);
 	}
-	debug_msg("%s,%d:add_pe (first) tail=0x%16"PRIx64, job->afu_name, job->dbg_id, tail );
 
 	// Create new pe job event and add to end of list
 	event = (struct job_event *)calloc(1, sizeof(struct job_event));
@@ -88,6 +86,8 @@ struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
 	event->_next = NULL;
 	*tail = event;
 
+	debug_msg( "%s,%d:add_pe: created pe:0x%016, stored pointer at=0x%016"PRIx64, job->afu_name, job->dbg_id, event, tail );
+	
 	// DEBUG
 	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
 
