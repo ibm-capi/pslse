@@ -144,11 +144,15 @@ static void _free(struct psl *psl, struct client *client)
 	if (client->type == 'm' || client->type == 's') {
 	        wed = PSL_LLCMD_TERMINATE;
 		wed = wed | (uint64_t)client->context;
-	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) != NULL) {
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
+		  // error
+		  error_msg( "%s:_free failed to add llcmd terminate for context=%d"PRIx64, psl->name, client->context );
 		}
 	        wed = PSL_LLCMD_REMOVE;
 		wed = wed | (uint64_t)client->context;
-	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) != NULL) {
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
+		  // error
+		  error_msg( "%s:_free failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
 		}
 	}
 

@@ -1279,6 +1279,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	buffer = PSLSE_DETACH;
 	rc = put_bytes_silent(afu->fd, 1, &buffer);
 	if (rc == 1) {
+	        info_msg("detach request from from host");
 		while (afu->attached)	/*infinite loop */
 			_delay_1ms();
 	}
