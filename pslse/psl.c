@@ -107,7 +107,7 @@ static void _attach(struct psl *psl, struct client *client)
 	}
 
 	psl->attached_clients++;
-	info_msg( "Attached a client: current attached clients = %d\n", psl->attached_clients );
+	info_msg( "Attached client context %d: current attached clients = %d\n", client->context, psl->attached_clients );
 	
 	// for master and slave send llcmd add
         // master "wed" is 0x0005000000000000 can actually use client->context here as well since context = 0
@@ -178,7 +178,7 @@ static void _free(struct psl *psl, struct client *client)
 	client->state = CLIENT_NONE;
 
 	psl->attached_clients--;
-	info_msg( "Detatched a client: current attached clients = %d\n, psl->attached_clients" );
+	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
 	
 }
 
