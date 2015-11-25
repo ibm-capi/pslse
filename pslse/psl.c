@@ -131,6 +131,60 @@ static void _attach(struct psl *psl, struct client *client)
 	}
 }
 
+// Client is detaching from the AFU
+static void _detach(struct psl *psl, struct client *client)
+{
+	uint64_t wed;
+	struct cmd_event *mem_access;
+
+	debug_msg("DETACH from client context 0x%02x", client->context);
+	// if afu-directed mode
+	//   add llcmd terminate to psl->job->pe
+	//   add llcmd remove to psl->job->pe
+	// comment - check to see if send pe is called if the client state is CLIENT_NONE
+	// allow the socket to close and the client struct to be freed.
+	if (client->type == 'm' || client->type == 's') {
+	        wed = PSL_LLCMD_TERMINATE;
+		wed = wed | (uint64_t)client->context;
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
+		  // error
+		  error_msg( "%s:_free failed to add llcmd terminate for context=%d"PRIx64, psl->name, client->context );
+		}
+	        wed = PSL_LLCMD_REMOVE;
+		wed = wed | (uint64_t)client->context;
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
+		  // error
+		  error_msg( "%s:_free failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
+		}
+	}
+
+	// should we "wait" here for jcack to come back from the term and remove?
+
+	// DEBUG
+	debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
+
+	info_msg("%s client disconnect from %s context %d", client->ip,
+		 psl->name, client->context);
+	close_socket(&(client->fd));
+	if (client->ip)
+		free(client->ip);
+	client->ip = NULL;
+	mem_access = (struct cmd_event *)client->mem_access;
+	if (mem_access != NULL) {
+		if (mem_access->state != MEM_DONE) {
+			mem_access->resp = PSL_RESPONSE_FAILED;
+			mem_access->state = MEM_DONE;
+		}
+	}
+	client->mem_access = NULL;
+	client->mmio_access = NULL;
+	client->state = CLIENT_NONE;
+
+	psl->attached_clients--;
+	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
+	
+}
+
 // Client release from AFU
 static void _free(struct psl *psl, struct client *client)
 {
@@ -181,7 +235,6 @@ static void _free(struct psl *psl, struct client *client)
 	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
 	
 }
-
 // Handle events from AFU
 static void _handle_afu(struct psl *psl)
 {
@@ -250,8 +303,9 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-			debug_msg("DETACH from client context 0x%02x", client->context);
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		  //debug_msg("DETACH from client context 0x%02x", client->context);
+		  //client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		        _detach(psl, client);
 			break;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
@@ -358,7 +412,8 @@ static void *_psl_loop(void *ptr)
 				put_bytes(psl->client[i]->fd, 1, &ack,
 					  psl->dbg_fp, psl->dbg_id,
 					  psl->client[i]->context);
-				_free(psl, psl->client[i]);
+				// removed _free from here and created _detach called from _handle_client
+				// _free(psl, psl->client[i]);
 				// only allow reset if we are in dedicated mode
 				// there should be only one of these
 				if (psl->client[i]->type == 'd') {
