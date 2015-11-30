@@ -127,13 +127,16 @@ void send_pe(struct job *job)
 	   switch (event->state) {
 	   case PSLSE_PENDING:
 	      // is event pending?  leave - we have to wait for this one to finish
+	      debug_msg("%s:LLCMD pending code=0x%02x ea=0x%016" PRIx64, job->afu_name,
+		          event->code, event->addr);
+
 	      return;
 	   case PSLSE_IDLE:
 	      // is event idle? send it and return
 	      // is psl_job_control the right routine to use?
 	      if (psl_job_control(job->afu_event, event->code, event->addr) == PSL_SUCCESS) {
 	         event->state = PSLSE_PENDING;
-	         debug_msg("%s:LLCMD code=0x%02x ea=0x%016" PRIx64, job->afu_name,
+	         debug_msg("%s:LLCMD sent code=0x%02x ea=0x%016" PRIx64, job->afu_name,
 		          event->code, event->addr);
 
 	         // DEBUG
