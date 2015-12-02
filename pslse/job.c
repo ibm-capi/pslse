@@ -238,7 +238,11 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 	uint32_t read_latency;
 	uint8_t dbg_aux2;
 	int reset, reset_complete;
+	// uint64_t llcmd;
+	// uint64_t context;
+	// uint8_t ack = PSLSE_DETACH;
 
+	//job = psl->job;
 	if (job == NULL)
 		return 0;
 
@@ -275,6 +279,7 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 			*(job->psl_state) = PSLSE_RUNNING;
 			dbg_aux2 |= DBG_AUX2_RUNNING;
 		}
+		// Handle job cack llcmd
 		if (job_cack_llcmd) {
 		        // remove the current pending pe from the list
 		        // loop through the pe's for the current pending one;
@@ -296,6 +301,7 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 			      debug_msg("%s,%d:handle_aux2, jcack, looking for pending pe, _prev=0x%016, _next=0x%016"PRIx64, 
 					job->afu_name, job->dbg_id, _prev, _prev->_next );
 			      if (_prev->_next->state == PSLSE_PENDING) {
+				// remove this entry in the list
 				debug_msg("%s,%d:handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
 					job->afu_name, job->dbg_id, _prev->_next );
 				cacked_pe = _prev->_next;
@@ -307,14 +313,15 @@ int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
 			  }
 			}
 			if (cacked_pe != NULL) {
-			  debug_msg("%s,%d:handle_aux2, jcack, remove pe, addr=0x%016"PRIx64, 
+			  // this is the pe that I want to process
+			  // get just the llcmd part of the addr
+			  debug_msg("%s,%d:handle_aux2, jcack, free pe, addr=0x%016"PRIx64, 
 				      job->afu_name, job->dbg_id, cacked_pe );
 			  free( cacked_pe );
 			} else {
 			  debug_msg("%s,%d:handle_aux2, jcack, no pe's to remove - why???", 
 				    job->afu_name, job->dbg_id );	  
 			}
-		        debug_msg("%s,%d:LLCMD running", job->afu_name, job->dbg_id );
 			dbg_aux2 |= DBG_AUX2_LLCACK;
 		}
 		if (tb_request) {

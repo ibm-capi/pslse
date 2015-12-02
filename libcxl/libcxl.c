@@ -541,6 +541,7 @@ static void *_psl_loop(void *ptr)
 		if (rc == 0)
 			continue;
 		if (rc < 0) {
+			warn_msg("Socket failure testing bytes_ready");
 			_all_idle(afu);
 			break;
 		}
@@ -841,6 +842,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 	afu->fd = fd;
 	afu->map = afu_map;
 	afu->dbg_id = (major << 4) | minor;
+	debug_msg("opened host-side socket %d", afu->fd);
 
 	// Send PSLSE query
 	size = 1 + sizeof(uint8_t);
@@ -1279,10 +1281,11 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	buffer = PSLSE_DETACH;
 	rc = put_bytes_silent(afu->fd, 1, &buffer);
 	if (rc == 1) {
-	        info_msg("detach request from from host");
+	        debug_msg("detach request sent from from host on socket %d", afu->fd);
 		while (afu->attached)	/*infinite loop */
 			_delay_1ms();
 	}
+	debug_msg("closing host side socket %d", afu->fd);
 	close_socket(&(afu->fd));
 	afu->opened = 0;
 	pthread_join(afu->thread, NULL);

@@ -38,6 +38,30 @@
 #include "../common/debug.h"
 #include "../common/psl_interface.h"
 
+// are there any pending commands with this context?
+int _is_cmd_pending(struct psl *psl, int32_t context)
+{
+  struct cmd_event *cmd_event;
+
+  if ( psl->cmd == NULL ) {
+    // no cmd struct
+    return 0;
+  }
+
+  cmd_event = psl->cmd->list;
+  while ( cmd_event != NULL ) {
+    if ( cmd_event->context == context ) {
+      // found a matching element
+      return 1;
+    }
+    cmd_event = cmd_event->_next;
+  }
+
+  // no matching elements found
+  return 0;
+
+}
+
 // Attach to AFU
 static void _attach(struct psl *psl, struct client *client)
 {
@@ -135,7 +159,6 @@ static void _attach(struct psl *psl, struct client *client)
 static void _detach(struct psl *psl, struct client *client)
 {
 	uint64_t wed;
-	struct cmd_event *mem_access;
 
 	debug_msg("DETACH from client context 0x%02x", client->context);
 	// if afu-directed mode
@@ -158,58 +181,18 @@ static void _detach(struct psl *psl, struct client *client)
 		}
 	}
 
-	// should we "wait" here for jcack to come back from the term and remove?
+	// we will let _psl_loop call send_pe to issue the llcmds
+	// when the jcack's come back, we will 
+	//   send the detach response to the client and 
+	//   free the client structure
 
-	// DEBUG
-	debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
-
-	info_msg("%s client disconnect from %s context %d", client->ip,
-		 psl->name, client->context);
-	close_socket(&(client->fd));
-	if (client->ip)
-		free(client->ip);
-	client->ip = NULL;
-	mem_access = (struct cmd_event *)client->mem_access;
-	if (mem_access != NULL) {
-		if (mem_access->state != MEM_DONE) {
-			mem_access->resp = PSL_RESPONSE_FAILED;
-			mem_access->state = MEM_DONE;
-		}
-	}
-	client->mem_access = NULL;
-	client->mmio_access = NULL;
-	client->state = CLIENT_NONE;
-
-	psl->attached_clients--;
-	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
 	
 }
 
 // Client release from AFU
 static void _free(struct psl *psl, struct client *client)
 {
-	uint64_t wed;
 	struct cmd_event *mem_access;
-
-	// if afu-directed mode
-	//   add llcmd terminate to psl->job->pe
-	//   add llcmd remove to psl->job->pe
-	// comment - check to see if send pe is called if the client state is CLIENT_NONE
-	// allow the socket to close and the client struct to be freed.
-	if (client->type == 'm' || client->type == 's') {
-	        wed = PSL_LLCMD_TERMINATE;
-		wed = wed | (uint64_t)client->context;
-	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
-		  // error
-		  error_msg( "%s:_free failed to add llcmd terminate for context=%d"PRIx64, psl->name, client->context );
-		}
-	        wed = PSL_LLCMD_REMOVE;
-		wed = wed | (uint64_t)client->context;
-	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
-		  // error
-		  error_msg( "%s:_free failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
-		}
-	}
 
 	// DEBUG
 	debug_context_remove(psl->dbg_fp, psl->dbg_id, client->context);
@@ -235,6 +218,164 @@ static void _free(struct psl *psl, struct client *client)
 	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
 	
 }
+
+// See if AFU changed any of the aux2 signals and handle accordingly
+int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
+		uint64_t * error)
+{
+        struct job *job;
+	struct job_event *_prev;
+	struct job_event *cacked_pe;
+	struct job_event *event;
+	uint32_t job_running;
+	uint32_t job_done;
+	uint32_t job_cack_llcmd;
+	uint64_t job_error;
+	uint32_t job_yield;
+	uint32_t tb_request;
+	uint32_t par_enable;
+	uint32_t read_latency;
+	uint8_t dbg_aux2;
+	int reset, reset_complete;
+	uint64_t llcmd;
+	uint64_t context;
+	uint8_t ack = PSLSE_DETACH;
+
+	job = psl->job;
+	if (job == NULL)
+		return 0;
+
+	// See if AFU is driving AUX2 signal changes
+	dbg_aux2 = reset = reset_complete = *error = 0;
+	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
+				&job_cack_llcmd, &job_error, &job_yield,
+				&tb_request, &par_enable, &read_latency) ==
+	    PSL_SUCCESS) {
+		// Handle job_done
+		if (job_done) {
+			debug_msg("%s:JOB done", job->afu_name);
+			dbg_aux2 |= DBG_AUX2_DONE;
+			*error = job_error;
+			if (job->job != NULL) {
+				event = job->job;
+				// Is job_done for reset or start?
+				if (event->code == PSL_JOB_RESET)
+					reset_complete = 1;
+				else
+					reset = 1;
+				job->job = event->_next;
+				free(event);
+				if (job->job != NULL)
+					assert(job->job->_next != job->job);
+			}
+			if (*(job->psl_state) == PSLSE_RESET) {
+				*(job->psl_state) = PSLSE_IDLE;
+			}
+		}
+		// Handle job_running
+		if (job_running) {
+			debug_msg("%s:JOB running", job->afu_name);
+			*(job->psl_state) = PSLSE_RUNNING;
+			dbg_aux2 |= DBG_AUX2_RUNNING;
+		}
+		// Handle job cack llcmd
+		if (job_cack_llcmd) {
+		        // remove the current pending pe from the list
+		        // loop through the pe's for the current pending one;
+		        // copy its _next to _prev's _next
+		        // remove the current pe
+		        debug_msg("%s,%d:handle_aux2, jcack, remove pe", 
+				  job->afu_name, job->dbg_id );
+			cacked_pe = NULL;
+			if (job->pe != NULL) {		  
+			  if (job->pe->state == PSLSE_PENDING) {
+			    // remove the first entry in the list
+			    debug_msg("%s,%d:handle_aux2, jcack, first pe is pending, job=0x%016, pe=0x%016"PRIx64, 
+				      job->afu_name, job->dbg_id, job, job->pe );
+			    cacked_pe = job->pe;
+			    job->pe = job->pe->_next;
+			  } else {
+			    _prev = job->pe;
+			    while (_prev->_next != NULL) {
+			      debug_msg("%s,%d:handle_aux2, jcack, looking for pending pe, _prev=0x%016, _next=0x%016"PRIx64, 
+					job->afu_name, job->dbg_id, _prev, _prev->_next );
+			      if (_prev->_next->state == PSLSE_PENDING) {
+				// remove this entry in the list
+				debug_msg("%s,%d:handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
+					job->afu_name, job->dbg_id, _prev->_next );
+				cacked_pe = _prev->_next;
+				_prev->_next = _prev->_next->_next;
+			      } else {
+				_prev = _prev->_next;
+			      }
+			    }
+			  }
+			}
+			if (cacked_pe != NULL) {
+			  // this is the pe that I want to process
+			  // get just the llcmd part of the addr
+			  llcmd = cacked_pe->addr && PSL_LLCMD_MASK;
+			  context = cacked_pe->addr && PSL_LLCMD_CONTEXT_MASK;
+			  switch ( llcmd ) {
+			  case PSL_LLCMD_ADD:
+			    // if it is a start, just keep going, print a message
+			    debug_msg("%s,%d:LLCMD ADD acked", job->afu_name, job->dbg_id );
+			    break;
+			  case PSL_LLCMD_TERMINATE:
+			    // if it is a terminate, make sure the cmd list is empty, warn if not empty
+			    debug_msg("%s,%d:LLCMD TERMINATE acked", job->afu_name, job->dbg_id );
+			    if ( _is_cmd_pending(psl, context) ) {
+			      warn_msg( "%s,%d:AFU command for context %d still pending when LLCMD TERMINATE acked", 
+					job->afu_name, job->dbg_id, context);
+			    }
+			    break;
+			  case PSL_LLCMD_REMOVE:
+			    // if it is a remove, send the detach response to the client and close up the client
+			    debug_msg("%s,%d:LLCMD REMOVE acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:detach response sent to host on socket %d", 
+				      job->afu_name, job->dbg_id, psl->client[context]->fd);
+			    put_bytes(psl->client[context]->fd, 1, &ack,
+			    	      psl->dbg_fp, psl->dbg_id,
+			    	      psl->client[context]->context);
+			    client_drop(psl->client[context], PSL_IDLE_CYCLES, CLIENT_NONE);
+			    // psl->attached_clients--
+			    break;
+			  default:
+			    break;
+			  }
+			  debug_msg("%s,%d:_handle_aux2, jcack, free pe, addr=0x%016"PRIx64, 
+				      job->afu_name, job->dbg_id, cacked_pe );
+			  free( cacked_pe );
+			} else {
+			  debug_msg("%s,%d:_handle_aux2, jcack, no pe's to remove - why???", 
+				    job->afu_name, job->dbg_id );	  
+			}
+			dbg_aux2 |= DBG_AUX2_LLCACK;
+		}
+		if (tb_request) {
+			dbg_aux2 |= DBG_AUX2_TBREQ;
+		}
+		if (par_enable) {
+			dbg_aux2 |= DBG_AUX2_PAREN;
+		}
+		dbg_aux2 |= read_latency & DBG_AUX2_LAT_MASK;
+		if (job_done && job_running)
+			error_msg("ah_jdone & ah_jrunning asserted together");
+		if ((read_latency != 1) && (read_latency != 3))
+			warn_msg("ah_brlat must be either 1 or 3");
+		*parity = par_enable;
+		*latency = read_latency;
+
+		// DEBUG
+		debug_job_aux2(job->dbg_fp, job->dbg_id, dbg_aux2);
+	}
+
+	if (reset)
+		add_job(job, PSL_JOB_RESET, 0L);
+
+	return reset_complete;
+}
+
 // Handle events from AFU
 static void _handle_afu(struct psl *psl)
 {
@@ -244,7 +385,7 @@ static void _handle_afu(struct psl *psl)
 	int reset_done;
 	size_t size;
 
-	reset_done = handle_aux2(psl->job, &(psl->parity_enabled),
+	reset_done = _handle_aux2(psl, &(psl->parity_enabled),
 				 &(psl->latency), &error);
 	if (error && !directed_mode_support(psl->mmio)) {
 	        // what about directed mode support?
@@ -303,8 +444,8 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-		  //debug_msg("DETACH from client context 0x%02x", client->context);
-		  //client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		        debug_msg("DETACH request from client context %d on socket %d", client->context, client->fd);
+		        //client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		        _detach(psl, client);
 			break;
 		case PSLSE_ATTACH:
@@ -334,7 +475,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 			mmio = handle_mmio(psl->mmio, client, 1, dw);
 			break;
 		default:
-			error_msg("Unexpected 0x%02x from client", buffer[0]);
+		  error_msg("Unexpected 0x%02x from client on socket", buffer[0], client->fd);
 		}
 
 		if (mmio)
@@ -409,16 +550,21 @@ static void *_psl_loop(void *ptr)
 				continue;
 			if ((psl->client[i]->state == CLIENT_NONE) &&
 			    (psl->client[i]->idle_cycles == 0)) {
-				put_bytes(psl->client[i]->fd, 1, &ack,
-					  psl->dbg_fp, psl->dbg_id,
-					  psl->client[i]->context);
+			        // for m/s devices, this was done in _handle_aux2 
+				// put_bytes(psl->client[i]->fd, 1, &ack,
+				//  	  psl->dbg_fp, psl->dbg_id,
+				//	  psl->client[i]->context);
 				// removed _free from here and created _detach called from _handle_client
-				// _free(psl, psl->client[i]);
+				//_free(psl, psl->client[i]);
 				// only allow reset if we are in dedicated mode
 				// there should be only one of these
 				if (psl->client[i]->type == 'd') {
+				  put_bytes(psl->client[i]->fd, 1, &ack,
+					    psl->dbg_fp, psl->dbg_id,
+					    psl->client[i]->context);
 				  reset = 1;
 				}
+				_free(psl, psl->client[i]);
 				//psl->client[i] = NULL;  // don't do this, pslse will free the client[i] struct
 				continue;
 			}
