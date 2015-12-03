@@ -161,6 +161,7 @@ static void _detach(struct psl *psl, struct client *client)
 	uint64_t wed;
 
 	debug_msg("DETACH from client context 0x%02x", client->context);
+	// if dedicated mode just drop the client
 	// if afu-directed mode
 	//   add llcmd terminate to psl->job->pe
 	//   add llcmd remove to psl->job->pe
@@ -179,6 +180,10 @@ static void _detach(struct psl *psl, struct client *client)
 		  // error
 		  error_msg( "%s:_free failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
 		}
+	} else {
+	  if (client->type == 'd' ) {
+	    client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	  }
 	}
 
 	// we will let _psl_loop call send_pe to issue the llcmds
@@ -216,6 +221,8 @@ static void _free(struct psl *psl, struct client *client)
 
 	psl->attached_clients--;
 	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
+
+	// where do we *really* free the client struct and it's contents???
 	
 }
 
@@ -315,7 +322,7 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			  // get just the llcmd part of the addr
 			  llcmd = cacked_pe->addr & PSL_LLCMD_MASK;
 			  context = cacked_pe->addr & PSL_LLCMD_CONTEXT_MASK;
-			  debug_msg("%s,%d:_handle_aux2: llcmd addr = 0x%016; llcmd = %d; context = %d"PRIx64, 
+			  debug_msg("%s,%d:_handle_aux2: llcmd addr = 0x%016"PRIx64"; llcmd = 0x%016"PRIx64"; context = 0x%016"PRIx64, 
 				    job->afu_name, job->dbg_id, cacked_pe->addr, llcmd, context);
 			  switch ( llcmd ) {
 			  case PSL_LLCMD_ADD:
@@ -338,8 +345,8 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			    put_bytes(psl->client[context]->fd, 1, &ack,
 			    	      psl->dbg_fp, psl->dbg_id,
 			    	      psl->client[context]->context);
-			    client_drop(psl->client[context], PSL_IDLE_CYCLES, CLIENT_NONE);
-			    // psl->attached_clients--
+			    _free( psl, psl->client[context] );
+			    psl->client[context] = NULL;  // I don't like this part...
 			    break;
 			  default:
 			    debug_msg("%s,%d:_handle_aux2: acked llcmd %d did not match an LLCMD pe", 
@@ -551,24 +558,24 @@ static void *_psl_loop(void *ptr)
 		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			if ((psl->client[i]->state == CLIENT_NONE) &&
+			if ((psl->client[i]->type == 'd') && 
+			    (psl->client[i]->state == CLIENT_NONE) &&
 			    (psl->client[i]->idle_cycles == 0)) {
-			        // for m/s devices, this was done in _handle_aux2 
-				// put_bytes(psl->client[i]->fd, 1, &ack,
-				//  	  psl->dbg_fp, psl->dbg_id,
-				//	  psl->client[i]->context);
-				// removed _free from here and created _detach called from _handle_client
-				//_free(psl, psl->client[i]);
-				// only allow reset if we are in dedicated mode
-				// there should be only one of these
-				if (psl->client[i]->type == 'd') {
-				  put_bytes(psl->client[i]->fd, 1, &ack,
-					    psl->dbg_fp, psl->dbg_id,
-					    psl->client[i]->context);
-				  reset = 1;
-				}
+			        // this was the old way of detaching a dedicated process app/afu pair
+			        // we get the detach message, drop the client, and wait for idle cycle to get to 0
+				put_bytes(psl->client[i]->fd, 1, &ack,
+					  psl->dbg_fp, psl->dbg_id,
+					  psl->client[i]->context);
 				_free(psl, psl->client[i]);
-				//psl->client[i] = NULL;  // don't do this, pslse will free the client[i] struct
+				psl->client[i] = NULL;  // aha - this is how we only called _free once the old way
+				                        // why do we not free client[i]???
+				reset = 1;
+				// but for m/s devices we need to do this differently and not send a reset...
+				// _handle_client - creates the llcmd's to term and remove
+				// send_pe - sends the llcmd pe's to afu one at a time
+				// _handle_afu calls _handle_aux2
+				// _handle_aux2 finishes the llcmd pe's when jcack is asserted by afu
+				//   when the remove llcmd is processed, we should put_bytes, _free and set client to NULL, right???
 				continue;
 			}
 			if (psl->state == PSLSE_RESET)
