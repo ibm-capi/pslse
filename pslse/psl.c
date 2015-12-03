@@ -249,8 +249,7 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 	dbg_aux2 = reset = reset_complete = *error = 0;
 	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
 				&job_cack_llcmd, &job_error, &job_yield,
-				&tb_request, &par_enable, &read_latency) ==
-	    PSL_SUCCESS) {
+				&tb_request, &par_enable, &read_latency) == PSL_SUCCESS) {
 		// Handle job_done
 		if (job_done) {
 			debug_msg("%s:_handle_aux2: JOB done", job->afu_name);
@@ -312,10 +311,12 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			  }
 			}
 			if (cacked_pe != NULL) {
-			  // this is the pe that I want to process
+			  // this is the pe that I want to "finish" processing
 			  // get just the llcmd part of the addr
-			  llcmd = cacked_pe->addr && PSL_LLCMD_MASK;
-			  context = cacked_pe->addr && PSL_LLCMD_CONTEXT_MASK;
+			  llcmd = cacked_pe->addr & PSL_LLCMD_MASK;
+			  context = cacked_pe->addr & PSL_LLCMD_CONTEXT_MASK;
+			  debug_msg("%s,%d:_handle_aux2: llcmd addr = 0x%016; llcmd = %d; context = %d"PRIx64, 
+				    job->afu_name, job->dbg_id, cacked_pe->addr, llcmd, context);
 			  switch ( llcmd ) {
 			  case PSL_LLCMD_ADD:
 			    // if it is a start, just keep going, print a message
@@ -341,7 +342,8 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			    // psl->attached_clients--
 			    break;
 			  default:
-			    debug_msg("%s,%d:_handle_aux2: ack did not match an LLCMD", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: acked llcmd %d did not match an LLCMD pe", 
+				      job->afu_name, job->dbg_id, llcmd );
 			    break;
 			  }
 			  debug_msg("%s,%d:_handle_aux2, jcack, free pe, addr=0x%016"PRIx64, 
