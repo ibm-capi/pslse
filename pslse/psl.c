@@ -253,7 +253,7 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 	    PSL_SUCCESS) {
 		// Handle job_done
 		if (job_done) {
-			debug_msg("%s:JOB done", job->afu_name);
+			debug_msg("%s:_handle_aux2: JOB done", job->afu_name);
 			dbg_aux2 |= DBG_AUX2_DONE;
 			*error = job_error;
 			if (job->job != NULL) {
@@ -274,7 +274,7 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 		}
 		// Handle job_running
 		if (job_running) {
-			debug_msg("%s:JOB running", job->afu_name);
+			debug_msg("%s:_handle_aux2: JOB running", job->afu_name);
 			*(job->psl_state) = PSLSE_RUNNING;
 			dbg_aux2 |= DBG_AUX2_RUNNING;
 		}
@@ -284,24 +284,24 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 		        // loop through the pe's for the current pending one;
 		        // copy its _next to _prev's _next
 		        // remove the current pe
-		        debug_msg("%s,%d:handle_aux2, jcack, remove pe", 
+		        debug_msg("%s,%d:_handle_aux2, jcack, complete llcmd and remove pe", 
 				  job->afu_name, job->dbg_id );
 			cacked_pe = NULL;
 			if (job->pe != NULL) {		  
 			  if (job->pe->state == PSLSE_PENDING) {
 			    // remove the first entry in the list
-			    debug_msg("%s,%d:handle_aux2, jcack, first pe is pending, job=0x%016, pe=0x%016"PRIx64, 
+			    debug_msg("%s,%d:_handle_aux2, jcack, first pe is pending, job=0x%016, pe=0x%016"PRIx64, 
 				      job->afu_name, job->dbg_id, job, job->pe );
 			    cacked_pe = job->pe;
 			    job->pe = job->pe->_next;
 			  } else {
 			    _prev = job->pe;
 			    while (_prev->_next != NULL) {
-			      debug_msg("%s,%d:handle_aux2, jcack, looking for pending pe, _prev=0x%016, _next=0x%016"PRIx64, 
+			      debug_msg("%s,%d:_handle_aux2, jcack, looking for pending pe, _prev=0x%016, _next=0x%016"PRIx64, 
 					job->afu_name, job->dbg_id, _prev, _prev->_next );
 			      if (_prev->_next->state == PSLSE_PENDING) {
 				// remove this entry in the list
-				debug_msg("%s,%d:handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
+				debug_msg("%s,%d:_handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
 					job->afu_name, job->dbg_id, _prev->_next );
 				cacked_pe = _prev->_next;
 				_prev->_next = _prev->_next->_next;
@@ -319,11 +319,11 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			  switch ( llcmd ) {
 			  case PSL_LLCMD_ADD:
 			    // if it is a start, just keep going, print a message
-			    debug_msg("%s,%d:LLCMD ADD acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: LLCMD ADD acked", job->afu_name, job->dbg_id );
 			    break;
 			  case PSL_LLCMD_TERMINATE:
 			    // if it is a terminate, make sure the cmd list is empty, warn if not empty
-			    debug_msg("%s,%d:LLCMD TERMINATE acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: LLCMD TERMINATE acked", job->afu_name, job->dbg_id );
 			    if ( _is_cmd_pending(psl, context) ) {
 			      warn_msg( "%s,%d:AFU command for context %d still pending when LLCMD TERMINATE acked", 
 					job->afu_name, job->dbg_id, context);
@@ -331,8 +331,8 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			    break;
 			  case PSL_LLCMD_REMOVE:
 			    // if it is a remove, send the detach response to the client and close up the client
-			    debug_msg("%s,%d:LLCMD REMOVE acked", job->afu_name, job->dbg_id );
-			    debug_msg("%s,%d:detach response sent to host on socket %d", 
+			    debug_msg("%s,%d:_handle_aux2: LLCMD REMOVE acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: detach response sent to host on socket %d", 
 				      job->afu_name, job->dbg_id, psl->client[context]->fd);
 			    put_bytes(psl->client[context]->fd, 1, &ack,
 			    	      psl->dbg_fp, psl->dbg_id,
@@ -341,6 +341,7 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			    // psl->attached_clients--
 			    break;
 			  default:
+			    debug_msg("%s,%d:_handle_aux2: ack did not match an LLCMD", job->afu_name, job->dbg_id );
 			    break;
 			  }
 			  debug_msg("%s,%d:_handle_aux2, jcack, free pe, addr=0x%016"PRIx64, 
@@ -360,9 +361,9 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 		}
 		dbg_aux2 |= read_latency & DBG_AUX2_LAT_MASK;
 		if (job_done && job_running)
-			error_msg("ah_jdone & ah_jrunning asserted together");
+			error_msg("_handle_aux2: ah_jdone & ah_jrunning asserted together");
 		if ((read_latency != 1) && (read_latency != 3))
-			warn_msg("ah_brlat must be either 1 or 3");
+			warn_msg("_handle_aux2: ah_brlat must be either 1 or 3");
 		*parity = par_enable;
 		*latency = read_latency;
 
