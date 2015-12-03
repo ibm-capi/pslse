@@ -98,7 +98,7 @@ static void _attach(struct psl *psl, struct client *client)
 	// track number of clients in psl
 	// if number of clients = 0, then add the start job
 	// add llcmd add to client  (loop through clients in send_com)
-	// increment number of clients (decrement in _psl_loop when we process client_none)
+	// increment number of clients (decrement where we handle the completion of the detach)
 	switch (client->type) {
 	case 'd':
 	  if (psl->attached_clients == 0) {
@@ -568,14 +568,16 @@ static void *_psl_loop(void *ptr)
 					  psl->client[i]->context);
 				_free(psl, psl->client[i]);
 				psl->client[i] = NULL;  // aha - this is how we only called _free once the old way
-				                        // why do we not free client[i]???
+				                        // why do we not free client[i]?
+				                        // because this was a short cut pointer
+				                        // the *real* client point is in client_list in pslse
 				reset = 1;
-				// but for m/s devices we need to do this differently and not send a reset...
+				// for m/s devices we need to do this differently and not send a reset...
 				// _handle_client - creates the llcmd's to term and remove
 				// send_pe - sends the llcmd pe's to afu one at a time
 				// _handle_afu calls _handle_aux2
 				// _handle_aux2 finishes the llcmd pe's when jcack is asserted by afu
-				//   when the remove llcmd is processed, we should put_bytes, _free and set client to NULL, right???
+				//   when the remove llcmd is processed, we should put_bytes, _free and set client[i] to NULL
 				continue;
 			}
 			if (psl->state == PSLSE_RESET)
