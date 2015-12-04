@@ -334,8 +334,30 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	client->type = afu_type;
 
 	// Send reset to AFU, if no other clients already connected
-	if (clients == 0)
+	// hmmm...  this might be a problem...
+	// I need only do this on the very first client in m/s mode...
+	// if this is dedicated client (only one), send a reset
+	// if this an an afu-directed client, only send a reset on the very first open...
+	// don't even send a reset if we've dropped to 0 clients and are now opening a new one
+	switch ( afu_type ) {
+	case 'd':
+	        // send a reset
+	        debug_msg( "_client_associate: adding reset for open of dedicated device", afu_type );
 		add_job(psl->job, PSL_JOB_RESET, 0L);
+		// ignores psl->has_been_reset
+		break;
+	case 'm':
+	case 's':
+	        // send a reset the very first time we associate a client
+	        if ( psl->has_been_reset == 0 ) {
+		  debug_msg( "_client_associate: adding reset for first open of afu-directed device", afu_type );
+		  add_job(psl->job, PSL_JOB_RESET, 0L);
+		  psl->has_been_reset = 1;
+		}
+	        break;
+	default:
+	        debug_msg( "_client_associate: invalid afu_type: %c", afu_type );
+	}
 
 	// Acknowledge to client
 	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context) < 0) {
