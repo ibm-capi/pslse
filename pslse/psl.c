@@ -172,13 +172,13 @@ static void _detach(struct psl *psl, struct client *client)
 		wed = wed | (uint64_t)client->context;
 	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
 		  // error
-		  error_msg( "%s:_free failed to add llcmd terminate for context=%d"PRIx64, psl->name, client->context );
+		  error_msg( "%s:_detach failed to add llcmd terminate for context=%d"PRIx64, psl->name, client->context );
 		}
 	        wed = PSL_LLCMD_REMOVE;
 		wed = wed | (uint64_t)client->context;
 	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
 		  // error
-		  error_msg( "%s:_free failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
+		  error_msg( "%s:_detach failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
 		}
 	} else {
 	  if (client->type == 'd' ) {
@@ -296,14 +296,14 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			if (job->pe != NULL) {		  
 			  if (job->pe->state == PSLSE_PENDING) {
 			    // remove the first entry in the list
-			    debug_msg("%s,%d:_handle_aux2, jcack, first pe is pending, job=0x%016, pe=0x%016"PRIx64, 
+			    debug_msg("%s,%d:_handle_aux2, jcack, first pe is pending, job=0x%016"PRIx64", pe=0x%016"PRIx64, 
 				      job->afu_name, job->dbg_id, job, job->pe );
 			    cacked_pe = job->pe;
 			    job->pe = job->pe->_next;
 			  } else {
 			    _prev = job->pe;
 			    while (_prev->_next != NULL) {
-			      debug_msg("%s,%d:_handle_aux2, jcack, looking for pending pe, _prev=0x%016, _next=0x%016"PRIx64, 
+			      debug_msg("%s,%d:_handle_aux2, jcack, looking for pending pe, _prev=0x%016"PRIx64", _next=0x%016"PRIx64, 
 					job->afu_name, job->dbg_id, _prev, _prev->_next );
 			      if (_prev->_next->state == PSLSE_PENDING) {
 				// remove this entry in the list

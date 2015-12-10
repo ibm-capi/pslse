@@ -53,7 +53,4 @@ struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr);
 
 void send_job(struct job *job);
 
-int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
-		uint64_t * error);
-
 #endif				/* _JOB_H_ */
