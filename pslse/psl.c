@@ -416,7 +416,7 @@ static void _handle_afu(struct psl *psl)
 	        // afu error gets logged by OS. - print warning message
                 // no interrupt/event is sent up to the application - don't "put_bytes" back to client(s)
 	        // all clients lose connection to afu but how is this observered by the client?
-	        warn_msg("%s: Received JERROR: 0x016"PRIx64" in afu-directed mode", psl->name, error);
+	        warn_msg("%s: Received JERROR: 0x%016"PRIx64" in afu-directed mode", psl->name, error);
 		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
