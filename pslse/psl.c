@@ -393,12 +393,13 @@ static void _handle_afu(struct psl *psl)
 	uint64_t error;
 	uint8_t *buffer;
 	int reset_done;
+	int i;
 	size_t size;
 
 	reset_done = _handle_aux2(psl, &(psl->parity_enabled),
 				 &(psl->latency), &error);
-	if (error && !directed_mode_support(psl->mmio)) {
-	        // what about directed mode support?
+	if (error) {
+	  if (dedicated_mode_support(psl->mmio)) {
 		client = psl->client[0];
 		size = 1 + sizeof(uint64_t);
 		buffer = (uint8_t *) malloc(size);
@@ -410,6 +411,18 @@ static void _handle_afu(struct psl *psl)
 		     0) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
+	  }
+	  if (directed_mode_support(psl->mmio)) {
+	        // afu error gets logged by OS. - print warning message
+                // no interrupt/event is sent up to the application - don't "put_bytes" back to client(s)
+	        // all clients lose connection to afu but how is this observered by the client?
+	        warn_msg("%s: Received JERROR: 0x016"PRIx64" in afu-directed mode", psl->name, error);
+		for (i = 0; i < psl->max_clients; i++) {
+			if (psl->client[i] == NULL)
+				continue;
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		}
+	  }
 	}
 	handle_mmio_ack(psl->mmio, psl->parity_enabled);
 	if (psl->cmd != NULL) {

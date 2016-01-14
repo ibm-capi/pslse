@@ -558,7 +558,7 @@ static void *_psl_loop(void *ptr)
 				_all_idle(afu);
 				break;
 			}
-			afu->context = (uint8_t) buffer[0];
+			afu->context = (uint16_t) buffer[0];
 			afu->open.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_ATTACH:
