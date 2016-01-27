@@ -247,7 +247,7 @@ static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
 }
 
 // Check address alignment
-static int _aligned(addr, size)
+static int _aligned(uint64_t addr, uint32_t size)
 {
 	// Check valid size
 	if ((size == 0) || (size & (size - 1))) {
