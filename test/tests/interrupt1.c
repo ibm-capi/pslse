@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-/* Description : memcopy.c
+/* Description : interrupt1.c
  *
- * This test performs memcopy using the Test AFU for validating pslse
+ * This test causes AFU to drive exactly 1 interrupt and waits so time
+ * and ensures that only 1 interrupt is delivered to client.
  */
 
 #include <errno.h>
@@ -41,10 +42,12 @@ void usage(char *name)
 int main(int argc, char *argv[])
 {
 	MachineConfig machine;
-	char *cacheline0, *cacheline1, *name;
+	struct cxl_event event;
+	char *name;
 	uint64_t wed;
 	unsigned seed;
-	int i, quadrant, byte, opt, option_index;
+	long max_irqs, irq;
+	int opt, option_index;
 	int response;
 
 	name = strrchr(argv[0], '/');
@@ -93,6 +96,13 @@ int main(int argc, char *argv[])
 		perror("cxl_afu_open_h");
 		goto done;
 	}
+//	FIXME:  cxl_get_irqs_max() is broken!
+//	if (cxl_get_irqs_max(afu_h, &max_irqs) < 0) {
+//		fprintf(stderr, "\nNo AFU found!\n\n");
+//		goto done;
+//	}
+	max_irqs = 2000;
+	irq = rand() % max_irqs;
 
 	// Set WED to random value
 	wed = rand();
@@ -109,70 +119,48 @@ int main(int argc, char *argv[])
 
 	}
 
-	// Allocate aligned memory for two cachelines
-	if (posix_memalign((void **)&cacheline0, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
-		perror("FAILED:posix_memalign");
-		goto done;
-	}
-	if (posix_memalign((void **)&cacheline1, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
-		perror("FAILED:posix_memalign");
-		goto done;
-	}
-
-	// Pollute first cacheline with random values
-	for (i = 0; i < CACHELINE_BYTES; i++)
-		cacheline0[i] = rand();
-
 	// Initialize machine configuration
 	init_machine(&machine);
 
-	// Use AFU Machine 1 to read the first cacheline from memory to AFU
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DEDICATED)) < 0)
+	// Use AFU Machine 1 to generate an interrupt
+	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0,
+						      PSL_COMMAND_INTREQ, 0, 0,
+						      0, (uint64_t)irq, 1,
+						      DEDICATED)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine");
 		goto done;
 	}
 
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
-	{
+	if (response != PSL_RESPONSE_DONE) {
 		printf("FAILED: Unexpected response code 0x%x\n", response);
 		goto done;
 	}
 
-	printf("Completed cacheline read\n");
-
-	// Use AFU Machine 1 to write the data to the second cacheline
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DEDICATED)) < 0)
-	{
-		printf("FAILED:config_enable_and_run_machine");
+	if (!cxl_event_pending(afu_h)) {
+		printf("FAILED: Expected interrupt to be pending\n");
 		goto done;
 	}
 
-	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
-	{
-		printf("FAILED: Unexpected response code 0x%x\n", response);
+	if (cxl_read_event(afu_h, &event) < 0) {
+		perror("cxl_read_event");
 		goto done;
 	}
 
-	// Test if copy from cacheline0 to cacheline1 was successful
-	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
-		printf("FAILED:memcmp\n");
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Expected  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
-				printf("%02x", cacheline0[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Actual  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
-				printf("%02x", cacheline1[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
+	if (event.header.type != CXL_EVENT_AFU_INTERRUPT) {
+		printf("FAILED: Expected AFU interrupt type\n");
+		goto done;
+	}
+
+	if (event.irq.irq != irq) {
+		printf("FAILED: Expected AFU interrupt %ld but got %d\n", irq,
+		       event.irq.irq);
+		goto done;
+	}
+
+	if (cxl_event_pending(afu_h)) {
+		printf("FAILED: Unexpected event pending\n");
 		goto done;
 	}
 

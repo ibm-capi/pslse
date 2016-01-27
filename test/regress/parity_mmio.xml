@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<!-- This test suite contains the main set of basic function test with no
-     error scenarios. -->
+<!-- The test injects an mmio read parity error -->
+<!-- This test causes pslse to exit so only 1 test in this suite -->
 <pslse_regress>
 	<afu name="0.0">
 		<num_of_processes>1</num_of_processes>
@@ -8,13 +8,12 @@
 		<PerProcessPSA_control>0x01</PerProcessPSA_control>
 	</afu>
 	<pslse>
-		<RESPONSE_PERCENT>10,20</RESPONSE_PERCENT>
-		<REORDER_PERCENT>80,90</REORDER_PERCENT>
+		<RESPONSE_PERCENT>100</RESPONSE_PERCENT>
+		<REORDER_PERCENT>0</REORDER_PERCENT>
 		<BUFFER_PERCENT>80,90</BUFFER_PERCENT>
 		<PAGED_PERCENT>0</PAGED_PERCENT>
-		<fail>WARNING|ERROR</fail>
 	</pslse>
-	<test name="mmio"/>
-	<test name="memcopy"/>
-	<test name="mem_commands" timeout="60"/>
+	<test name="parity_inject">
+		<mmio/>
+	</test>
 </pslse_regress>

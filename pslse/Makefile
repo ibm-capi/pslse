@@ -12,6 +12,6 @@ pslse: $(OBJS)
 	$(call Q,CC, $(CC) $(CFLAGS) -o $@ $^ -lpthread, $@)
 
 clean:
-	rm -f *.[od] gmon.out pslse
+	rm -rf *.[od] *.d-e gmon.out pslse
 
 .PHONY: clean all

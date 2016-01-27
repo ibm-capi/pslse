@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-/* Description : memcopy.c
+/* Description : parity_inject.c
  *
- * This test performs memcopy using the Test AFU for validating pslse
+ * This test is used to generate various parity error inject cases
  */
 
 #include <errno.h>
@@ -31,11 +31,23 @@
 #include "TestAFU_config.h"
 #include "utils.h"
 
+int mmio_inj;
+int addr_inj;
+int code_inj;
+int tag_inj;
+int read_inj;
+
 void usage(char *name)
 {
 	printf("Usage: %s [OPTION]...\n\n", name);
 	printf("  -s, --seed\t\tseed for random number generation\n");
+	printf("      --mmio\t\tforce parity error on MMIO read data\n");
+	printf("      --addr\t\tforce parity error on command address\n");
+	printf("      --code\t\tforce parity error on command code\n");
+	printf("      --tag \t\tforce parity error on command tag\n");
+	printf("      --read\t\tforce parity error on buffer read data\n");
 	printf("      --help\tdisplay this help and exit\n\n");
+	printf("	Exactly one of --mmio, --addr, --code, --tag or --read must be specified\n\n");
 }
 
 int main(int argc, char *argv[])
@@ -43,8 +55,8 @@ int main(int argc, char *argv[])
 	MachineConfig machine;
 	char *cacheline0, *cacheline1, *name;
 	uint64_t wed;
+	int i, opt, option_index;
 	unsigned seed;
-	int i, quadrant, byte, opt, option_index;
 	int response;
 
 	name = strrchr(argv[0], '/');
@@ -54,8 +66,13 @@ int main(int argc, char *argv[])
 		name = argv[0];
 
 	static struct option long_options[] = {
-		{"help",	no_argument,		0,		'h'},
 		{"seed",	required_argument,	0,		's'},
+		{"mmio",	no_argument,		&mmio_inj,	  1},
+		{"addr",	no_argument,		&addr_inj,	  1},
+		{"code",	no_argument,		&code_inj,	  1},
+		{"tag",		no_argument,		&tag_inj,	  1},
+		{"read",	no_argument,		&read_inj,	  1},
+		{"help",	no_argument,		0,		'h'},
 		{NULL, 0, 0, 0}
 	};
 
@@ -75,6 +92,11 @@ int main(int argc, char *argv[])
 			usage(name);
 			return 0;
 		}
+	}
+
+	if ((mmio_inj+addr_inj+code_inj+tag_inj+read_inj) != 1) {
+		usage(name);
+		return -1;
 	}
 
 	// Seed random number generator
@@ -134,7 +156,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
+	if (response != 0)
 	{
 		printf("FAILED: Unexpected response code 0x%x\n", response);
 		goto done;
@@ -142,50 +164,26 @@ int main(int argc, char *argv[])
 
 	printf("Completed cacheline read\n");
 
+	if (mmio_inj) {
+		if (cxl_mmio_write32(afu_h, 0x10, 0x80000000)) {
+			perror("FAILED:cxl_mmio_write64");
+			goto done;
+		}	
+	}	
+
+	set_machine_config_command_address_parity(&machine, addr_inj);
+	set_machine_config_command_code_parity(&machine, code_inj);
+	set_machine_config_command_tag_parity(&machine, tag_inj);
+	set_machine_config_buffer_read_parity(&machine, read_inj);
+
 	// Use AFU Machine 1 to write the data to the second cacheline
 	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DEDICATED)) < 0)
 	{
-		printf("FAILED:config_enable_and_run_machine");
+		printf("PASSED");
 		goto done;
 	}
 
-	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
-	{
-		printf("FAILED: Unexpected response code 0x%x\n", response);
-		goto done;
-	}
-
-	// Test if copy from cacheline0 to cacheline1 was successful
-	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
-		printf("FAILED:memcmp\n");
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Expected  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
-				printf("%02x", cacheline0[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Actual  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
-				printf("%02x", cacheline1[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		goto done;
-	}
-
-	printf("PASSED\n");
-
+	printf("FAILED: Cacheline write got response 0x%x\n", response);
 done:
-	if (afu_h) {
-		// Unmap AFU MMIO registers
-		cxl_mmio_unmap(afu_h);
-
-		// Free AFU
-		cxl_afu_free(afu_h);
-	}
-
 	return 0;
 }

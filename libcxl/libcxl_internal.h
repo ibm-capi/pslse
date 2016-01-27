@@ -19,7 +19,6 @@
 
 #include <dirent.h>
 #include <inttypes.h>
-#include <linux/types.h>
 #include <poll.h>
 #include <pthread.h>
 
@@ -59,7 +58,7 @@ struct cxl_afu_h {
 	struct cxl_event *events[EVENT_QUEUE_MAX];
 	int adapter;
 	char *id;
-	uint8_t context;
+	uint16_t context;
 	uint16_t map;
 	uint16_t position;
 	uint8_t dbg_id;

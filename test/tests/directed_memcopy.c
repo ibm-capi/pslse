@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "\nNo AFU found!\n\n");
 		goto done;
 	}
-	afu_h = cxl_afu_open_h(afu_h, CXL_VIEW_DEDICATED);
+	afu_h = cxl_afu_open_h(afu_h, CXL_VIEW_MASTER);
 	if (!afu_h) {
 		perror("cxl_afu_open_h");
 		goto done;

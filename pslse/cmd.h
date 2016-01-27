@@ -38,6 +38,7 @@ enum cmd_type {
 	CMD_WRITE,
 	CMD_TOUCH,
 	CMD_INTERRUPT,
+	CMD_READ_PE,
 	CMD_OTHER
 };
 

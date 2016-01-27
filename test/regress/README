@@ -1,0 +1,22 @@
+The regress.py script is a Python script that is used to run the entire list
+of regression tests.  It accomplishes this through xml files that define how
+the tests should be run.  It will automatically attempt to parse every xml
+file that is found in this directory.
+
+The tests are themselves are build as C code files in the tests directory.
+All these tests will use one or more Test AFU devices.  The Test AFU is the
+C++ code in the afu directory.
+
+Each xml file configures one or more Test AFUs which will be started by the
+regress.py script.  The xml file also configures the pslse which will also be
+started by regress.py.  Each xml file can only contain a single afu/pslse
+configuration.  However, multiple tests can be run sequentially on a single
+configuration.  Each test must be identified by a name="" parameter in the test
+element.  All parameters to be passed to a test are defined as child elements
+of that test in the xml file.
+
+If regress.py detects a fail it will exit immediately leaving log files that
+can be examine to determined how the fail occured.
+
+If regress.py detects pass conditions for all tests then it will clean up after
+itself at the end of the run.

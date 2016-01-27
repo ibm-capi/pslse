@@ -38,6 +38,30 @@
 #include "../common/debug.h"
 #include "../common/psl_interface.h"
 
+// are there any pending commands with this context?
+int _is_cmd_pending(struct psl *psl, int32_t context)
+{
+  struct cmd_event *cmd_event;
+
+  if ( psl->cmd == NULL ) {
+    // no cmd struct
+    return 0;
+  }
+
+  cmd_event = psl->cmd->list;
+  while ( cmd_event != NULL ) {
+    if ( cmd_event->context == context ) {
+      // found a matching element
+      return 1;
+    }
+    cmd_event = cmd_event->_next;
+  }
+
+  // no matching elements found
+  return 0;
+
+}
+
 // Attach to AFU
 static void _attach(struct psl *psl, struct client *client)
 {
@@ -47,23 +71,81 @@ static void _attach(struct psl *psl, struct client *client)
 	size_t size;
 
 	// FIXME: This only works for dedicate mode
+	// might work for afu-directed now - lgt
 
 	// Get wed value from application
+	// always do the get
+        // pass the wed only for dedicated
 	ack = PSLSE_DETACH;
 	size = sizeof(uint64_t);
 	if (get_bytes_silent(client->fd, size, buffer, psl->timeout,
 			     &(client->abort)) < 0) {
-		warn_msg("Failed to get WED value from client");
-		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
-		goto attach_done;
+	  warn_msg("Failed to get WED value from client");
+	  client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	  goto attach_done;
 	}
+
+	// but need to save wed if master|slave for future consumption
+	// interestingly, I can always save it
+	// add to client type.
 	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
-	wed = ntohll(wed);
+	client->wed = ntohll(wed);
 
 	// Send start to AFU
-	if (add_job(psl->job, PSL_JOB_START, wed) != NULL) {
-		psl->idle_cycles = PSL_IDLE_CYCLES;
-		ack = PSLSE_ATTACH;
+	// only add PSL_JOB_START for dedicated and master clients.
+	// send an empty wed in the case of master
+	// lgt - new idea:
+	// track number of clients in psl
+	// if number of clients = 0, then add the start job
+	// add llcmd add to client  (loop through clients in send_com)
+	// increment number of clients (decrement where we handle the completion of the detach)
+	switch (client->type) {
+	case 'd':
+	  if (psl->attached_clients == 0) {
+	    if (add_job(psl->job, PSL_JOB_START, client->wed) != NULL) {
+	      // if dedicated, we can ack PSLSE_ATTACH
+	      // if master, we might want to wait until after the llcmd add is complete
+	      // can I wait here for the START to finish?
+	      psl->idle_cycles = PSL_IDLE_CYCLES;
+	      ack = PSLSE_ATTACH;
+	    }
+	  }
+	  break;
+	case 'm':
+	case 's':
+	  if (psl->attached_clients < psl->max_clients) {
+	    if (psl->attached_clients == 0) {
+	      if (add_job(psl->job, PSL_JOB_START, 0L) != NULL) {
+		// if master, we might want to wait until after the llcmd add is complete
+		// can I wait here for the START to finish?
+	      }
+	    }
+	    psl->idle_cycles = PSL_IDLE_CYCLES;
+	    ack = PSLSE_ATTACH;
+	  }
+	  // running will be set by send/handle_aux2 routines
+	  break;
+	default:
+	  // error?
+	  break;
+	}
+
+	psl->attached_clients++;
+	info_msg( "Attached client context %d: current attached clients = %d\n", client->context, psl->attached_clients );
+	
+	// for master and slave send llcmd add
+        // master "wed" is 0x0005000000000000 can actually use client->context here as well since context = 0
+	// slave "wed" is 0x000500000000hhhh where hhhh is the "handle" from client->context
+	// now - about those llcmds :-)
+	// put these in a separate list associated with the job?  psl->pe maybe...  or another call to add_job?
+	// new routine to job.c?  add_cmd?
+	// should a slave know their master?
+	if (client->type == 'm' || client->type == 's') {
+	        wed = PSL_LLCMD_ADD;
+		wed = wed | (uint64_t)client->context;
+		// add_pe adds to the client
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) != NULL) {
+		}
 	}
 
  attach_done:
@@ -71,6 +153,45 @@ static void _attach(struct psl *psl, struct client *client)
 		      client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
+}
+
+// Client is detaching from the AFU
+static void _detach(struct psl *psl, struct client *client)
+{
+	uint64_t wed;
+
+	debug_msg("DETACH from client context 0x%02x", client->context);
+	// if dedicated mode just drop the client
+	// if afu-directed mode
+	//   add llcmd terminate to psl->job->pe
+	//   add llcmd remove to psl->job->pe
+	// comment - check to see if send pe is called if the client state is CLIENT_NONE
+	// allow the socket to close and the client struct to be freed.
+	if (client->type == 'm' || client->type == 's') {
+	        wed = PSL_LLCMD_TERMINATE;
+		wed = wed | (uint64_t)client->context;
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
+		  // error
+		  error_msg( "%s:_detach failed to add llcmd terminate for context=%d"PRIx64, psl->name, client->context );
+		}
+	        wed = PSL_LLCMD_REMOVE;
+		wed = wed | (uint64_t)client->context;
+	        if (add_pe(psl->job, PSL_JOB_LLCMD, wed) == NULL) {
+		  // error
+		  error_msg( "%s:_detach failed to add llcmd remove for context=%d"PRIx64, psl->name, client->context );
+		}
+	} else {
+	  if (client->type == 'd' ) {
+	    client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	  }
+	}
+
+	// we will let _psl_loop call send_pe to issue the llcmds
+	// when the jcack's come back, we will 
+	//   send the detach response to the client and 
+	//   free the client structure
+
+	
 }
 
 // Client release from AFU
@@ -96,9 +217,173 @@ static void _free(struct psl *psl, struct client *client)
 	}
 	client->mem_access = NULL;
 	client->mmio_access = NULL;
-	if (client->job)
-		client->job->state = PSLSE_DONE;
 	client->state = CLIENT_NONE;
+
+	psl->attached_clients--;
+	info_msg( "Detatched a client: current attached clients = %d\n", psl->attached_clients );
+
+	// where do we *really* free the client struct and it's contents???
+	
+}
+
+// See if AFU changed any of the aux2 signals and handle accordingly
+int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
+		uint64_t * error)
+{
+        struct job *job;
+	struct job_event *_prev;
+	struct job_event *cacked_pe;
+	struct job_event *event;
+	uint32_t job_running;
+	uint32_t job_done;
+	uint32_t job_cack_llcmd;
+	uint64_t job_error;
+	uint32_t job_yield;
+	uint32_t tb_request;
+	uint32_t par_enable;
+	uint32_t read_latency;
+	uint8_t dbg_aux2;
+	int reset, reset_complete;
+	uint64_t llcmd;
+	uint64_t context;
+	uint8_t ack = PSLSE_DETACH;
+
+	job = psl->job;
+	if (job == NULL)
+		return 0;
+
+	// See if AFU is driving AUX2 signal changes
+	dbg_aux2 = reset = reset_complete = *error = 0;
+	if (psl_get_aux2_change(job->afu_event, &job_running, &job_done,
+				&job_cack_llcmd, &job_error, &job_yield,
+				&tb_request, &par_enable, &read_latency) == PSL_SUCCESS) {
+		// Handle job_done
+		if (job_done) {
+			debug_msg("%s:_handle_aux2: JOB done", job->afu_name);
+			dbg_aux2 |= DBG_AUX2_DONE;
+			*error = job_error;
+			if (job->job != NULL) {
+				event = job->job;
+				// Is job_done for reset or start?
+				if (event->code == PSL_JOB_RESET)
+					reset_complete = 1;
+				else
+					reset = 1;
+				job->job = event->_next;
+				free(event);
+				if (job->job != NULL)
+					assert(job->job->_next != job->job);
+			}
+			if (*(job->psl_state) == PSLSE_RESET) {
+				*(job->psl_state) = PSLSE_IDLE;
+			}
+		}
+		// Handle job_running
+		if (job_running) {
+			debug_msg("%s:_handle_aux2: JOB running", job->afu_name);
+			*(job->psl_state) = PSLSE_RUNNING;
+			dbg_aux2 |= DBG_AUX2_RUNNING;
+		}
+		// Handle job cack llcmd
+		if (job_cack_llcmd) {
+		        // remove the current pending pe from the list
+		        // loop through the pe's for the current pending one;
+		        // copy its _next to _prev's _next
+		        // remove the current pe
+		        debug_msg("%s,%d:_handle_aux2, jcack, complete llcmd and remove pe", 
+				  job->afu_name, job->dbg_id );
+			cacked_pe = NULL;
+			if (job->pe != NULL) {		  
+			  if (job->pe->state == PSLSE_PENDING) {
+			    // remove the first entry in the list
+			    debug_msg("%s,%d:_handle_aux2, jcack, first pe is pending, job=0x%016"PRIx64", pe=0x%016"PRIx64, 
+				      job->afu_name, job->dbg_id, job, job->pe );
+			    cacked_pe = job->pe;
+			    job->pe = job->pe->_next;
+			  } else {
+			    _prev = job->pe;
+			    while (_prev->_next != NULL) {
+			      debug_msg("%s,%d:_handle_aux2, jcack, looking for pending pe, _prev=0x%016"PRIx64", _next=0x%016"PRIx64, 
+					job->afu_name, job->dbg_id, _prev, _prev->_next );
+			      if (_prev->_next->state == PSLSE_PENDING) {
+				// remove this entry in the list
+				debug_msg("%s,%d:_handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
+					job->afu_name, job->dbg_id, _prev->_next );
+				cacked_pe = _prev->_next;
+				_prev->_next = _prev->_next->_next;
+			      } else {
+				_prev = _prev->_next;
+			      }
+			    }
+			  }
+			}
+			if (cacked_pe != NULL) {
+			  // this is the pe that I want to "finish" processing
+			  // get just the llcmd part of the addr
+			  llcmd = cacked_pe->addr & PSL_LLCMD_MASK;
+			  context = cacked_pe->addr & PSL_LLCMD_CONTEXT_MASK;
+			  debug_msg("%s,%d:_handle_aux2: llcmd addr = 0x%016"PRIx64"; llcmd = 0x%016"PRIx64"; context = 0x%016"PRIx64, 
+				    job->afu_name, job->dbg_id, cacked_pe->addr, llcmd, context);
+			  switch ( llcmd ) {
+			  case PSL_LLCMD_ADD:
+			    // if it is a start, just keep going, print a message
+			    debug_msg("%s,%d:_handle_aux2: LLCMD ADD acked", job->afu_name, job->dbg_id );
+			    break;
+			  case PSL_LLCMD_TERMINATE:
+			    // if it is a terminate, make sure the cmd list is empty, warn if not empty
+			    debug_msg("%s,%d:_handle_aux2: LLCMD TERMINATE acked", job->afu_name, job->dbg_id );
+			    if ( _is_cmd_pending(psl, context) ) {
+			      warn_msg( "%s,%d:AFU command for context %d still pending when LLCMD TERMINATE acked", 
+					job->afu_name, job->dbg_id, context);
+			    }
+			    break;
+			  case PSL_LLCMD_REMOVE:
+			    // if it is a remove, send the detach response to the client and close up the client
+			    debug_msg("%s,%d:_handle_aux2: LLCMD REMOVE acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: detach response sent to host on socket %d", 
+				      job->afu_name, job->dbg_id, psl->client[context]->fd);
+			    put_bytes(psl->client[context]->fd, 1, &ack,
+			    	      psl->dbg_fp, psl->dbg_id,
+			    	      psl->client[context]->context);
+			    _free( psl, psl->client[context] );
+			    psl->client[context] = NULL;  // I don't like this part...
+			    break;
+			  default:
+			    debug_msg("%s,%d:_handle_aux2: acked llcmd %d did not match an LLCMD pe", 
+				      job->afu_name, job->dbg_id, llcmd );
+			    break;
+			  }
+			  debug_msg("%s,%d:_handle_aux2, jcack, free pe, addr=0x%016"PRIx64, 
+				      job->afu_name, job->dbg_id, cacked_pe );
+			  free( cacked_pe );
+			} else {
+			  debug_msg("%s,%d:_handle_aux2, jcack, no pe's to remove - why???", 
+				    job->afu_name, job->dbg_id );	  
+			}
+			dbg_aux2 |= DBG_AUX2_LLCACK;
+		}
+		if (tb_request) {
+			dbg_aux2 |= DBG_AUX2_TBREQ;
+		}
+		if (par_enable) {
+			dbg_aux2 |= DBG_AUX2_PAREN;
+		}
+		dbg_aux2 |= read_latency & DBG_AUX2_LAT_MASK;
+		if (job_done && job_running)
+			error_msg("_handle_aux2: ah_jdone & ah_jrunning asserted together");
+		if ((read_latency != 1) && (read_latency != 3))
+			warn_msg("_handle_aux2: ah_brlat must be either 1 or 3");
+		*parity = par_enable;
+		*latency = read_latency;
+
+		// DEBUG
+		debug_job_aux2(job->dbg_fp, job->dbg_id, dbg_aux2);
+	}
+
+	if (reset)
+		add_job(job, PSL_JOB_RESET, 0L);
+
+	return reset_complete;
 }
 
 // Handle events from AFU
@@ -108,11 +393,13 @@ static void _handle_afu(struct psl *psl)
 	uint64_t error;
 	uint8_t *buffer;
 	int reset_done;
+	int i;
 	size_t size;
 
-	reset_done = handle_aux2(psl->job, &(psl->parity_enabled),
+	reset_done = _handle_aux2(psl, &(psl->parity_enabled),
 				 &(psl->latency), &error);
-	if (error && !directed_mode_support(psl->mmio)) {
+	if (error) {
+	  if (dedicated_mode_support(psl->mmio)) {
 		client = psl->client[0];
 		size = 1 + sizeof(uint64_t);
 		buffer = (uint8_t *) malloc(size);
@@ -124,6 +411,18 @@ static void _handle_afu(struct psl *psl)
 		     0) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
+	  }
+	  if (directed_mode_support(psl->mmio)) {
+	        // afu error gets logged by OS. - print warning message
+                // no interrupt/event is sent up to the application - don't "put_bytes" back to client(s)
+	        // all clients lose connection to afu but how is this observered by the client?
+	        warn_msg("%s: Received JERROR: 0x%016"PRIx64" in afu-directed mode", psl->name, error);
+		for (i = 0; i < psl->max_clients; i++) {
+			if (psl->client[i] == NULL)
+				continue;
+			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		}
+	  }
 	}
 	handle_mmio_ack(psl->mmio, psl->parity_enabled);
 	if (psl->cmd != NULL) {
@@ -168,7 +467,9 @@ static void _handle_client(struct psl *psl, struct client *client)
 		}
 		switch (buffer[0]) {
 		case PSLSE_DETACH:
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		        debug_msg("DETACH request from client context %d on socket %d", client->context, client->fd);
+		        //client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		        _detach(psl, client);
 			break;
 		case PSLSE_ATTACH:
 			_attach(psl, client);
@@ -197,7 +498,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 			mmio = handle_mmio(psl->mmio, client, 1, dw);
 			break;
 		default:
-			error_msg("Unexpected 0x%02x from client", buffer[0]);
+		  error_msg("Unexpected 0x%02x from client on socket", buffer[0], client->fd);
 		}
 
 		if (mmio)
@@ -248,6 +549,7 @@ static void *_psl_loop(void *ptr)
 
 			// Drive events to AFU
 			send_job(psl->job);
+			send_pe(psl->job);
 			send_mmio(psl->mmio);
 
 			if (psl->mmio->list == NULL)
@@ -269,14 +571,26 @@ static void *_psl_loop(void *ptr)
 		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			if ((psl->client[i]->state == CLIENT_NONE) &&
+			if ((psl->client[i]->type == 'd') && 
+			    (psl->client[i]->state == CLIENT_NONE) &&
 			    (psl->client[i]->idle_cycles == 0)) {
+			        // this was the old way of detaching a dedicated process app/afu pair
+			        // we get the detach message, drop the client, and wait for idle cycle to get to 0
 				put_bytes(psl->client[i]->fd, 1, &ack,
 					  psl->dbg_fp, psl->dbg_id,
 					  psl->client[i]->context);
 				_free(psl, psl->client[i]);
-				psl->client[i] = NULL;
+				psl->client[i] = NULL;  // aha - this is how we only called _free once the old way
+				                        // why do we not free client[i]?
+				                        // because this was a short cut pointer
+				                        // the *real* client point is in client_list in pslse
 				reset = 1;
+				// for m/s devices we need to do this differently and not send a reset...
+				// _handle_client - creates the llcmd's to term and remove
+				// send_pe - sends the llcmd pe's to afu one at a time
+				// _handle_afu calls _handle_aux2
+				// _handle_aux2 finishes the llcmd pe's when jcack is asserted by afu
+				//   when the remove llcmd is processed, we should put_bytes, _free and set client[i] to NULL
 				continue;
 			}
 			if (psl->state == PSLSE_RESET)
@@ -300,7 +614,7 @@ static void *_psl_loop(void *ptr)
 					    ("Client dropped context before AFU completed");
 					reset = 0;
 				}
-				warn_msg("Dumping command tag=0x%02x",
+				info_msg("Dumping command tag=0x%02x",
 					 event->tag);
 				if (event->data) {
 					free(event->data);

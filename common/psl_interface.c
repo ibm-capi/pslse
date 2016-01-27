@@ -52,7 +52,7 @@ static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
 	    (event->proto_tertiary != tertiary)) {
 		printf
 		    ("PSL_SOCKET:WARNING: Adjusting PSL interface protocol level!\n");
-		printf("PSL_SOCKET:\tPlease review changes betwen levels.\n");
+		printf("PSL_SOCKET:\tPlease review changes between levels.\n");
 		printf("PSL_SOCKET:\tSupported PSL protocol level: %d.%d.%d\n",
 		       event->proto_primary, event->proto_secondary,
 		       event->proto_tertiary);
@@ -138,6 +138,17 @@ static int establish_protocol(struct AFU_EVENT *event)
 		byte = event->rbuf[i];
 		tertiary <<= 8;
 		tertiary += (uint32_t) byte;
+	}
+
+	// Check for broken levels
+	if ((primary == 0) && (secondary == 9908) && (tertiary == 0)) {
+		printf("Remote psl_interface code using broken code level!\n");
+		printf("\tLocal psl_interface level:%d.%d.%d\n",
+		       event->proto_primary, event->proto_secondary,
+		       event->proto_tertiary);
+		printf("\tRemote psl_interface level:%d.%d.%d\n",
+		       primary, secondary, tertiary);
+		return PSL_BAD_SOCKET;
 	}
 
 	// Test if other side with adjust protocol level down
@@ -698,8 +709,8 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 	if (event->command_valid) {
 		event->tbuf[0] = event->tbuf[0] | 0x01;
 		event->tbuf[bp++] = event->command_tag;
-		event->tbuf[bp++] = (((event->command_abort) << 4) & 0x70) |
-		    (((event->command_code) >> 8) & 0x0F);
+		event->tbuf[bp++] = (((event->command_abort) << 5) & 0xE0) |
+		    (((event->command_code) >> 8) & 0x1F);
 		event->tbuf[bp++] = event->command_code & 0xFF;
 		event->tbuf[bp++] =
 		    (((event->command_tag_parity) << 6) & 0x40) |
@@ -841,8 +852,8 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 	if ((event->rbuf[0] & 0x01) != 0) {
 		event->command_valid = 1;
 		event->command_tag = event->rbuf[rbc++];
-		event->command_abort = (event->rbuf[rbc] >> 4) & 0x7;
-		event->command_code = (event->rbuf[rbc++] & 0x0F) << 8;
+		event->command_abort = (event->rbuf[rbc] >> 5) & 0x7;
+		event->command_code = (event->rbuf[rbc++] & 0x1F) << 8;
 		event->command_code = event->command_code | event->rbuf[rbc++];
 		event->command_tag_parity = (event->rbuf[rbc] >> 6) & 0x01;
 		event->command_code_parity = (event->rbuf[rbc] >> 5) & 0x01;

@@ -75,11 +75,39 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 		return event;
 	event->rnw = rnw;
 	event->dw = dw;
-	event->addr = addr;
+	if (client == NULL) {
+	  // don't try to recalculate the address
+	  event->addr = addr;
+	} else {
+	  // adjust addr (aka offset) depending on type of device (client)
+	  // type master/dedicated needs no adjustment - the address is the actual offset into the psa
+	  // type slave needs to bump up to the per process problem state area and into the handles offset
+	  // maybe I should put this up in add_mmio so the address calc is done and then shifted before callin _add_event...
+	  switch (client->type) {
+	  case 'd':
+	  case 'm':
+	    // addr has already been right shifted 2 bits.
+	    event->addr = addr;
+	    break;
+	  case 's':
+	    // the addr has already been shifted right 2 bits, need to also shift the mmio offset for this slave.
+	    event->addr = (client->mmio_offset / 4) + addr;
+	    break;
+	  default:
+	    // error
+	    break;
+	  }
+	}
+	// event->addr = addr;
 	event->desc = desc;
 	event->data = data;
 	event->state = PSLSE_IDLE;
 	event->_next = NULL;
+
+	// debug the mmio and print the input address and the translated address
+	/* debug_msg("_add_event: %s: WRITE%d word=0x%05x (0x%05x) data=0x%s", */
+	/* 	  mmio->afu_name, event->dw ? 64 : 32, */
+	/* 	  event->addr, addr, event->data); */
 
 	// Add to end of list
 	list = &(mmio->list);
@@ -172,7 +200,9 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 		return -1;
 	}
 	// Verify req_prog_model
-	if ((mmio->desc.req_prog_model & 0x7fffl) != 0x0010l) {
+	if ( ( (mmio->desc.req_prog_model & 0x7fffl) != 0x0010 ) && // dedicated
+	     ( (mmio->desc.req_prog_model & 0x7fffl) != 0x0004 ) && // afu-directed
+	     ( (mmio->desc.req_prog_model & 0x7fffl) != 0x0014 ) ) {// both
 		error_msg("AFU descriptor: Unsupported req_prog_model");
 		errno = ENODEV;
 		return -1;
@@ -289,6 +319,8 @@ void handle_mmio_map(struct mmio *mmio, struct client *client)
 	}
 	if (get_bytes_silent(fd, 4, (uint8_t *) & flags, mmio->timeout,
 			     &(client->abort)) < 0) {
+	        debug_msg("%s:handle_mmio_map failed context=%d",
+			  mmio->afu_name, client->context);
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		warn_msg("Socket failure with client context %d",
 			 client->context);
@@ -354,6 +386,8 @@ static struct mmio_event *_handle_mmio_write(struct mmio *mmio,
 
  write_fail:
 	// Socket connection is dead
+	debug_msg("%s:_handle_mmio_write failed context=%d",
+		  mmio->afu_name, client->context);
 	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	return NULL;
 }
@@ -376,6 +410,8 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 
  read_fail:
 	// Socket connection is dead
+	debug_msg("%s:_handle_mmio_read failed context=%d",
+		  mmio->afu_name, client->context);
 	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	return NULL;
 }

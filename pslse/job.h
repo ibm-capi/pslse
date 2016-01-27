@@ -33,6 +33,7 @@ struct job_event {
 struct job {
 	struct AFU_EVENT *afu_event;
 	struct job_event *job;
+	struct job_event *pe;
 	volatile enum pslse_state *psl_state;
 	uint32_t read_latency;
 	char *afu_name;
@@ -44,11 +45,12 @@ struct job *job_init(struct AFU_EVENT *afu_event,
 		     volatile enum pslse_state *psl_state, char *afu_name,
 		     FILE * dbg_fp, uint8_t dbg_id);
 
+struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr);
+
+void send_pe(struct job *job);
+
 struct job_event *add_job(struct job *job, uint32_t code, uint64_t addr);
 
 void send_job(struct job *job);
-
-int handle_aux2(struct job *job, uint32_t * parity, uint32_t * latency,
-		uint64_t * error);
 
 #endif				/* _JOB_H_ */

@@ -24,31 +24,38 @@
 #include <inttypes.h>
 #include "libcxl.h"
 
+#define DEDICATED 1
+#define DIRECTED 0
+#define PPPSA_OFFSET 0x1000
+#define PPPSA_SIZE 0x1000
+
 // Strucure to configure AFU
 typedef struct AFUConfig
 {
 	uint64_t config[4];
 } MachineConfig;
 
+// Zero out all machine config registers
+void init_machine(MachineConfig *machine);
 
 // Function to set most commonly used elements
 int config_machine(MachineConfig *machine, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, uint8_t enable_always);
 
 // Function to write config to AFU MMIO space
-int enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index);
+int enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index, int dedicated);
 
 // Function to set most commonly used elements and write to AFU MMIO space
-int config_and_enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, uint8_t enable_always);
+int config_and_enable_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, uint8_t enable_always, int dedicated);
 
 // Function to read config from AFU
-int poll_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index);
+int poll_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t index, int dedicated);
 
 // Wait for response from AFU machine
-int get_response(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num);
+int get_response(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, int dedicated);
 
 // Function to set most commonly used elements, write to AFU MMIO space and
 // wait for command completion
-int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size);
+int config_enable_and_run_machine(struct cxl_afu_h *afu, MachineConfig *machine, uint16_t mach_num, uint16_t context, uint16_t command, uint16_t command_size, uint16_t min_delay, uint16_t max_delay, uint64_t memory_base_address, uint64_t memory_size, int dedicated);
 
 // Enable always field is bits[0] of double-word 0
 void set_machine_config_enable_always(MachineConfig* machine);

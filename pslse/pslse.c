@@ -247,6 +247,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		close_socket(&(client->fd));
 		return -1;
 	}
+
 	// Check AFU type is valid for connection
 	switch (afu_type) {
 	case 'd':
@@ -276,7 +277,23 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 		return -1;
 	}
 
+	// check to see if device is already open
+	// lgt - I think I can open any combination of m/s upto max
+	if ( afu_type == 'd' /* | afu_type == 'm' */ ) {
+		if (psl->client[0] != NULL) {
+			warn_msg
+			    ("afu%d.%d%c is already open\n",
+			     major, minor, afu_type);
+			put_bytes(client->fd, 1, &(rc[0]), fp, psl->dbg_id, -1);
+			// should I really close the socket in this case?
+			close_socket(&(client->fd));
+			return -1;
+		}
+	}
+
 	// Look for open client slot
+	// dedicated - client[0] is the only client.
+	// afu-directed - is client[0] the master? not necessarily
 	assert(psl->max_clients > 0);
 	clients = 0;
 	context = -1;
@@ -288,6 +305,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 			client->state = CLIENT_VALID;
 			client->pending = 0;
 			psl->client[i] = client;
+			break;
 		}
 	}
 	if (context < 0) {
@@ -298,6 +316,7 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	}
 
 	// Attach to PSL
+	// i should point to an open slot
 	rc[0] = PSLSE_OPEN;
 	rc[1] = context;
 	mmio_offset = 0;
@@ -315,8 +334,30 @@ static int _client_associate(struct client *client, uint8_t id, char afu_type)
 	client->type = afu_type;
 
 	// Send reset to AFU, if no other clients already connected
-	if (clients == 0)
+	// hmmm...  this might be a problem...
+	// I need only do this on the very first client in m/s mode...
+	// if this is dedicated client (only one), send a reset
+	// if this an an afu-directed client, only send a reset on the very first open...
+	// don't even send a reset if we've dropped to 0 clients and are now opening a new one
+	switch ( afu_type ) {
+	case 'd':
+	        // send a reset
+	        debug_msg( "_client_associate: adding reset for open of dedicated device", afu_type );
 		add_job(psl->job, PSL_JOB_RESET, 0L);
+		// ignores psl->has_been_reset
+		break;
+	case 'm':
+	case 's':
+	        // send a reset the very first time we associate a client
+	        if ( psl->has_been_reset == 0 ) {
+		  debug_msg( "_client_associate: adding reset for first open of afu-directed device", afu_type );
+		  add_job(psl->job, PSL_JOB_RESET, 0L);
+		  psl->has_been_reset = 1;
+		}
+	        break;
+	default:
+	        debug_msg( "_client_associate: invalid afu_type: %c", afu_type );
+	}
 
 	// Acknowledge to client
 	if (put_bytes(client->fd, 2, &(rc[0]), fp, psl->dbg_id, context) < 0) {
@@ -349,6 +390,7 @@ static void *_client_loop(void *ptr)
 		if (data[0] == PSLSE_QUERY) {
 			if (get_bytes_silent(client->fd, 1, data, timeout,
 					     &(client->abort)) < 0) {
+			        debug_msg("_client_loop failed PSLSE_QUERY");
 				client_drop(client, PSL_IDLE_CYCLES,
 					    CLIENT_NONE);
 				break;
@@ -373,9 +415,11 @@ static void *_client_loop(void *ptr)
 					     &(client->abort)) < 0) {
 				client_drop(client, PSL_IDLE_CYCLES,
 					    CLIENT_NONE);
+				debug_msg("_client_loop: client associate failed; could not communicate with socket");
 				break;
 			}
 			_client_associate(client, data[0], (char)data[1]);
+			debug_msg("_client_loop: client associated");
 			break;
 		}
 		client->pending = 0;

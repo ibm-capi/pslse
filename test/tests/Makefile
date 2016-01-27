@@ -25,5 +25,9 @@ $(TESTS) : $(addsuffix .o,$$@) $(DEPS)
 
 TesetAFU_config.o :
 
+$(LIBCXL_DIR)/libcxl.a:
+	@$(MAKE) -C $(LIBCXL_DIR)
+
 clean:
+	@$(MAKE) -C $(LIBCXL_DIR) clean
 	rm -f *.o *.d gmon.out $(TESTS)

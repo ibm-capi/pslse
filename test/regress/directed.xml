@@ -3,9 +3,11 @@
      error scenarios. -->
 <pslse_regress>
 	<afu name="0.0">
-		<num_of_processes>1</num_of_processes>
-		<reg_prog_model>0x8010</reg_prog_model>
-		<PerProcessPSA_control>0x01</PerProcessPSA_control>
+		<num_of_processes>4</num_of_processes>
+		<reg_prog_model>0x8004</reg_prog_model>
+		<PerProcessPSA_control>0x03</PerProcessPSA_control>
+		<PerProcessPSA_length>0x1</PerProcessPSA_length>
+		<PerProcessPSA_offset>0x1</PerProcessPSA_offset>
 	</afu>
 	<pslse>
 		<RESPONSE_PERCENT>10,20</RESPONSE_PERCENT>
@@ -14,7 +16,6 @@
 		<PAGED_PERCENT>0</PAGED_PERCENT>
 		<fail>WARNING|ERROR</fail>
 	</pslse>
-	<test name="mmio"/>
-	<test name="memcopy"/>
-	<test name="mem_commands" timeout="60"/>
+	<test name="directed_memcopy"/>
+	<test name="directed_mmio"/>
 </pslse_regress>
