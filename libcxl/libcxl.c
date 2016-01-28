@@ -1375,19 +1375,30 @@ int cxl_afu_fd(struct cxl_afu_h *afu)
 	return afu->pipe[0];
 }
 
-int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
+/**
+ * I think this normally reads the cxl drivers sysfs entry which keeps
+ * the kernels cxl api version. Users should probably compare that
+ * against what libcxl they used. This info is in
+ * CXL_KERNEL_API_VERSION. If that is not matching, communication
+ * might fail.
+ */
+int cxl_get_api_version(struct cxl_afu_h *afu __attribute__((unused)),
+			long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
-		return -1;
-	*valp = API_VERSION;
+	if (valp)
+		*valp = CXL_KERNEL_API_VERSION;
 	return 0;
 }
 
-int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
+/**
+ * See above.
+ */
+int
+cxl_get_api_version_compatible(struct cxl_afu_h *afu __attribute__((unused)),
+			       long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
-		return -1;
-	*valp = API_VERSION_COMPATIBLE;
+	if (valp)
+		*valp = CXL_KERNEL_API_VERSION;
 	return 0;
 }
 
