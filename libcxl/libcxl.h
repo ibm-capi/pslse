@@ -253,6 +253,7 @@ cxl_get_cr_vendor(struct cxl_afu_h *afu __attribute__((unused)),
 static inline int cxl_mmio_install_sigbus_handler(void)
 {
 	/* nothing to be done yet */
+	return 0;
 }
 
 #endif
