@@ -242,4 +242,18 @@ cxl_get_cr_vendor(struct cxl_afu_h *afu __attribute__((unused)),
 	return 0;
 }
 
+/*
+ * Calling this function will install the libcxl SIGBUS handler. This will
+ * catch bad MMIO accesses (e.g. due to hardware failures) that would otherwise
+ * terminate the program and make the above mmio functions return errors
+ * instead.
+ *
+ * Call this once per process prior to any MMIO accesses.
+ */
+static inline int cxl_mmio_install_sigbus_handler(void)
+{
+	/* nothing to be done yet */
+	return 0;
+}
+
 #endif
