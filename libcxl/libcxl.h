@@ -144,7 +144,7 @@ int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
 int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
+int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
 //int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_mode(struct cxl_afu_h *afu, long value);
 //int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp);
@@ -210,36 +210,9 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
  * Call this once per process prior to any MMIO accesses.
  */
 //int cxl_mmio_install_sigbus_handler();
+int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp);
+int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp);
+int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp);
 
-/* FIXME FIXME Replace me with real functionality */
-static inline int
-cxl_get_cr_class(struct cxl_afu_h *afu __attribute__((unused)),
-		 long cr_num __attribute__((unused)),
-		 long *valp)
-{
-	if (valp)
-		*valp = 0x00120000; /* accelerator */
-	return 0;
-}
-
-static inline int
-cxl_get_cr_device(struct cxl_afu_h *afu __attribute__((unused)),
-		  long cr_num __attribute__((unused)),
-		  long *valp)
-{
-	if (valp)
-		*valp = 0x00000602; /* CGzip */
-	return 0;
-}
-
-static inline int
-cxl_get_cr_vendor(struct cxl_afu_h *afu __attribute__((unused)),
-		  long cr_num __attribute__((unused)),
-		  long *valp)
-{
-	if (valp)
-		*valp = 0x00001014; /* IBM */
-	return 0;
-}
 
 #endif
