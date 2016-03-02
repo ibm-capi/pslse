@@ -74,6 +74,9 @@ struct cxl_afu_h {
 	long mmio_len;
 	long mmio_off;
 	long prefault_mode;
+	long cr_device;
+	long cr_vendor;
+	long cr_class;
 	struct int_req int_req;
 	struct open_req open;
 	struct attach_req attach;

@@ -505,6 +505,7 @@ static void *_psl_loop(void *ptr)
 	uint8_t size;
 	uint64_t addr;
 	uint16_t value;
+	uint32_t lvalue;
 	int rc;
 
 	if (!afu)
@@ -589,7 +590,8 @@ static void *_psl_loop(void *ptr)
 			afu->int_req.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_QUERY:
-			size = sizeof(uint16_t) + sizeof(uint16_t);
+			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) 
+                           + sizeof(uint16_t) + sizeof(uint32_t);
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
 			    0) {
 				warn_msg("Socket failure getting PSLSE query");
@@ -600,6 +602,12 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_min = (long)ntohs(value);
 			memcpy((char *)&value, (char *)&(buffer[3]), 2);
 			afu->irqs_max = (long)ntohs(value);
+                	memcpy((char *)&value, (char *)&(buffer[4]), 2);
+			afu->cr_device = (long)ntohs(value);
+                        memcpy((char *)&value, (char *)&(buffer[6]), 2);
+			afu->cr_vendor = (long)ntohs(value);
+                        memcpy((char *)&lvalue, (char *)&(buffer[8]), 4);
+			afu->cr_class = ntohl(lvalue);
 			break;
 		case PSLSE_MEMORY_READ:
 			DPRINTF("AFU MEMORY READ\n");
@@ -1607,3 +1615,43 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	errno = ENODEV;
 	return -1;
 }
+
+int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+        //uint16_t crnum = cr_num;
+	// For now, don't worry about cr_num
+	*valp =  afu->cr_device;
+	return 0;
+}
+
+int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+        //uint16_t crnum = cr_num;
+	// For now, don't worry about cr_num
+	*valp =  afu->cr_vendor;
+	return 0;
+}
+
+int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+        //uint16_t crnum = cr_num;
+	// For now, don't worry about cr_num
+	*valp =  afu->cr_class;
+	return 0;
+}
+
+int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = 0x04000000;
+        return 0;
+}
+

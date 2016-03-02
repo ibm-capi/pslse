@@ -50,6 +50,12 @@ struct mmio_event {
 	struct mmio_event *_next;
 };
 
+struct config_record  {
+        uint16_t cr_device;
+        uint16_t cr_vendor;
+        uint32_t cr_class;
+};
+
 struct afu_descriptor {
 	uint16_t num_ints_per_process;
 	uint16_t num_of_processes;
@@ -64,6 +70,7 @@ struct afu_descriptor {
 	uint64_t PerProcessPSA_offset;
 	uint64_t AFU_EB_len;
 	uint64_t AFU_EB_offset;
+        struct config_record * crptr;
 };
 
 struct mmio {
