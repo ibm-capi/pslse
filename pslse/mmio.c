@@ -208,6 +208,31 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 		return -1;
 	}
 
+        // NEW BLOCK add code to check for CRs and read them in if available
+        struct mmio_event *eventdevven, *eventclass;
+        uint32_t crstart;
+        uint16_t crnum = mmio->desc.num_of_afu_CRs;
+        if ( crnum > 0) {
+        crstart = mmio->desc.AFU_CR_offset;
+        // allocate 
+        struct config_record *cr_array = malloc(crnum * sizeof(struct config_record *));
+        //struct config_record *crptr = &cr_array;
+        mmio->desc.crptr = cr_array;
+	// Queue mmio reads
+	eventdevven = _add_desc(mmio, 1, 1,crstart >> 2, 0L);
+	eventclass = _add_desc(mmio, 1, 1, (crstart+8) >> 2, 0L);
+	
+	// Store data from reads
+	_wait_for_done(&(eventdevven->state), lock);
+	cr_array->cr_device = (uint16_t) (eventdevven->data >> 48) & 0xffffl;
+	cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 32) & 0xffffl;
+        debug_msg("%x:%x CR dev & vendor", cr_array->cr_device, cr_array->cr_vendor);
+        free(eventdevven);
+        _wait_for_done(&(eventclass->state), lock);
+	cr_array->cr_class = (uint32_t) (eventclass->data >> 32) & 0xffffffffl;
+        free(eventclass);
+        }
+        // end of NEW BLOCK`
 	return 0;
 }
 
