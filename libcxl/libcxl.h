@@ -141,6 +141,7 @@ enum cxl_image {
  */
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
 int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
+
 int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
@@ -213,6 +214,62 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
 int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp);
 int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp);
 int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp);
+
+
+
+
+/*
+ * Calling this function will install the libcxl SIGBUS handler. This will
+ * catch bad MMIO accesses (e.g. due to hardware failures) that would otherwise
+ * terminate the program and make the above mmio functions return errors
+ * instead.
+ *
+ * Call this once per process prior to any MMIO accesses.
+ */
+static inline int cxl_mmio_install_sigbus_handler(void)
+{
+	/* nothing to be done yet */
+	return 0;
+}
+
+/**
+ * Returns the size of afu_err_buff in bytes.
+ * @param afu Handle to the afu.
+ * @param valp Pointer to the location where size is copied to.
+ * @return In case of success '0' is returned. In case of an error or
+ * the afu_err_buff doesn't exist, -1 is returned and errno is set
+ * appropriately.
+ */
+static inline int
+cxl_errinfo_size(struct cxl_afu_h *afu __attribute__((unused)), size_t *valp)
+{
+	if (!valp)
+		return -1;
+
+	*valp = 4096;
+	return 0;
+}
+
+/**
+ * Read and copy the contents of afu_err_info buffer into the provided buffer.
+ * @param afu Handle to the afu
+ * @param dst Pointer to the buffer where data would be copied.
+ * @param off Start offset within the afu_err_info handle.
+ * @param len Number of bytes to be copied after the start offset.
+ * @return The number of bytes copied from the afu_err_buff to dst. In case of
+ * an error or the afu_err_buff doesn't exist, -1 is returned and errno is set
+ * appropriately.
+ */
+static inline ssize_t
+cxl_errinfo_read(struct cxl_afu_h *afu __attribute__((unused)),
+		 void *dst, off_t off, size_t len)
+{
+	if (!dst)
+		return -1;
+
+	memset(dst + off, 0xAB, len);
+	return len;
+}
 
 
 #endif
