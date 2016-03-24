@@ -446,6 +446,8 @@ static void _handle_client(struct psl *psl, struct client *client)
 	uint8_t buffer[MAX_LINE_CHARS];
 	int dw = 0;
 
+	debug_msg("HANDLE_CLIENT: context:0x%02x, socket:0x%02x", client->context, client->fd);
+
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
 		client->idle_cycles = PSL_IDLE_CYCLES;

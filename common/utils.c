@@ -119,9 +119,12 @@ void debug_msg(const char *format, ...)
 {
 #ifdef DEBUG
 	va_list args;
+        #include <sys/timeb.h>
+        struct timeb tmb;
 
+        ftime(&tmb);
 	fflush(stdout);
-	printf("DEBUG:");
+	printf("DEBUG: %ld.%03d: ",tmb.time,tmb.millitm);
 	va_start(args, format);
 	vprintf(format, args);
 	va_end(args);
@@ -212,7 +215,12 @@ int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 	}
 
 #if DEBUG
-	DPRINTF("DEBUG:SOCKET IN:0x");
+        #include <sys/timeb.h>
+        struct timeb tmb;
+
+        ftime(&tmb);
+	fflush(stdout);
+	DPRINTF("DEBUG %ld.%03d: SOCKET IN 0x%02x :0x",tmb.time,tmb.millitm, fd);
 	for (count = 0; count < bytes; count++)
 		DPRINTF("%02x", data[count]);
 	DPRINTF("\n");
@@ -251,7 +259,12 @@ int put_bytes_silent(int fd, int size, uint8_t * data)
 	}
 
 #if DEBUG
-	DPRINTF("DEBUG:SOCKET OUT:0x");
+        #include <sys/timeb.h>
+        struct timeb tmb;
+
+        ftime(&tmb);
+	fflush(stdout);
+	DPRINTF("DEBUG %ld.%03d: SOCKET OUT 0x%02x :0x",tmb.time,tmb.millitm, fd);
 	for (count = 0; count < bytes; count++)
 		DPRINTF("%02x", data[count]);
 	DPRINTF("\n");
