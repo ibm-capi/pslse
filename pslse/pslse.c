@@ -114,8 +114,8 @@ static void _query(struct client *client, uint8_t id)
 	int size, offset;
 
 	psl = _find_psl(id, &major, &minor);
-	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process) +
-	    sizeof(client->max_irqs) + sizeof(psl->mmio->desc.crptr->cr_device) +
+	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process) + sizeof(client->max_irqs) +
+	    sizeof(psl->mmio->desc.AFU_EB_len) + sizeof(psl->mmio->desc.crptr->cr_device) +
 	    sizeof(psl->mmio->desc.crptr->cr_vendor) + sizeof(psl->mmio->desc.crptr->cr_class);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_QUERY;
@@ -129,6 +129,10 @@ static void _query(struct client *client, uint8_t id)
 	memcpy(&(buffer[offset]),
 	       (char *)&(client->max_irqs), sizeof(client->max_irqs));
         offset += sizeof(client->max_irqs);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.AFU_EB_len),
+	       sizeof(psl->mmio->desc.AFU_EB_len));
+        offset += sizeof(psl->mmio->desc.AFU_EB_len);
 	memcpy(&(buffer[offset]),
 	       (char *)&(psl->mmio->desc.crptr->cr_device),
 	       sizeof(psl->mmio->desc.crptr->cr_device));

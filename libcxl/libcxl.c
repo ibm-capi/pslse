@@ -42,6 +42,14 @@
 #define DPRINTF(...)
 #endif
 
+#ifndef MAX
+#define MAX(a,b)(((a)>(b))?(a):(b))
+#endif /* #ifndef MAX */
+
+#ifndef MIN
+#define MIN(a,b)(((a)<(b))?(a):(b))
+#endif /* #ifndef MIN */
+
 /*
  * System constants
  */
@@ -51,6 +59,7 @@
 #define FOURK_MASK        0xFFFFFFFFFFFFF000L
 
 #define DSISR 0x4000000040000000L
+#define ERR_BUFF_MAX_COPY_SIZE 4096
 
 static int _delay_1ms()
 {
@@ -306,7 +315,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 	if (!afu)
 		fatal_msg("NULL afu passed to libcxl.c:_handle_ack");
 	DPRINTF("MMIO ACK\n");
-	if (afu->mmio.type == PSLSE_MMIO_READ64) {
+	if ((afu->mmio.type == PSLSE_MMIO_READ64)| (afu->mmio.type == PSLSE_MMIO_EBREAD)) {
 		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 1000, 0) <
 		    0) {
 			warn_msg("Socket failure getting MMIO Ack");
@@ -529,6 +538,7 @@ static void *_psl_loop(void *ptr)
 			case PSLSE_MMIO_WRITE32:
 				_mmio_write32(afu);
 				break;
+			case PSLSE_MMIO_EBREAD:
 			case PSLSE_MMIO_READ64:
 			case PSLSE_MMIO_READ32:	/*fall through */
 				_mmio_read(afu);
@@ -590,8 +600,8 @@ static void *_psl_loop(void *ptr)
 			afu->int_req.state = LIBCXL_REQ_IDLE;
 			break;
 		case PSLSE_QUERY:
-			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) 
-                           + sizeof(uint16_t) + sizeof(uint32_t);
+			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(size_t) +  
+                            sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t);
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
 			    0) {
 				warn_msg("Socket failure getting PSLSE query");
@@ -602,11 +612,13 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_min = (long)ntohs(value);
 			memcpy((char *)&value, (char *)&(buffer[3]), 2);
 			afu->irqs_max = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[4]), 2);
+                	memcpy((char *)&value, (char *)&(buffer[5]), 8);
+			afu->eb_len = (long)ntohs(value);
+                	memcpy((char *)&value, (char *)&(buffer[12]), 2);
 			afu->cr_device = (long)ntohs(value);
-                        memcpy((char *)&value, (char *)&(buffer[6]), 2);
+                        memcpy((char *)&value, (char *)&(buffer[14]), 2);
 			afu->cr_vendor = (long)ntohs(value);
-                        memcpy((char *)&lvalue, (char *)&(buffer[8]), 4);
+                        memcpy((char *)&lvalue, (char *)&(buffer[16]), 4);
 			afu->cr_class = ntohl(lvalue);
 			break;
 		case PSLSE_MEMORY_READ:
@@ -1562,6 +1574,81 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	return -1;
 }
 
+int cxl_errinfo_read(struct cxl_afu_h *afu, void *dst, off_t off, size_t len)
+{
+        off_t aligned_start, last_byte;
+	off_t index1, index2;
+	uint8_t *buffer;
+	size_t total_read_length;
+
+	if ((afu == NULL) || !afu->mapped)
+		goto bread64_fail;
+	if (len == 0 || off < 0 || (size_t)off >= afu->eb_len)
+		return 0;
+
+	/* calculate aligned read window */
+	len = MIN((size_t)(afu->eb_len - off), len);
+	aligned_start = off & 0xfff8;
+	last_byte = aligned_start + len + (off & 0x7);
+	total_read_length = (((off & 0x7) + len + 0x7) >>3) << 3  ;
+	buffer = (uint8_t* )calloc(total_read_length +8, sizeof(uint8_t));
+	if (!buffer)
+		return -ENOMEM;
+	uint64_t *wbuf = (uint64_t *)buffer;
+	uint8_t *bbuf = (uint8_t *)buffer;
+
+	/* max we can copy in one read is PAGE_SIZE */
+	if (total_read_length > ERR_BUFF_MAX_COPY_SIZE) {
+		total_read_length = ERR_BUFF_MAX_COPY_SIZE;
+		len = ERR_BUFF_MAX_COPY_SIZE - (off & 0x7);
+	}
+
+	/* perform aligned read from the mmio region */
+        index1 = 0;
+	while (aligned_start <= last_byte)  {
+	// Send MMIO request to PSLSE
+		afu->mmio.type = PSLSE_MMIO_EBREAD;
+		afu->mmio.addr = (uint32_t) aligned_start ;
+		afu->mmio.state = LIBCXL_REQ_REQUEST;
+		while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
+			_delay_1ms();
+		if (!afu->opened)
+			goto bread64_fail;
+		// if offset, have to potentially do BE->LE swap
+        	if ((off & 0x7) >0) 
+                	afu->mmio.data = htonll(afu->mmio.data);
+        	wbuf[index1] = afu->mmio.data;
+        	aligned_start = aligned_start + 8;
+                ++index1;
+        }
+	memcpy(&wbuf[0], &bbuf[off & 0x7], len);
+	// if offset we have to do LE->BE swap back	
+ 	if ((off & 0x7) > 0)    {
+                index2 = 0;
+	       total_read_length = len;
+                while (total_read_length !=0)  {
+                        if (total_read_length < 8) 
+                        // set total_read_length to 0
+				total_read_length = 0;
+                        else                    {
+				wbuf[index2]= htonll(wbuf[index2]);
+                		++index2;
+                        	total_read_length = total_read_length -8; 
+                	}
+		}
+	} 
+	memcpy(dst, &wbuf[0], len);
+	free(buffer);
+	// return # of bytes read
+	return len;
+
+ bread64_fail:
+        if (buffer)
+          free(buffer);
+	errno = ENODEV;
+	return -1;
+}
+
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 {
 	if (offset & 0x3) {
@@ -1653,5 +1740,13 @@ int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp)
         // for now just return constant, later will read value from file
         *valp = 0x04000000;
         return 0;
+}
+
+int cxl_errinfo_size(struct cxl_afu_h *afu, size_t *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->eb_len;
+	return 0;
 }
 

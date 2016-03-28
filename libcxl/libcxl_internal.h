@@ -74,6 +74,7 @@ struct cxl_afu_h {
 	long mmio_len;
 	long mmio_off;
 	long prefault_mode;
+        size_t eb_len;
 	long cr_device;
 	long cr_vendor;
 	long cr_class;

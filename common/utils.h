@@ -58,6 +58,7 @@
 #define PSLSE_MMIO_FAIL		0x12
 #define PSLSE_INTERRUPT		0x13
 #define PSLSE_AFU_ERROR		0x14
+#define PSLSE_MMIO_EBREAD	0x15
 
 // PSLSE states
 enum pslse_state {

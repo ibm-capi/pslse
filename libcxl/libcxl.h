@@ -213,6 +213,9 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
 int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp);
 int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp);
 int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp);
+int cxl_errinfo_size(struct cxl_afu_h *afu, size_t *valp);
+int cxl_errinfo_read(struct cxl_afu_h *afu, void *dst, off_t off, size_t len);
+
 
 
 #endif

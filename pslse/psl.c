@@ -445,6 +445,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	struct cmd_event *cmd;
 	uint8_t buffer[MAX_LINE_CHARS];
 	int dw = 0;
+	int eb_rd = 0;
 
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
@@ -490,12 +491,14 @@ static void _handle_client(struct psl *psl, struct client *client)
 		case PSLSE_MMIO_WRITE64:
 			dw = 1;
 		case PSLSE_MMIO_WRITE32:	/*fall through */
-			mmio = handle_mmio(psl->mmio, client, 0, dw);
+			mmio = handle_mmio(psl->mmio, client, 0, dw, 0);
 			break;
-		case PSLSE_MMIO_READ64:
+		case PSLSE_MMIO_EBREAD:
+                        eb_rd = 1;
+		case PSLSE_MMIO_READ64: /*fall through */
 			dw = 1;
 		case PSLSE_MMIO_READ32:	/*fall through */
-			mmio = handle_mmio(psl->mmio, client, 1, dw);
+			mmio = handle_mmio(psl->mmio, client, 1, dw, eb_rd);
 			break;
 		default:
 		  error_msg("Unexpected 0x%02x from client on socket", buffer[0], client->fd);

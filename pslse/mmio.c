@@ -75,7 +75,7 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 		return event;
 	event->rnw = rnw;
 	event->dw = dw;
-	if (client == NULL) {
+	if (client == NULL)  {
 	  // don't try to recalculate the address
 	  event->addr = addr;
 	} else {
@@ -441,9 +441,38 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	return NULL;
 }
 
+// Add mmio read event of error buffer at offset to list
+static struct mmio_event *_handle_mmio_read_eb(struct mmio *mmio,
+					    struct client *client, int dw)
+{
+	struct mmio_event *event;
+	uint32_t offset;
+	int fd = client->fd;
+
+	if (get_bytes_silent(fd, 4, (uint8_t *) & offset, mmio->timeout,
+			     &(client->abort)) < 0) {
+		goto read_fail;
+	}
+	offset = ntohl(offset);
+        offset = offset + (uint32_t)mmio->desc.AFU_EB_offset;
+        debug_msg("offset for eb read is %x\n", offset);
+//	event = _add_event(mmio, client, 1, dw, offset>>2, 1, 0);
+	event = _add_desc(mmio, 1, dw, offset>>2, 0);
+//        _wait_for_done(&(event->state), psl->lock);
+	return event;
+
+ read_fail:
+	// Socket connection is dead
+	debug_msg("%s:_handle_mmio_read failed context=%d",
+		  mmio->afu_name, client->context);
+	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	return NULL;
+}
+
+
 // Handle MMIO request from client
 struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
-			       int rnw, int dw)
+			       int rnw, int dw, int eb_rd)
 {
 	uint8_t ack;
 
@@ -456,6 +485,10 @@ struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 		}
 		return NULL;
 	}
+
+	if (eb_rd) 
+		return _handle_mmio_read_eb(mmio, client, dw);
+
 	if (rnw)
 		return _handle_mmio_read(mmio, client, dw);
 	else

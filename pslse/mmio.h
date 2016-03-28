@@ -42,6 +42,7 @@
 struct mmio_event {
 	uint32_t rnw;
 	uint32_t dw;
+	uint32_t eb_rd;
 	uint32_t addr;
 	uint32_t desc;
 	uint64_t data;
@@ -99,7 +100,7 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled);
 void handle_mmio_map(struct mmio *mmio, struct client *client);
 
 struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
-			       int rnw, int dw);
+			       int rnw, int dw, int eb_rd);
 
 struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client);
 
