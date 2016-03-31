@@ -390,7 +390,7 @@ static void *_client_loop(void *ptr)
 
 	pthread_mutex_lock(&lock);
 	while (client->pending) {
-	        debug_msg("_CLIENT_LOOP:");
+	        debug_msg("_CLIENT_LOOP: socket:0x%02x", client->fd);
 		rc = bytes_ready(client->fd, client->timeout, &(client->abort));
 		if (rc == 0) {
 			lock_delay(&lock);
