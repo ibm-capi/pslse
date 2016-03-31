@@ -296,19 +296,19 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			if (job->pe != NULL) {		  
 			  if (job->pe->state == PSLSE_PENDING) {
 			    // remove the first entry in the list
-			    debug_msg("%s,%d:_handle_aux2, jcack, first pe is pending, job=0x%016"PRIx64", pe=0x%016"PRIx64, 
-				      job->afu_name, job->dbg_id, job, job->pe );
+			    // debug_msg("%s,%d:_handle_aux2, jcack, first pe is pending, job=0x%016"PRIx64", pe=0x%016"PRIx64, 
+			    // 	      job->afu_name, job->dbg_id, job, job->pe );
 			    cacked_pe = job->pe;
 			    job->pe = job->pe->_next;
 			  } else {
 			    _prev = job->pe;
 			    while (_prev->_next != NULL) {
-			      debug_msg("%s,%d:_handle_aux2, jcack, looking for pending pe, _prev=0x%016"PRIx64", _next=0x%016"PRIx64, 
-					job->afu_name, job->dbg_id, _prev, _prev->_next );
+			      // debug_msg("%s,%d:_handle_aux2, jcack, looking for pending pe, _prev=0x%016"PRIx64", _next=0x%016"PRIx64, 
+			      //           job->afu_name, job->dbg_id, _prev, _prev->_next );
 			      if (_prev->_next->state == PSLSE_PENDING) {
 				// remove this entry in the list
-				debug_msg("%s,%d:_handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
-					job->afu_name, job->dbg_id, _prev->_next );
+				// debug_msg("%s,%d:_handle_aux2, jcack, found pending pe, _next=0x%016"PRIx64, 
+				// 	job->afu_name, job->dbg_id, _prev->_next );
 				cacked_pe = _prev->_next;
 				_prev->_next = _prev->_next->_next;
 			      } else {
@@ -327,11 +327,11 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			  switch ( llcmd ) {
 			  case PSL_LLCMD_ADD:
 			    // if it is a start, just keep going, print a message
-			    debug_msg("%s,%d:_handle_aux2: LLCMD ADD acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: LLCMD ADD ack", job->afu_name, job->dbg_id );
 			    break;
 			  case PSL_LLCMD_TERMINATE:
 			    // if it is a terminate, make sure the cmd list is empty, warn if not empty
-			    debug_msg("%s,%d:_handle_aux2: LLCMD TERMINATE acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: LLCMD TERMINATE ack", job->afu_name, job->dbg_id );
 			    if ( _is_cmd_pending(psl, context) ) {
 			      warn_msg( "%s,%d:AFU command for context %d still pending when LLCMD TERMINATE acked", 
 					job->afu_name, job->dbg_id, context);
@@ -339,7 +339,7 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			    break;
 			  case PSL_LLCMD_REMOVE:
 			    // if it is a remove, send the detach response to the client and close up the client
-			    debug_msg("%s,%d:_handle_aux2: LLCMD REMOVE acked", job->afu_name, job->dbg_id );
+			    debug_msg("%s,%d:_handle_aux2: LLCMD REMOVE ack", job->afu_name, job->dbg_id );
 			    debug_msg("%s,%d:_handle_aux2: detach response sent to host on socket %d", 
 				      job->afu_name, job->dbg_id, psl->client[context]->fd);
 			    put_bytes(psl->client[context]->fd, 1, &ack,
@@ -526,6 +526,7 @@ static void *_psl_loop(void *ptr)
 		// time after the AFU has gone idle.  Eventually clocks will
 		// not be presented to an idle AFU to keep simulation
 		// waveforms from getting huge with no activity cycles.
+	        debug_msg("_PSL_LOOP:");
 		if (psl->state != PSLSE_IDLE) {
 			psl->idle_cycles = PSL_IDLE_CYCLES;
 			if (stopped)

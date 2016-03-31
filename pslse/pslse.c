@@ -390,6 +390,7 @@ static void *_client_loop(void *ptr)
 
 	pthread_mutex_lock(&lock);
 	while (client->pending) {
+	        debug_msg("_CLIENT_LOOP:");
 		rc = bytes_ready(client->fd, client->timeout, &(client->abort));
 		if (rc == 0) {
 			lock_delay(&lock);
@@ -555,6 +556,7 @@ int main(int argc, char **argv)
 	// Watch for client connections
 	while (psl_list != NULL) {
 		// Wait for next client to connect
+	        debug_msg("PSLSE: main");
 		client_len = sizeof(client_addr);
 		pthread_mutex_unlock(&lock);
 		connect_fd = accept(listen_fd, (struct sockaddr *)&client_addr,
