@@ -1,7 +1,7 @@
 # A copy of this file should be placed in the run directory.
 # Each line maps an AFU device to it's simulator host:port.
 # Update as needed to match your simulation environment.
-# Comments must be on there own line.
+# Comments must be on their own line.
 #
 # Line format is as follows:
 # AFU_DEVICE,HOSTNAME:PORT

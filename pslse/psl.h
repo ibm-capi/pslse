@@ -28,6 +28,7 @@
 #include "parms.h"
 #include "../common/utils.h"
 
+
 struct psl {
 	struct AFU_EVENT *afu_event;
 	pthread_t thread;
@@ -54,6 +55,10 @@ struct psl {
 	int attached_clients;
 	int timeout;
 	int has_been_reset;
+	uint16_t vsec_caia_version;
+	uint16_t vsec_psl_rev_level;
+	uint16_t vsec_image_loaded;
+	uint16_t vsec_base_image;
 };
 
 uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,

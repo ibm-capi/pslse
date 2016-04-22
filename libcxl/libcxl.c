@@ -599,8 +599,9 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_max = ntohs(value);
 			afu->int_req.state = LIBCXL_REQ_IDLE;
 			break;
-		case PSLSE_QUERY:
-			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(size_t) +  
+		case PSLSE_QUERY: {
+			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) +
+			    sizeof(uint64_t) + sizeof(uint64_t) + sizeof(size_t) +  
                             sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t);
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
 			    0) {
@@ -612,15 +613,24 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_min = (long)ntohs(value);
 			memcpy((char *)&value, (char *)&(buffer[3]), 2);
 			afu->irqs_max = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[5]), 8);
+                	memcpy((char *)&value, (char *)&(buffer[5]), 2);
+			afu->modes_supported = (long)ntohs(value);
+                	memcpy((char *)&value, (char *)&(buffer[7]), 8);
+			afu->mmio_len = (long)ntohs(value);
+                	memcpy((char *)&value, (char *)&(buffer[15]), 8);
+			afu->mmio_off = (long)ntohs(value);
+                	memcpy((char *)&value, (char *)&(buffer[23]), 8);
 			afu->eb_len = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[12]), 2);
+                	memcpy((char *)&value, (char *)&(buffer[30]), 2);
 			afu->cr_device = (long)ntohs(value);
-                        memcpy((char *)&value, (char *)&(buffer[14]), 2);
+                        memcpy((char *)&value, (char *)&(buffer[32]), 2);
 			afu->cr_vendor = (long)ntohs(value);
-                        memcpy((char *)&lvalue, (char *)&(buffer[16]), 4);
+                        memcpy((char *)&lvalue, (char *)&(buffer[34]), 4);
 			afu->cr_class = ntohl(lvalue);
+			//no better place to put this right now
+			afu->prefault_mode = CXL_PREFAULT_MODE_NONE;
 			break;
+		}
 		case PSLSE_MEMORY_READ:
 			DPRINTF("AFU MEMORY READ\n");
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
@@ -1271,12 +1281,15 @@ struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 	switch (view) {
 	case CXL_VIEW_DEDICATED:
 		afu_type = 'd';
+		afu->mode = CXL_MODE_DEDICATED;
 		break;
 	case CXL_VIEW_MASTER:
 		afu_type = 'm';
+		afu->mode = CXL_MODE_DIRECTED;
 		break;
 	case CXL_VIEW_SLAVE:
 		afu_type = 's';
+		afu->mode = CXL_MODE_DIRECTED;
 		break;
 	default:
 		errno = ENODEV;
@@ -1709,6 +1722,7 @@ int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp)
 		return -1;
         //uint16_t crnum = cr_num;
 	// For now, don't worry about cr_num
+	//*valp =  htons(afu->cr_device);
 	*valp =  afu->cr_device;
 	return 0;
 }
@@ -1719,6 +1733,7 @@ int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp)
 		return -1;
         //uint16_t crnum = cr_num;
 	// For now, don't worry about cr_num
+	//*valp =  htons(afu->cr_vendor);
 	*valp =  afu->cr_vendor;
 	return 0;
 }
@@ -1729,6 +1744,7 @@ int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp)
 		return -1;
         //uint16_t crnum = cr_num;
 	// For now, don't worry about cr_num
+	//*valp =  htonl(afu->cr_class);
 	*valp =  afu->cr_class;
 	return 0;
 }
@@ -1749,4 +1765,120 @@ int cxl_errinfo_size(struct cxl_afu_h *afu, size_t *valp)
 	*valp =  afu->eb_len;
 	return 0;
 }
+
+int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->mmio_len;
+	return 0;
+}
+
+int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->mmio_off;
+	return 0;
+}
+
+int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp)
+{
+//List of the modes this AFU supports. One per line.
+//Valid entries are: "dedicated_process" and "afu_directed"
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->modes_supported;
+	return 0;
+}
+
+int cxl_get_mode(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->mode;
+	return 0;
+}
+
+int cxl_set_mode(struct cxl_afu_h *afu, long value)
+{
+//Writing will change the mode provided that no user contexts are attached.
+	if (afu == NULL) 
+		return -1;
+        //check to be sure no contexts are attached before setting this, could be hard to tell?
+	afu->mode = value;
+        // do we also need to change afu_type to match mode now??
+	return 0;
+}
+
+int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp)
+{
+//Get the mode for prefaulting in segments into the segment table
+//when performing the START_WORK ioctl. Possible values:
+//       none: No prefaulting (default)
+//       work_element_descriptor: Treat the work element
+//           descriptor as an effective address and
+//           prefault what it points to.
+//       all: all segments process calling START_WORK maps.
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->prefault_mode;
+	return 0;
+}
+
+int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value)
+{
+//Set the mode for prefaulting in segments into the segment table
+//when performing the START_WORK ioctl. Possible values:
+//       none: No prefaulting (default)
+//       work_element_descriptor: Treat the work element
+//           descriptor as an effective address and
+//           prefault what it points to.
+//       all: all segments process calling START_WORK maps.
+	if (afu == NULL) 
+		return -1;
+        if (value == CXL_PREFAULT_MODE_NONE || CXL_PREFAULT_MODE_WED || CXL_PREFAULT_MODE_ALL) 
+		afu->prefault_mode = value;
+//Probably should return error msg if value wasn't a "good" value
+	return 0;
+}
+
+int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = 0x0;
+        return 0;
+}
+
+
+int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,long *minorp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *majorp = 0x1;
+        *minorp = 0x0;
+        return 0;
+}
+
+int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = CXL_IMAGE_USER;
+        return 0;
+}
+
+int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = 0x0;
+        return 0;
+}
+
 

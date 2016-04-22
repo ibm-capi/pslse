@@ -224,10 +224,12 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 	
 	// Store data from reads
 	_wait_for_done(&(eventdevven->state), lock);
+	debug_msg("XXXX: DATA: = %016x\n", eventdevven->data);
 	cr_array->cr_device = (uint16_t) (eventdevven->data >> 48) & 0xffffl;
 	cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 32) & 0xffffl;
         debug_msg("%x:%x CR dev & vendor", cr_array->cr_device, cr_array->cr_vendor);
         free(eventdevven);
+        	debug_msg("%x:%x CR dev & vendor swapped", ntohs(cr_array->cr_device),ntohs(cr_array->cr_vendor));
         _wait_for_done(&(eventclass->state), lock);
 	cr_array->cr_class = (uint32_t) (eventclass->data >> 32) & 0xffffffffl;
         free(eventclass);

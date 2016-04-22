@@ -145,19 +145,19 @@ int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
 //int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
 int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
-//int cxl_set_mode(struct cxl_afu_h *afu, long value);
-//int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp);
-//int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value);
+int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
+int cxl_set_mode(struct cxl_afu_h *afu, long value);
+int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp);
+int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp);
+int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value);
 //int cxl_get_dev(struct cxl_afu_h *afu, long *majorp, long *minorp);
-//int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp);
-//int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,
-//                       long *minorp);
-//int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp);
-//int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp);
+int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp);
+int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp);
+int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp);
+int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,
+                       long *minorp);
+int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp);
+int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp);
 
 /*
  * Events

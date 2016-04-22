@@ -60,6 +60,10 @@ typedef uint8_t DBG_HEADER;
 #define DBG_PARM_PAGED_PERCENT		0x4
 #define DBG_PARM_REORDER_PERCENT	0x5
 #define DBG_PARM_BUFFER_PERCENT		0x6
+#define DBG_CAIA_VERSION		0x7
+#define DBG_PSL_REV_LVL			0x8
+#define DBG_IMAGE_LOADED		0x9
+#define DBG_BASE_IMAGE			0xA
 
 size_t debug_get_64(FILE * fp, uint64_t * value);
 size_t debug_get_32(FILE * fp, uint32_t * value);

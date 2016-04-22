@@ -774,6 +774,11 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 		perror("cmd_init");
 		goto init_fail;
 	}
+	// Load in VSEC data (read in from pslse.parms file)
+	psl->vsec_caia_version = parms->caia_version;
+	psl->vsec_psl_rev_level= parms->psl_rev_level;
+	psl->vsec_image_loaded= parms->image_loaded;
+	psl->vsec_base_image= parms->base_image;
 	// Set credits for AFU
 	if (psl_aux1_change(psl->afu_event, psl->cmd->credits) != PSL_SUCCESS) {
 		warn_msg("Unable to set credits");

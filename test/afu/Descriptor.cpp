@@ -1,6 +1,8 @@
 #include "Descriptor.h"
 
+#include <limits.h>
 #include <string>
+#include <stdlib.h>
 #include <stdint.h>
 #include <fstream>
 #include <sstream>
@@ -26,7 +28,7 @@ Descriptor::parse_descriptor_file (string filename)
         error_msg
         ("Descriptor::parse_descriptor_file: failed to open file %s",
          filename.c_str ());
-    string line, field, colon, s_value;
+    string line, field, colon, s_value, s_data;
 
     while (getline (file, line)) {
         // skip comments and empty lines
@@ -36,19 +38,36 @@ Descriptor::parse_descriptor_file (string filename)
 
         ss >> field >> colon >> s_value;
 
+        uint64_t value, data;
+
+        // Test for data values
+        if (field == "data") {
+            if (s_value.substr (0, 2) == "0x")
+                s_value.erase(0, 2);
+            getline (file, s_data);
+            if (s_data.substr (0, 2) == "0x")
+                s_data.erase(0, 2);
+            value = strtoull(s_value.c_str(), NULL, 16);
+            data = strtoull(s_data.c_str(), NULL, 16);
+            info_msg ("Descriptor: setting offset 0x%x with value 0x%016llx",
+                      value, data);
+            uint64_t offset = to_vector_index(value);
+            while (offset >= regs.size())
+                regs.push_back(0);
+            regs[offset] = data;
+            continue;
+        }
+
         // re-output s_value as unsigned int
-        uint64_t value;
 
         if (s_value.substr (0, 2) == "0x") {
             stringstream temp (s_value.substr (2));
-
             temp >> std::hex >> value;
-            info_msg ("Descriptor: setting %s with value %x", field.c_str (),
+            info_msg ("Descriptor: setting %s with value 0x%x", field.c_str (),
                       value);
         }
         else {
             stringstream temp (s_value);
-
             temp >> value;
             info_msg ("Descriptor: setting %s with value %d", field.c_str (),
                       value);
@@ -105,9 +124,7 @@ Descriptor::parse_descriptor_file (string filename)
 
 uint32_t Descriptor::to_vector_index (uint32_t byte_address) const
 {
-    return
-        byte_address >>
-        3;
+    return byte_address >> 3;
 }
 
 uint64_t
