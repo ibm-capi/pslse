@@ -28,6 +28,10 @@
 #include "debug.h"
 #include "utils.h"
 
+#if DEBUG
+        #include <sys/timeb.h>
+#endif				/* DEBUG */
+
 #ifndef __APPLE__
 // Is this a little endian machine?
 static uint16_t _is_little_endian(void)
@@ -119,7 +123,6 @@ void debug_msg(const char *format, ...)
 {
 #ifdef DEBUG
 	va_list args;
-        #include <sys/timeb.h>
         struct timeb tmb;
 
         ftime(&tmb);
@@ -215,7 +218,6 @@ int get_bytes_silent(int fd, int size, uint8_t * data, int timeout, int *abort)
 	}
 
 #if DEBUG
-        #include <sys/timeb.h>
         struct timeb tmb;
 
         ftime(&tmb);
@@ -259,7 +261,6 @@ int put_bytes_silent(int fd, int size, uint8_t * data)
 	}
 
 #if DEBUG
-        #include <sys/timeb.h>
         struct timeb tmb;
 
         ftime(&tmb);
