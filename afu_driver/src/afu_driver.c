@@ -27,6 +27,7 @@
 
 #define CLOCK_EDGE_DELAY 2
 #define CACHELINE_BYTES 128
+#define DEBUG
 
 struct resp_event {
 	uint32_t tag;
@@ -532,18 +533,18 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	int change = 0;
 	if ( ha_pclock == sv_0 ) {
 	// Replication of aux2 method
-	  c_ah_jrunning = (ah_jrunning_top & 0x1);
-          c_ah_jdone  = (ah_jdone_top & 0x1);
-          c_ah_jcack  = (ah_jcack_top & 0x1);
+	  c_ah_jrunning  = (ah_jrunning_top & 0x2) ? 0 : (ah_jrunning_top & 0x1);
+          c_ah_jdone     = (ah_jdone_top & 0x2) ? 0 : (ah_jdone_top & 0x1);
+          c_ah_jcack     = (ah_jcack_top & 0x2) ? 0 : (ah_jcack_top & 0x1);
           getMy64Bit(ah_jerror_top, &c_ah_jerror);
-          c_ah_brlat  = ah_brlat_top->aval & 0xF;	// 4 bits
-          c_ah_jyield = (ah_jyield & 0x1);
-          c_ah_tbreq  = (ah_tbreq_top & 0x1);
-          c_ah_paren  = (ah_paren_top & 0x1);
+          c_ah_brlat     = ah_brlat_top->aval & 0x3;	// 4 bits	// FIXME: warning says the valid values are only 1 & 3, therefore changing the mask to 0x3
+          c_ah_jyield    = (ah_jyield & 0x2) ? 0 : (ah_jyield & 0x1);
+          c_ah_tbreq     = (ah_tbreq_top & 0x2) ? 0 : (ah_tbreq_top & 0x1);
+          c_ah_paren     = (ah_paren_top & 0x2) ? 0 : (ah_paren_top & 0x1);
   	  change = test_change(event.job_done, c_ah_jdone, "jdone");
 	  if (change && (c_ah_jerror != 0x0))
 		info_message("jerror=0x%016llx\n", (long long)c_ah_jerror);
-	  change += test_change(event.job_running, ah_jrunning_top, "jrunning");
+	  change += test_change(event.job_running, c_ah_jrunning, "jrunning");
 	  change += test_change(event.job_cack_llcmd, c_ah_jcack, "jcack");
 	  change += test_change(event.job_yield, c_ah_jyield, "jyield");
 	  change += test_change(event.timebase_request, c_ah_tbreq, "jtbreq");
@@ -554,11 +555,11 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 				    c_ah_jyield, c_ah_tbreq, c_ah_paren, c_ah_brlat);
 	// Replication of aux2 method - ends
 	// Replication of the mmio method - start
-	  c_ah_mmack = (ah_mmack_top & 0x1);
+	  c_ah_mmack = (ah_mmack_top & 0x2) ? 0 : (ah_mmack_top & 0x1);
 	  if(c_ah_mmack)
           {
             getMy64Bit(ah_mmdata_top, &c_ah_mmrdata);
-            c_ah_mmrdatapar = (ah_mmdatapar_top & 0x1);
+            c_ah_mmrdatapar = (ah_mmdatapar_top & 0x2) ? 0 : (ah_mmdatapar_top & 0x1);
             psl_afu_mmio_ack(&event, c_ah_mmrdata, c_ah_mmrdatapar);
           }
 	// Replication of the mmio method - ends
@@ -676,11 +677,11 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	  if(c_ah_cvalid == sv_1) 
 	  {
 	    c_ah_ctag    = (ah_ctag_top->aval) & 0xFF;	// 8 bits
-	    c_ah_ctagpar = (ah_ctagpar_top & 0x1);
-	    c_ah_ccompar = (ah_compar_top & 0x1);
+	    c_ah_ctagpar = (ah_ctagpar_top & 0x2) ? 0 : (ah_ctagpar_top & 0x1);
+	    c_ah_ccompar = (ah_compar_top & 0x2) ? 0 : (ah_compar_top & 0x1);
 	    c_ah_ccom    = (ah_com_top->aval) & 0x1FFF;	// 13 bits
             getMy64Bit(ah_cea_top, &c_ah_cea);
-	    c_ah_ceapar  = (ah_ceapar_top & 0x1);
+	    c_ah_ceapar  = (ah_ceapar_top & 0x2) ? 0 : (ah_ceapar_top & 0x1);
 	    c_ah_csize   = (ah_csize_top->aval) & 0xFFF;	// 12 bits
 	    c_ah_cabt    = (ah_cabt_top->aval) & 0x7;		// 3 bits
 	    c_ah_cch     = (ah_cch_top->aval) & 0xFFFF;		// 16 bits
