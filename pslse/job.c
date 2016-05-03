@@ -90,7 +90,8 @@ struct job_event *add_pe(struct job *job, uint32_t code, uint64_t addr)
 		   job->afu_name, job->dbg_id, event, tail );
 	
 	// DEBUG
-	debug_job_add(job->dbg_fp, job->dbg_id, event->code);
+	//debug_job_add(job->dbg_fp, job->dbg_id, event->code);
+	debug_pe_add(job->dbg_fp, job->dbg_id, event->code, addr);
 
 	return event;
 }
@@ -141,7 +142,8 @@ void send_pe(struct job *job)
 		          event->code, event->addr);
 
 	         // DEBUG
-	         debug_job_send(job->dbg_fp, job->dbg_id, event->code);
+	         //debug_job_send(job->dbg_fp, job->dbg_id, event->code);
+	         debug_pe_send(job->dbg_fp, job->dbg_id, event->code, event->addr);
 	      }
 	      return;
 	   default:

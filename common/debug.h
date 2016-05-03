@@ -45,6 +45,8 @@ typedef uint8_t DBG_HEADER;
 #define DBG_HEADER_CMD_BUFFER_WRITE 	0x14
 #define DBG_HEADER_CMD_BUFFER_READ 	0x15
 #define DBG_HEADER_CMD_RESPONSE    	0x16
+#define DBG_HEADER_PE_ADD		0x18
+#define DBG_HEADER_PE_SEND		0x19
 
 #define DBG_AUX2_DONE			0x80
 #define DBG_AUX2_RUNNING		0x40
@@ -88,6 +90,8 @@ void debug_context_remove(FILE * fp, uint8_t id, uint16_t context);
 void debug_job_add(FILE * fp, uint8_t id, uint32_t code);
 void debug_job_send(FILE * fp, uint8_t id, uint32_t code);
 void debug_job_aux2(FILE * fp, uint8_t id, uint8_t aux2);
+void debug_pe_add(FILE * fp, uint8_t id, uint32_t code, uint64_t addr);
+void debug_pe_send(FILE * fp, uint8_t id, uint32_t code, uint64_t addr);
 void debug_parm(FILE * fp, uint32_t parm, uint32_t value);
 void debug_mmio_map(FILE * fp, uint8_t id, uint16_t context);
 void debug_mmio_add(FILE * fp, uint8_t id, uint16_t context, uint8_t rnw,

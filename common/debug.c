@@ -131,6 +131,8 @@ static void _debug_send_32_32(FILE * fp, DBG_HEADER header, uint32_t value0,
 	}
 }
 
+
+
 static void _debug_send_id_8_16(FILE * fp, DBG_HEADER header, uint8_t id,
 				uint8_t value0, uint16_t value1)
 {
@@ -155,6 +157,33 @@ static void _debug_send_id_8_16(FILE * fp, DBG_HEADER header, uint8_t id,
 		free(buffer);
 	}
 }
+
+static void _debug_send_id_32_64(FILE * fp, DBG_HEADER header, uint8_t id,
+				uint32_t value0, uint64_t value1)
+{
+	char *buffer;
+	size_t size;
+	int offset;
+
+	offset = 0;
+	header = adjust_header(header);
+	size =
+	    sizeof(DBG_HEADER) + sizeof(id) + sizeof(value0) + sizeof(value1);
+	if ((buffer = (char *)malloc(size)) != NULL) {
+		memcpy(buffer, (char *)&header, sizeof(DBG_HEADER));
+		offset += sizeof(header);
+		buffer[offset] = id;
+		offset += sizeof(id);
+		value0 = htonl(value0);
+		memcpy(buffer + offset, (char *)&value0, sizeof(value0));
+		offset += sizeof(value0);
+		value1 = htonll(value1);
+		memcpy(buffer + offset, (char *)&value1, sizeof(value1));
+		fwrite(buffer, size, 1, fp);
+		free(buffer);
+	}
+}
+
 
 static void _debug_send_id_8_16_16(FILE * fp, DBG_HEADER header, uint8_t id,
 				   uint8_t value0, uint16_t value1,
@@ -311,6 +340,16 @@ void debug_job_add(FILE * fp, uint8_t id, uint32_t code)
 void debug_job_send(FILE * fp, uint8_t id, uint32_t code)
 {
 	_debug_send_id_32(fp, DBG_HEADER_JOB_SEND, id, code);
+}
+
+void debug_pe_add(FILE * fp, uint8_t id, uint32_t code, uint64_t addr)
+{
+	_debug_send_id_32_64(fp, DBG_HEADER_PE_ADD, id, code, addr);
+}
+
+void debug_pe_send(FILE * fp, uint8_t id, uint32_t code, uint64_t addr)
+{
+	_debug_send_id_32_64(fp, DBG_HEADER_PE_SEND, id, code, addr);
 }
 
 void debug_job_aux2(FILE * fp, uint8_t id, uint8_t aux2)
