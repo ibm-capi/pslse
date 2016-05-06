@@ -601,7 +601,7 @@ static void *_psl_loop(void *ptr)
 			break;
 		case PSLSE_QUERY: {
 			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) +
-			    sizeof(uint64_t) + sizeof(uint64_t) + sizeof(size_t) +  
+			    sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +  
                             sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t);
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
 			    0) {
@@ -609,18 +609,19 @@ static void *_psl_loop(void *ptr)
 				_all_idle(afu);
 				break;
 			}
-			memcpy((char *)&value, (char *)&(buffer[1]), 2);
-			afu->irqs_min = (long)ntohs(value);
-			memcpy((char *)&value, (char *)&(buffer[3]), 2);
-			afu->irqs_max = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[5]), 2);
-			afu->modes_supported = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[7]), 8);
-			afu->mmio_len = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[15]), 8);
-			afu->mmio_off = (long)ntohs(value);
-                	memcpy((char *)&value, (char *)&(buffer[23]), 8);
-			afu->eb_len = (long)ntohs(value);
+			memcpy((char *)&value, (char *)&(buffer[0]), 2);
+			afu->irqs_min = (long)(value);
+			memcpy((char *)&value, (char *)&(buffer[2]), 2);
+			afu->irqs_max = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[4]), 2);
+			afu->modes_supported = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[6]), 8);
+			afu->mmio_len = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[14]), 8);
+			afu->mmio_off = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[22]), 8);
+			//afu->eb_len = (long)ntohll(value);
+			afu->eb_len = (long)(value);
                 	memcpy((char *)&value, (char *)&(buffer[30]), 2);
 			afu->cr_device = (long)ntohs(value);
                         memcpy((char *)&value, (char *)&(buffer[32]), 2);
@@ -1426,19 +1427,41 @@ int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 
 int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if (!afu) {
+		warn_msg("cxl_get_irqs_max: No AFU given");
+		errno = ENODEV;
 		return -1;
+	}
 	*valp = afu->irqs_max;
 	return 0;
 }
 
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if (!afu) {
+		warn_msg("cxl_get_irqs_min: No AFU given");
+		errno = ENODEV;
 		return -1;
+	}
 	*valp = afu->irqs_min;
 	return 0;
 }
+
+int cxl_set_irqs_max(struct cxl_afu_h *afu, long value)
+{
+	if (!afu) {
+		warn_msg("cxl_set_irqs_max: No AFU given");
+		errno = ENODEV;
+		return -1;
+	}
+	if (value > afu->irqs_max)
+	 	warn_msg("cxl_set_irqs_max: value is greater than limit, ignoring \n");
+	else
+		afu->irqs_max = value;
+	//TODO	 Send the new irqs_max value back to psl's client struct
+	return 0;
+}
+
 
 int cxl_event_pending(struct cxl_afu_h *afu)
 {
