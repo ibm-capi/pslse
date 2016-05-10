@@ -27,7 +27,6 @@
 
 #define CLOCK_EDGE_DELAY 2
 #define CACHELINE_BYTES 128
-#define DEBUG
 
 struct resp_event {
 	uint32_t tag;
@@ -42,6 +41,7 @@ struct resp_event {
 static unsigned int bw_delay;
 static struct AFU_EVENT event;
 static struct resp_event *resp_list;
+#ifdef OLD_PLI_CODE
 static vpiHandle pclock;
 static vpiHandle jval, jcom, jcompar, jea, jeapar, jrunning, jdone, jcack,
     jerror, latency, jyield, timebase_req, parity_enabled;
@@ -53,6 +53,8 @@ static vpiHandle brval, brtag, brtagpar, brdata, brpar, brvalid_out, brtag_out,
     brlat;
 static vpiHandle bwval, bwtag, bwtagpar, bwdata, bwpar;
 static vpiHandle rval, rtag, rtagpar, resp, rcredits;
+#endif
+
 static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
 // Added New
         int c_ha_jval;
@@ -115,6 +117,7 @@ static long long get_time()
 	return (long long)long_time;
 }
 
+#ifdef OLD_PLI_CODE
 static void set_signal32(vpiHandle signal, uint32_t data)
 {
 	s_vpi_value value;
@@ -122,6 +125,7 @@ static void set_signal32(vpiHandle signal, uint32_t data)
 	value.value.integer = data;
 	vpi_put_value(signal, &value, NULL, vpiNoDelay);
 }
+#endif
 /*
 static void set_signal64(vpiHandle signal, uint64_t data)
 {
@@ -220,6 +224,7 @@ static void get_signal_long(vpiHandle signal, uint8_t * data)
 //  return vpi_register_cb(&cb);
 //}
 
+#ifdef OLD_PLI_CODE
 static vpiHandle set_callback_signal(void *func, vpiHandle signal)
 {
 	s_vpi_time time;
@@ -238,7 +243,7 @@ static vpiHandle set_callback_signal(void *func, vpiHandle signal)
 	cb.user_data = 0;
 	return vpi_register_cb(&cb);
 }
-
+#endif
 static vpiHandle set_callback_event(void *func, int event)
 {
 	s_cb_data cb;
@@ -517,7 +522,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
              svLogicVecVal *ha_mmad_top, 		//24 bits
              svLogic *ha_mmadpar_top, 
              svLogicVecVal *ha_mmdata_top, 		// 64 bits
-             svLogic *ha_mmdatapar_top,
+             svLogic *ha_mmdatapar_top,				
              svLogic *ha_bwvalid_top, 
              svLogicVecVal *ha_bwtag_top, 		// 8 bits
              svLogic *ha_bwtagpar_top,
@@ -525,7 +530,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
              svLogicVecVal *ha_bwpar_top,		// 16 bits
              svLogic *ha_rvalid_top, 
              svLogicVecVal *ha_rtag_top, 		// 8 bits
-             svLogic *ha_rtagpar_top,
+             svLogic *ha_rtagpar_top,				
              svLogicVecVal *ha_response_top, 		// 8 bits
              svLogicVecVal *ha_rcredits_top		// 9 bits
              )
@@ -565,7 +570,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	// Replication of the mmio method - ends
 	// Replication of buffer_read method - start
 	  change = 0;
-	  c_ah_brvalid  = (ah_brvalid_top & 0x1);
+	  c_ah_brvalid  = (ah_brvalid_top & 0x2) ? 0 : (ah_brvalid_top & 0x1);
           if(c_ah_brvalid == sv_1)
           {
 //	    printf("Command Valid: ah_brvalid=%d\n", c_ah_brvalid);
@@ -605,7 +610,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal32(ha_mmad_top, event.mmio_address, 24);
 	  *ha_mmadpar_top = event.mmio_address_parity;
 	  setDpiSignal64(ha_mmdata_top, event.mmio_wdata);
-	  *mmwdatapar = event.mmio_wdata_parity;
+	  *ha_mmdatapar_top = event.mmio_wdata_parity;
 	  *ha_mmcfg_top = event.mmio_afudescaccess;
 	  *ha_mmval_top = 1;
 	  info_message("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
@@ -649,7 +654,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
         {
 	// Replicating	set_response() function
 	  setDpiSignal32(ha_rtag_top, resp_list->tag, 8);
-	  *rtagpar = resp_list->tagpar;
+	  *ha_rtagpar_top = resp_list->tagpar;
 	  setDpiSignal32(ha_response_top, resp_list->code, 8);
 	  setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
 	  *ha_rvalid_top = 1;
@@ -673,7 +678,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 		event.aux1_change = 0;
 	}
 	// Replication of acceleartor command interface starts
-	  c_ah_cvalid = ah_cvalid_top;
+	  c_ah_cvalid = (ah_cvalid_top & 0x2) ? 0 : (ah_cvalid_top & 0x1);
 	  if(c_ah_cvalid == sv_1) 
 	  {
 	    c_ah_ctag    = (ah_ctag_top->aval) & 0xFF;	// 8 bits
@@ -777,7 +782,8 @@ void setDpiSignal32(svLogicVecVal *my32bSignal, uint32_t inData, int size)
   my32bSignal->aval = inData & myMask;
   my32bSignal->bval = 0x0;
 }
-
+#ifdef OLD_PLI_CODE
+// kept here for reference
 PLI_INT32 register_clock()
 {
 	vpiHandle systfref, argsiter;
@@ -925,6 +931,7 @@ PLI_INT32 clear_rval()
 	set_signal32(rval, 0);
 	return 0;
 }
+#endif
 
 // AFU abstraction functions
 /*
@@ -1151,6 +1158,7 @@ void registerAfuInitSystfs()
 	vpi_register_systf(task_data_p);
 }
 
+#ifdef OLD_PLI_CODE
 void registerRegClockSystfs()
 {
 	s_vpi_systf_data task_data_s;
@@ -1231,3 +1239,4 @@ void registerRegResponseSystfs()
 void (*vlog_startup_routines[]) () = {
 	registerAfuInitSystfs, registerRegClockSystfs, registerRegControlSystfs, registerRegMmioSystfs, registerRegCommandSystfs, registerRegRdBufferSystfs, registerRegWrBufferSystfs, registerRegResponseSystfs, 0	// last entry must be 0
 };
+#endif
