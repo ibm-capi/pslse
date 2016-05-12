@@ -536,13 +536,19 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
              )
 {
 	int change = 0;
+	int invalidVal = 0;
 	if ( ha_pclock == sv_0 ) {
 	// Replication of aux2 method
 	  c_ah_jrunning  = (ah_jrunning_top & 0x2) ? 0 : (ah_jrunning_top & 0x1);
           c_ah_jdone     = (ah_jdone_top & 0x2) ? 0 : (ah_jdone_top & 0x1);
           c_ah_jcack     = (ah_jcack_top & 0x2) ? 0 : (ah_jcack_top & 0x1);
-          getMy64Bit(ah_jerror_top, &c_ah_jerror);
+          invalidVal = getMy64Bit(ah_jerror_top, &c_ah_jerror);
+//          if(invalidVal)
+//		info_message("jerror has either X or Z value =0x%016llx\n", (long long)c_ah_jerror);
           c_ah_brlat     = ah_brlat_top->aval & 0x3;	// 4 bits	// FIXME: warning says the valid values are only 1 & 3, therefore changing the mask to 0x3
+          invalidVal     = ah_brlat_top->bval & 0x3;	
+          if(invalidVal)
+		info_message("ah_brlat_top has either X or Z value =0x%08llx\n", (long long)c_ah_brlat);
           c_ah_jyield    = (ah_jyield & 0x2) ? 0 : (ah_jyield & 0x1);
           c_ah_tbreq     = (ah_tbreq_top & 0x2) ? 0 : (ah_tbreq_top & 0x1);
           c_ah_paren     = (ah_paren_top & 0x2) ? 0 : (ah_paren_top & 0x1);
@@ -563,7 +569,9 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	  c_ah_mmack = (ah_mmack_top & 0x2) ? 0 : (ah_mmack_top & 0x1);
 	  if(c_ah_mmack)
           {
-            getMy64Bit(ah_mmdata_top, &c_ah_mmrdata);
+            invalidVal = getMy64Bit(ah_mmdata_top, &c_ah_mmrdata);
+            if(invalidVal)
+		info_message("ah_mmdata has either X or Z value =0x%016llx\n", (long long)c_ah_mmrdata);
             c_ah_mmrdatapar = (ah_mmdatapar_top & 0x2) ? 0 : (ah_mmdatapar_top & 0x1);
             psl_afu_mmio_ack(&event, c_ah_mmrdata, c_ah_mmrdatapar);
           }
@@ -575,7 +583,13 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
           {
 //	    printf("Command Valid: ah_brvalid=%d\n", c_ah_brvalid);
             c_ah_brtag    = (ah_brtag_top->aval) & 0xFF;	// 8 bits
+            invalidVal     = ah_brtag_top->bval & 0xFF;	
+          if(invalidVal)
+		info_message("ah_brtag_top has either X or Z value =0x%08llx\n", (long long)c_ah_brtag);
             c_ah_brpar    = (ah_brpar_top->aval) & 0xFFFF;	// 16 bits
+            invalidVal     = ah_brpar_top->bval & 0xFF;	
+          if(invalidVal)
+		info_message("ah_brpar_top has either X or Z value =0x%08llx\n", (long long)c_ah_brpar);
 	    uint16_t parity16;
 	    parity16 = (uint16_t) c_ah_brpar;
 	    parity16 = htons(parity16);		// FIXME: compare with the orignal usage
@@ -610,7 +624,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal32(ha_mmad_top, event.mmio_address, 24);
 	  *ha_mmadpar_top = event.mmio_address_parity;
 	  setDpiSignal64(ha_mmdata_top, event.mmio_wdata);
-	  *ha_mmdatapar_top = event.mmio_wdata_parity;
+	  *ha_mmdatapar_top = (event.mmio_wdata_parity) & 0x1;		// 2016/05/11: UMA: checking whether ensuring bval is set always to 0b0 solves the MMIO parity error which is coming up
 	  *ha_mmcfg_top = event.mmio_afudescaccess;
 	  *ha_mmval_top = 1;
 	  info_message("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
@@ -685,7 +699,9 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 	    c_ah_ctagpar = (ah_ctagpar_top & 0x2) ? 0 : (ah_ctagpar_top & 0x1);
 	    c_ah_ccompar = (ah_compar_top & 0x2) ? 0 : (ah_compar_top & 0x1);
 	    c_ah_ccom    = (ah_com_top->aval) & 0x1FFF;	// 13 bits
-            getMy64Bit(ah_cea_top, &c_ah_cea);
+            invalidVal = getMy64Bit(ah_cea_top, &c_ah_cea);
+            if(invalidVal)
+		info_message("ah_cea has either X or Z value =0x%016llx\n", (long long)c_ah_cea);
 	    c_ah_ceapar  = (ah_ceapar_top & 0x2) ? 0 : (ah_ceapar_top & 0x1);
 	    c_ah_csize   = (ah_csize_top->aval) & 0xFFF;	// 12 bits
 	    c_ah_cabt    = (ah_cabt_top->aval) & 0x7;		// 3 bits
@@ -740,12 +756,12 @@ static int getMy64Bit(const svLogicVecVal *my64bSignal, uint64_t *conv64bit)
   msb32_bval = (my64bSignal+1)->bval;
   lsb32_aval =  my64bSignal->aval;
   msb32_aval = (my64bSignal+1)->aval;
-    printf("msb32_aval=%08x, lsb32_aval=%08x\n", msb32_aval, lsb32_aval); 
-    printf("msb32_bval=%08x, lsb32_bval=%08x\n", msb32_bval, lsb32_bval); 
+//    printf("msb32_aval=%08x, lsb32_aval=%08x\n", msb32_aval, lsb32_aval); 
+//    printf("msb32_bval=%08x, lsb32_bval=%08x\n", msb32_bval, lsb32_bval); 
  
   *conv64bit = ((uint64_t) msb32_aval <<32) | (uint64_t) lsb32_aval;
-    printf("conv64bit = %llx\n", (long long) *conv64bit);
-  if(!lsb32_bval && !msb32_bval){ return 0;}
+//    printf("conv64bit = %llx\n", (long long) *conv64bit);
+  if((lsb32_bval | msb32_bval) == 0){ return 0;}
   return 1;
 }
 
