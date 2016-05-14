@@ -480,59 +480,59 @@ PLI_INT32 clock_edge()
 	return 0;
 }
 
-void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
-                   svLogic *ha_jval_top, 
-	     svLogicVecVal *ha_jcom_top, 	// 8 bits
-                   svLogic *ha_jcompar_top, 
-                   svLogicVecVal *ha_jea_top,	// 64 bits
-	     svLogic *ha_jeapar_top,  
-                   const svLogic ah_jrunning_top,  
-                   const svLogic ah_jdone_top,
-	     const svLogic ah_jcack_top, 
-                   svLogicVecVal *ah_jerror_top, 	// 64 bits
-                   svLogicVecVal *ah_brlat_top,  	// 4 bits
-                   const svLogic ah_jyield,
-	     const svLogic ah_tbreq_top,  
-                   const svLogic ah_paren_top, 
-             const svLogic ah_cvalid_top, 
-                   const svLogicVecVal *ah_ctag_top, 		// 8 bits
-                   const svLogic ah_ctagpar_top, 
-                   const svLogicVecVal *ah_com_top, 		//13 bits
-                   const svLogic ah_compar_top, 
+void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
+                   svLogic       *ha_jval_top, 
+	     svLogicVecVal       *ha_jcom_top, 	// 8 bits
+                   svLogic       *ha_jcompar_top, 
+             svLogicVecVal       *ha_jea_top,	// 64 bits
+	           svLogic       *ha_jeapar_top,  
+             const svLogic       ah_jrunning_top,  
+             const svLogic       ah_jdone_top,
+	     const svLogic       ah_jcack_top, 
+             svLogicVecVal       *ah_jerror_top, 	// 64 bits
+             svLogicVecVal       *ah_brlat_top,  	// 4 bits
+             const svLogic       ah_jyield,
+	     const svLogic       ah_tbreq_top,  
+             const svLogic       ah_paren_top, 
+             svLogic             *ha_mmval_top,
+             svLogic             *ha_mmcfg_top, 
+             svLogic             *ha_mmrnw_top, 
+             svLogic             *ha_mmdw_top,
+             svLogicVecVal       *ha_mmad_top, 		//24 bits
+             svLogic             *ha_mmadpar_top, 
+             svLogicVecVal       *ha_mmdata_top, 		// 64 bits
+             svLogic             *ha_mmdatapar_top,				
+             const svLogic       ah_mmack_top, 
+             const svLogicVecVal *ah_mmdata_top, 		// 64 bits
+             const svLogic       ah_mmdatapar_top,
+             svLogicVecVal       *ha_croom_top,			// 8 bits
+             const svLogic       ah_cvalid_top, 
+             const svLogicVecVal *ah_ctag_top, 		// 8 bits
+             const svLogic       ah_ctagpar_top, 
+             const svLogicVecVal *ah_com_top, 		//13 bits
+             const svLogic       ah_compar_top, 
+             const svLogicVecVal *ah_cabt_top, 		// 3 bits
              const svLogicVecVal *ah_cea_top, 			// 64 bits
-                   const svLogic ah_ceapar_top, 
-                   const svLogicVecVal *ah_csize_top, 		//12 bits
-                   const svLogicVecVal *ah_cabt_top, 		// 3 bits
-                   const svLogicVecVal *ah_cch_top, 		// 16 bits
-                   svLogicVecVal *ha_croom_top,			// 8 bits
-             svLogic *ha_brvalid_top,
-                   svLogicVecVal *ha_brtag_top, 		// 8 bits
-                   svLogic *ha_brtagpar_top, 
-                   const svLogicVecVal *ah_brdata_top, 		// 1024 bits
-                   const svLogicVecVal *ah_brpar_top, 		// 16 bits
-             const svLogic ah_brvalid_top, 
-                   const svLogicVecVal *ah_brtag_top,		// 8 bits
-             const svLogic ah_mmack_top, 
-                   const svLogicVecVal *ah_mmdata_top, 		// 64 bits
-                   const svLogic ah_mmdatapar_top,
-             svLogic *ha_mmval_top,
-             svLogic *ha_mmcfg_top, 
-             svLogic *ha_mmrnw_top, 
-             svLogic *ha_mmdw_top,
-             svLogicVecVal *ha_mmad_top, 		//24 bits
-             svLogic *ha_mmadpar_top, 
-             svLogicVecVal *ha_mmdata_top, 		// 64 bits
-             svLogic *ha_mmdatapar_top,				
-             svLogic *ha_bwvalid_top, 
-             svLogicVecVal *ha_bwtag_top, 		// 8 bits
-             svLogic *ha_bwtagpar_top,
-             svLogicVecVal *ha_bwdata_top, 		// 1024 bits
-             svLogicVecVal *ha_bwpar_top,		// 16 bits
-             svLogic *ha_rvalid_top, 
-             svLogicVecVal *ha_rtag_top, 		// 8 bits
-             svLogic *ha_rtagpar_top,				
-             svLogicVecVal *ha_response_top, 		// 8 bits
-             svLogicVecVal *ha_rcredits_top		// 9 bits
+             const svLogic       ah_ceapar_top, 
+             const svLogicVecVal *ah_cch_top, 		// 16 bits
+             const svLogicVecVal *ah_csize_top, 		//12 bits
+             svLogic             *ha_brvalid_top,
+             svLogicVecVal       *ha_brtag_top, 		// 8 bits
+                   svLogic       *ha_brtagpar_top, 
+             const svLogicVecVal *ah_brdata_top, 		// 1024 bits
+             const svLogicVecVal *ah_brpar_top, 		// 16 bits
+             const svLogic       ah_brvalid_top, 
+             const svLogicVecVal *ah_brtag_top,		// 8 bits
+             svLogic             *ha_bwvalid_top, 
+             svLogicVecVal       *ha_bwtag_top, 		// 8 bits
+             svLogic             *ha_bwtagpar_top,
+             svLogicVecVal       *ha_bwdata_top, 		// 1024 bits
+             svLogicVecVal       *ha_bwpar_top,		// 16 bits
+             svLogic             *ha_rvalid_top, 
+             svLogicVecVal       *ha_rtag_top, 		// 8 bits
+             svLogic             *ha_rtagpar_top,				
+             svLogicVecVal       *ha_response_top, 		// 8 bits
+             svLogicVecVal       *ha_rcredits_top		// 9 bits
              )
 {
 	int change = 0;
@@ -592,7 +592,7 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
 		info_message("ah_brpar_top has either X or Z value =0x%08llx\n", (long long)c_ah_brpar);
 	    uint16_t parity16;
 	    parity16 = (uint16_t) c_ah_brpar;
-	    parity16 = htons(parity16);		// FIXME: compare with the orignal usage
+	    parity16 = htons(parity16);		
             getMyCacheLine(ah_brdata_top, c_ah_brdata);
 	    psl_afu_read_buffer_data(&event, CACHELINE_BYTES, c_ah_brdata,
 				 (uint8_t *) & parity16);
@@ -713,35 +713,35 @@ void psl_bfm(const svLogic ha_pclock, 		// used as pclock on PLI
   	    psl_afu_command(&event, c_ah_ctag, c_ah_ctagpar, c_ah_ccom, c_ah_ccompar, c_ah_cea, c_ah_ceapar, c_ah_csize,
 	 		   c_ah_cabt, c_ah_cch);
 	  }
-	// Replication of acceleartor command interface ends
-	// Copying over the rest of the assignments from the clock_edge function
+	  // Replication of acceleartor command interface ends
+	  // Copying over the rest of the assignments from the clock_edge function
+	  if (cl_jval) {
+	  	--cl_jval;
+	  	if (!cl_jval)
+	  		*ha_jval_top = 0;
+	  }
+	  if (cl_mmio) {
+	  	--cl_mmio;
+	  	if (!cl_mmio)
+	  		*ha_mmval_top = 0;
+	  }
+	  if (cl_br) {
+	  	--cl_br;
+	  	if (!cl_br)
+	  		*ha_brvalid_top = 0;
+	  }
+	  if (cl_bw) {
+	  	--cl_bw;
+	  	if (!cl_bw)
+	  		*ha_bwvalid_top = 0;
+	  }
+	  if (cl_rval) {
+	  	--cl_rval;
+	  	if (!cl_rval)
+	  		*ha_rvalid_top = 0;
+	  }
+	  return;
         }
-	if (cl_jval) {
-		--cl_jval;
-		if (!cl_jval)
-			*ha_jval_top = 0;
-	}
-	if (cl_mmio) {
-		--cl_mmio;
-		if (!cl_mmio)
-			*ha_mmval_top = 0;
-	}
-	if (cl_br) {
-		--cl_br;
-		if (!cl_br)
-			*ha_brvalid_top = 0;
-	}
-	if (cl_bw) {
-		--cl_bw;
-		if (!cl_bw)
-			*ha_bwvalid_top = 0;
-	}
-	if (cl_rval) {
-		--cl_rval;
-		if (!cl_rval)
-			*ha_rvalid_top = 0;
-	}
-	return;
 }
 
 // Setup & facility functions
@@ -765,16 +765,26 @@ static int getMy64Bit(const svLogicVecVal *my64bSignal, uint64_t *conv64bit)
   return 1;
 }
 
+// The getMyCacheLine is a more specific version of the PLI function
+// get_signal_long. In here, we are specifically doing the conversion of 1024
+// bit long vector to 128 byte cacheline buffer. On VPI as well as DPI, the
+// 1024 bit vector is returned as array of 32bit entries. ie, array[0] will
+// contain the aval for bits [992:1023]. The PSLSE demands that the first
+// entry of the array has bits [0:31], hence we do a reversal of that array
+// the htonl std lib function will ensure that the byte ordering is maintained
+// based on the endianness of the processor
 int getMyCacheLine(const svLogicVecVal *myLongSignal, uint8_t myCacheData[CACHELINE_BYTES])
 {
-   int i;
+   int i, j;
   //uint32_t get32aval, get32bval;
   uint8_t errorVal = 0;
   uint32_t *p32BitCacheWords = (uint32_t*)myCacheData;
   for(i=0; i <(CACHELINE_BYTES/4 ); i++)
   {
+    j = (CACHELINE_BYTES/4 ) - (i + 1);
     if(myLongSignal[i].bval !=0){ errorVal=1; }
-    p32BitCacheWords[i] = myLongSignal[i].aval; 
+    p32BitCacheWords[j] = myLongSignal[i].aval; 
+    p32BitCacheWords[j] = htonl(p32BitCacheWords[j]);
   }
   if(errorVal!=0){return 1;}
   return 0;
