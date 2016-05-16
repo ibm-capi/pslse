@@ -653,6 +653,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  parity = (uint32_t) event.buffer_wparity[0];
 	  parity <<= 8;
 	  parity += (uint32_t) event.buffer_wparity[1];
+          parity = htons((uint16_t) parity);
 	  setDpiSignal32(ha_bwtag_top, event.buffer_write_tag, 8);
 	  *ha_bwtagpar_top = event.buffer_write_tag_parity;
 	  setMyCacheLine(ha_bwdata_top, event.buffer_wdata);
@@ -792,13 +793,14 @@ int getMyCacheLine(const svLogicVecVal *myLongSignal, uint8_t myCacheData[CACHEL
 
 void setMyCacheLine(svLogicVecVal *myLongSignal, uint8_t myCacheData[CACHELINE_BYTES])
 {
-   int i;
+   int i, j;
   //uint32_t get32aval, get32bval;
   uint32_t *p32BitCacheWords = (uint32_t*)myCacheData;
   for(i=0; i <(CACHELINE_BYTES/4 ); i++)
   {
-     myLongSignal[i].aval = p32BitCacheWords[i]; 
-     myLongSignal[i].bval = 0;
+    j = (CACHELINE_BYTES/4 ) - (i + 1);
+    myLongSignal[j].aval = htonl(p32BitCacheWords[i]); 
+    myLongSignal[j].bval = 0;
   }
 }
 
