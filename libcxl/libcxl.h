@@ -32,6 +32,7 @@
  */
 struct cxl_adapter_h;
 struct cxl_afu_h;
+struct cxl_ioctl_start_work;
 
 /*
  * Adapter Enumeration
@@ -92,9 +93,22 @@ int cxl_afu_opened(struct cxl_afu_h *afu);
 /*
  * Attach AFU context to this process
  */
+struct cxl_ioctl_start_work *cxl_work_alloc(void);
+int cxl_work_free(struct cxl_ioctl_start_work *work);
+int cxl_work_get_amr(struct cxl_ioctl_start_work *work, __u64 *valp);
+int cxl_work_get_num_irqs(struct cxl_ioctl_start_work *work, __s16 *valp);
+int cxl_work_get_wed(struct cxl_ioctl_start_work *work, __u64 *valp);
+int cxl_work_set_amr(struct cxl_ioctl_start_work *work, __u64 amr);
+int cxl_work_set_num_irqs(struct cxl_ioctl_start_work *work, __s16 num_irqs);
+int cxl_work_set_wed(struct cxl_ioctl_start_work *work, __u64 wed);
+
+int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed);
+int cxl_afu_attach_work(struct cxl_afu_h *afu,
+			struct cxl_ioctl_start_work *work);
+
+/* Deprecated interface */
 int cxl_afu_attach_full(struct cxl_afu_h *afu, uint64_t wed,
 			uint16_t num_interrupts, uint64_t amr);
-int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed);
 
 /*
  * Get AFU process element
@@ -209,7 +223,12 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
  *
  * Call this once per process prior to any MMIO accesses.
  */
-//int cxl_mmio_install_sigbus_handler();
+//use JK's temp fix for this
+static inline int cxl_mmio_install_sigbus_handler(void)
+{
+/* nothing to be done yet */
+return 0;
+}
 int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp);
 int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp);
 int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp);

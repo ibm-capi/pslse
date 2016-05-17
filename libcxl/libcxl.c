@@ -1411,7 +1411,7 @@ int cxl_afu_fd(struct cxl_afu_h *afu)
 
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if ((afu == NULL) || (!afu->opened))
 		return -1;
 	*valp = API_VERSION;
 	return 0;
@@ -1419,7 +1419,7 @@ int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
 
 int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if ((afu == NULL) || (!afu->opened))
 		return -1;
 	*valp = API_VERSION_COMPATIBLE;
 	return 0;
@@ -1904,4 +1904,107 @@ int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp)
         return 0;
 }
 
+inline
+int cxl_afu_attach_work(struct cxl_afu_h *afu,
+			struct cxl_ioctl_start_work *work)
+{
+	if (afu == NULL ||  work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	afu->int_req.max = work->num_interrupts;
+;
+	return cxl_afu_attach(afu, work->work_element_descriptor);
+}
+
+inline
+struct cxl_ioctl_start_work *cxl_work_alloc()
+{
+	return calloc(1, sizeof(struct cxl_ioctl_start_work));
+}
+
+inline
+int cxl_work_free(struct cxl_ioctl_start_work *work)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	free(work);
+	return 0;
+}
+
+inline
+int cxl_work_get_amr(struct cxl_ioctl_start_work *work, __u64 *valp)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	*valp = work->amr;
+	return 0;
+}
+
+inline
+int cxl_work_get_num_irqs(struct cxl_ioctl_start_work *work, __s16 *valp)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	*valp = work->num_interrupts;
+	return 0;
+}
+
+inline
+int cxl_work_get_wed(struct cxl_ioctl_start_work *work, __u64 *valp)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	*valp = work->work_element_descriptor;
+	return 0;
+}
+
+inline
+int cxl_work_set_amr(struct cxl_ioctl_start_work *work, __u64 amr)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	work->amr = amr;
+	if (amr)
+		work->flags |= CXL_START_WORK_AMR;
+	else
+		work->flags &= ~(CXL_START_WORK_AMR);
+	return 0;
+}
+
+inline
+int cxl_work_set_num_irqs(struct cxl_ioctl_start_work *work, __s16 irqs)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	work->num_interrupts = irqs;
+	if (irqs >= 0)
+		work->flags |= CXL_START_WORK_NUM_IRQS;
+	else
+		work->flags &= ~(CXL_START_WORK_NUM_IRQS);
+	return 0;
+}
+
+inline
+int cxl_work_set_wed(struct cxl_ioctl_start_work *work, __u64 wed)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	work->work_element_descriptor = wed;
+	return 0;
+}
 

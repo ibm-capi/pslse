@@ -320,6 +320,19 @@ AFU::resolve_control_event ()
             if ((afu_event.job_address & 0xFFFF) == 0) {
                 machine_controller = context_to_mc[0];
                 highest_priority_mc = context_to_mc.end ();
+		printf("PSL_LLCMD_ADD create new Machine Controller\n");
+            }
+	    printf("afu_event.job_cack_llcmd = %d\n", afu_event.job_cack_llcmd);
+	    // set job acknowledge
+	    afu_event.job_cack_llcmd = 1;
+	    debug_msg("PSL_LLCMD_ADD");
+	    // signal job_cack_back to PSL
+	    if (psl_afu_aux2_change
+		(&afu_event, afu_event.job_running, afu_event.job_done, 1,
+		afu_event.job_error, afu_event.job_yield,
+		afu_event.timebase_request, afu_event.parity_enable,
+	 	afu_event.buffer_read_latency) != PSL_SUCCESS) {
+		error_msg("AFU: failed to assert job_cack_llcmd for PSL_LLCMD_ADD\n");
             }
             break;
         case PSL_LLCMD_TERMINATE:
@@ -330,6 +343,17 @@ AFU::resolve_control_event ()
             }
             context_to_mc[afu_event.
                           job_address & 0xFFFF]->disable_all_machines ();
+	    debug_msg("PSL_LLCMD_TERMINATE");
+	    afu_event.job_cack_llcmd = 1;
+	    // signal job_cack_back to PSL
+	    if (psl_afu_aux2_change
+		(&afu_event, afu_event.job_running, afu_event.job_done, 1,
+		afu_event.job_error, afu_event.job_yield,
+		afu_event.timebase_request, afu_event.parity_enable,
+	 	afu_event.buffer_read_latency) != PSL_SUCCESS) {
+		error_msg("AFU: failed to assert job_cack_llcmd for PSL_LLCMD_TERMINATE\n");
+		}
+
             break;
         case PSL_LLCMD_REMOVE:
             //TODO also make sure ADD->TERMINATE->REMOVE
@@ -348,6 +372,16 @@ AFU::resolve_control_event ()
             delete context_to_mc[afu_event.job_address & 0xFFFF];
 
             context_to_mc.erase (afu_event.job_address & 0xFFFF);
+	    debug_msg("PSL_LLCMD_REMOVE");
+	    afu_event.job_cack_llcmd = 1;
+	    // signal job_cack_back to PSL
+	    if (psl_afu_aux2_change
+		(&afu_event, afu_event.job_running, afu_event.job_done, 1,
+		afu_event.job_error, afu_event.job_yield,
+		afu_event.timebase_request, afu_event.parity_enable,
+	 	afu_event.buffer_read_latency) != PSL_SUCCESS) {
+		error_msg("AFU: failed to assert job_cack_llcmd for PSL_LLCMD_REMOVE\n");
+		}
             break;
         default:
             error_msg ("AFU: this LLCMD code is currently not supported");
