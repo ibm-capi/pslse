@@ -420,7 +420,7 @@ static void _handle_afu(struct psl *psl)
 		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+			client_drop(psl->client[i], PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 	  }
 	}
