@@ -262,6 +262,8 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			debug_msg("%s:_handle_aux2: JOB done", job->afu_name);
 			dbg_aux2 |= DBG_AUX2_DONE;
 			*error = job_error;
+		        //debug_msg("%s,%d:_handle_aux2, jerror is %x ", 
+			//	  job->afu_name, job->dbg_id, job_error );
 			if (job->job != NULL) {
 				event = job->job;
 				// Is job_done for reset or start?
@@ -406,6 +408,7 @@ static void _handle_afu(struct psl *psl)
 		buffer[0] = PSLSE_AFU_ERROR;
 		error = htonll(error);
 		memcpy((char *)&(buffer[1]), (char *)&error, sizeof(error));
+	        warn_msg("%s: Received JERROR: 0x%016"PRIx64" in afu-dedicated mode", psl->name, error);
 		if (put_bytes
 		    (client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
 		     0) < 0) {
@@ -420,7 +423,7 @@ static void _handle_afu(struct psl *psl)
 		for (i = 0; i < psl->max_clients; i++) {
 			if (psl->client[i] == NULL)
 				continue;
-			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+			client_drop(psl->client[i], PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
 	  }
 	}

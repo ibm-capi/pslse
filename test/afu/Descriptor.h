@@ -49,6 +49,8 @@ public:
 
     uint64_t get_reg (uint32_t word_address, uint32_t mmio_double) const;
 
+    bool set_jerror () const;
+ 
     bool is_dedicated () const;
     bool is_directed () const;
 

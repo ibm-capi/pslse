@@ -96,12 +96,11 @@ int main(int argc, char *argv[])
 		perror("cxl_afu_open_h");
 		goto done;
 	}
-//	FIXME:  cxl_get_irqs_max() is broken!
-//	if (cxl_get_irqs_max(afu_h, &max_irqs) < 0) {
-//		fprintf(stderr, "\nNo AFU found!\n\n");
-//		goto done;
-//	}
-	max_irqs = 2000;
+	if (cxl_get_irqs_max(afu_h, &max_irqs) < 0) {
+		fprintf(stderr, "\nNo AFU found!\n\n");
+		goto done;
+	}
+//	max_irqs = 2000;
 	irq = rand() % max_irqs;
 
 	// Set WED to random value

@@ -11,7 +11,7 @@ main (int argc, char *argv[])
 {
     if (argc < 3) {
         fprintf (stderr,
-                 "Not eneough arguments. Usage: ./afu port_number descriptor_file [parity]\n");
+                 "Not enough arguments. Usage: ./afu port_number descriptor_file [parity] [jerror]\n");
         exit (1);
     }
 
@@ -20,6 +20,7 @@ main (int argc, char *argv[])
 
     string descriptor_file (argv[2]);
     bool parity = false;
+    bool jerror = false;
 
     stringstream ss;
 
@@ -31,7 +32,17 @@ main (int argc, char *argv[])
         parity = true;
     }
 
-    AFU afu (port, descriptor_file, parity);
+    if (argc == 4 && string (argv[3]) == "jerror") {
+        printf ("MAIN: AFU will send jerror not running\n");
+        jerror = true;
+    }
+
+    if (argc == 5 && string (argv[4]) == "jerror") {
+        printf ("MAIN: AFU will send jerror not running\n");
+        jerror = true;
+    }
+
+    AFU afu (port, descriptor_file, parity, jerror);
 
     afu.start ();
     debug_msg ("main: AFU quitting");
