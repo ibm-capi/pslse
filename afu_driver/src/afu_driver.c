@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <arpa/inet.h>
+#include <malloc.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -23,6 +23,7 @@
 
 #include "psl_interface.h"
 #include "vpi_user.h"
+#include "svdpi.h"
 
 #define CLOCK_EDGE_DELAY 2
 #define CACHELINE_BYTES 128
@@ -40,6 +41,7 @@ struct resp_event {
 static unsigned int bw_delay;
 static struct AFU_EVENT event;
 static struct resp_event *resp_list;
+#ifdef OLD_PLI_CODE
 static vpiHandle pclock;
 static vpiHandle jval, jcom, jcompar, jea, jeapar, jrunning, jdone, jcack,
     jerror, latency, jyield, timebase_req, parity_enabled;
@@ -51,12 +53,56 @@ static vpiHandle brval, brtag, brtagpar, brdata, brpar, brvalid_out, brtag_out,
     brlat;
 static vpiHandle bwval, bwtag, bwtagpar, bwdata, bwpar;
 static vpiHandle rval, rtag, rtagpar, resp, rcredits;
+#endif
+
 static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
+// Added New
+        int c_ha_jval;
+        int c_ha_jcom;
+
+        uint32_t c_ah_jrunning;
+        uint32_t c_ah_jdone;
+        uint32_t c_ah_jcack;
+	uint64_t c_ah_jerror;
+        uint32_t c_ah_brlat;
+        uint32_t c_ah_jyield;
+        uint32_t c_ah_tbreq;
+        uint32_t c_ah_paren;
+
+        uint32_t c_ah_cvalid;
+        uint32_t c_ah_ctag;
+        uint32_t c_ah_ctagpar;
+        uint32_t c_ah_ccom;
+        uint32_t c_ah_ccompar;
+        uint32_t c_ah_cabt;
+        uint64_t c_ah_cea;
+        uint32_t c_ah_ceapar;
+        uint32_t c_ah_cch;
+        uint32_t c_ah_csize;
+        uint32_t c_ha_croom;
+
+	uint32_t c_ah_brtag;
+	uint32_t c_ah_brvalid;
+	uint32_t c_ah_brpar;
+	uint16_t parity16;
+	uint8_t  c_ah_brdata[CACHELINE_BYTES];
+
+        uint32_t c_ah_mmack;
+        uint64_t c_ah_mmrdata;
+        uint32_t c_ah_mmrdatapar;
 
 // Function declaration
 
+static int getMy64Bit(const svLogicVecVal *my64bSignal, uint64_t *conv64bit);
+int getMyCacheLine(const svLogicVecVal *myLongSignal, uint8_t myCacheData[]);
+void setMyCacheLine(svLogicVecVal *myLongSignal, uint8_t myCacheData[]);
+// Dpi eqt of set_signal32
+void setDpiSignal32(svLogicVecVal *my32bSignal, uint32_t inData, int size);
+static void setDpiSignal64(svLogicVecVal *my64bSignal, uint64_t data);
+static void psl_control(void);
+/* commenting out unused functions
 static void psl(void);
-
+*/
 // VPI abstraction functions
 
 static long long get_time()
@@ -71,6 +117,7 @@ static long long get_time()
 	return (long long)long_time;
 }
 
+#ifdef OLD_PLI_CODE
 static void set_signal32(vpiHandle signal, uint32_t data)
 {
 	s_vpi_value value;
@@ -78,7 +125,8 @@ static void set_signal32(vpiHandle signal, uint32_t data)
 	value.value.integer = data;
 	vpi_put_value(signal, &value, NULL, vpiNoDelay);
 }
-
+#endif
+/*
 static void set_signal64(vpiHandle signal, uint64_t data)
 {
 	s_vpi_value value;
@@ -90,7 +138,16 @@ static void set_signal64(vpiHandle signal, uint64_t data)
 	value.value.vector[0].bval = 0;
 	vpi_put_value(signal, &value, NULL, vpiNoDelay);
 }
+*/
+static void setDpiSignal64(svLogicVecVal *my64bSignal, uint64_t data)
+{
+	(my64bSignal+1)->aval = (uint32_t)(data >> 32);
+	(my64bSignal+1)->bval = 0x0;
+	(my64bSignal)->aval = (uint32_t)(data & 0xffffffff);
+	(my64bSignal)->bval = 0x0;
+}
 
+/*
 static void set_signal_long(vpiHandle signal, uint8_t * data)
 {
 	s_vpi_value value;
@@ -130,7 +187,6 @@ static void get_signal64(vpiHandle signal, uint64_t * data)
 	*data |=
 	    ((uint64_t) value.value.vector[0].aval) & ((uint64_t) 0xffffffffll);
 }
-
 static void get_signal_long(vpiHandle signal, uint8_t * data)
 {
 	s_vpi_value value;
@@ -150,7 +206,7 @@ static void get_signal_long(vpiHandle signal, uint8_t * data)
 		}
 	}
 }
-
+*/
 //static vpiHandle set_callback_delay(void *func, int delay)
 //{
 //  s_vpi_time time;
@@ -168,6 +224,7 @@ static void get_signal_long(vpiHandle signal, uint8_t * data)
 //  return vpi_register_cb(&cb);
 //}
 
+#ifdef OLD_PLI_CODE
 static vpiHandle set_callback_signal(void *func, vpiHandle signal)
 {
 	s_vpi_time time;
@@ -186,7 +243,7 @@ static vpiHandle set_callback_signal(void *func, vpiHandle signal)
 	cb.user_data = 0;
 	return vpi_register_cb(&cb);
 }
-
+#endif
 static vpiHandle set_callback_event(void *func, int event)
 {
 	s_cb_data cb;
@@ -260,7 +317,7 @@ static int test_change(uint32_t previous, uint32_t current, const char *sig)
 
 	return 0;
 }
-
+/*
 PLI_INT32 aux2()
 {
 	uint64_t error;
@@ -292,7 +349,6 @@ PLI_INT32 aux2()
 
 	return 0;
 }
-
 void mmio()
 {
 	uint64_t data, datapar;
@@ -310,7 +366,7 @@ void mmio()
 #ifdef DEBUG
 	printf("\n");
 	info_message("MMIO Ack data=0x%016llx\n", data);
-#endif				/* #ifdef DEBUG */
+#endif				
 }
 
 static void command()
@@ -338,11 +394,12 @@ static void command()
 	info_message
 	    ("Command tag=0x%02x com=%03x ea=0x%016llx size=%d abt=%x\n", tag,
 	     com, addr, size, abt);
-#endif				/* #ifdef DEBUG */
+#endif				
 
 	return;
 }
-
+*/
+/*
 void buffer_read()
 {
 	uint32_t tag, valid, parity;
@@ -371,32 +428,31 @@ void buffer_read()
 		printf("%02x", event.buffer_rdata[i]);
 	}
 	printf("\n");
-#endif				/* #ifdef DEBUG */
+#endif				
 }
-
+*/
 // Clean up on clock edges
 
 PLI_INT32 clock_edge()
 {
+/*
 	uint32_t clock;
-	get_signal32(pclock, &clock);
+//	get_signal32(pclock, &clock);
 
 	if (!clock) {
-		aux2();
-		mmio();
-		buffer_read();
+//		aux2();
+//		mmio();
+//		buffer_read();
 		return 0;
 	}
 
-	psl();
-	command();
-
+//	psl();
+//	command();
 	if (cl_jval) {
 		--cl_jval;
 		if (!cl_jval)
 			set_signal32(jval, 0);
 	}
-
 	if (cl_mmio) {
 		--cl_mmio;
 		if (!cl_mmio)
@@ -420,12 +476,342 @@ PLI_INT32 clock_edge()
 		if (!cl_rval)
 			set_signal32(rval, 0);
 	}
-
+*/
 	return 0;
 }
 
-// Setup & facility functions
+void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
+                   svLogic       *ha_jval_top, 
+	     svLogicVecVal       *ha_jcom_top, 	// 8 bits
+                   svLogic       *ha_jcompar_top, 
+             svLogicVecVal       *ha_jea_top,	// 64 bits
+	           svLogic       *ha_jeapar_top,  
+             const svLogic       ah_jrunning_top,  
+             const svLogic       ah_jdone_top,
+	     const svLogic       ah_jcack_top, 
+             svLogicVecVal       *ah_jerror_top, 	// 64 bits
+             svLogicVecVal       *ah_brlat_top,  	// 4 bits
+             const svLogic       ah_jyield,
+	     const svLogic       ah_tbreq_top,  
+             const svLogic       ah_paren_top, 
+             svLogic             *ha_mmval_top,
+             svLogic             *ha_mmcfg_top, 
+             svLogic             *ha_mmrnw_top, 
+             svLogic             *ha_mmdw_top,
+             svLogicVecVal       *ha_mmad_top, 		//24 bits
+             svLogic             *ha_mmadpar_top, 
+             svLogicVecVal       *ha_mmdata_top, 		// 64 bits
+             svLogic             *ha_mmdatapar_top,				
+             const svLogic       ah_mmack_top, 
+             const svLogicVecVal *ah_mmdata_top, 		// 64 bits
+             const svLogic       ah_mmdatapar_top,
+             svLogicVecVal       *ha_croom_top,			// 8 bits
+             const svLogic       ah_cvalid_top, 
+             const svLogicVecVal *ah_ctag_top, 		// 8 bits
+             const svLogic       ah_ctagpar_top, 
+             const svLogicVecVal *ah_com_top, 		//13 bits
+             const svLogic       ah_compar_top, 
+             const svLogicVecVal *ah_cabt_top, 		// 3 bits
+             const svLogicVecVal *ah_cea_top, 			// 64 bits
+             const svLogic       ah_ceapar_top, 
+             const svLogicVecVal *ah_cch_top, 		// 16 bits
+             const svLogicVecVal *ah_csize_top, 		//12 bits
+             svLogic             *ha_brvalid_top,
+             svLogicVecVal       *ha_brtag_top, 		// 8 bits
+                   svLogic       *ha_brtagpar_top, 
+             const svLogicVecVal *ah_brdata_top, 		// 1024 bits
+             const svLogicVecVal *ah_brpar_top, 		// 16 bits
+             const svLogic       ah_brvalid_top, 
+             const svLogicVecVal *ah_brtag_top,		// 8 bits
+             svLogic             *ha_bwvalid_top, 
+             svLogicVecVal       *ha_bwtag_top, 		// 8 bits
+             svLogic             *ha_bwtagpar_top,
+             svLogicVecVal       *ha_bwdata_top, 		// 1024 bits
+             svLogicVecVal       *ha_bwpar_top,		// 16 bits
+             svLogic             *ha_rvalid_top, 
+             svLogicVecVal       *ha_rtag_top, 		// 8 bits
+             svLogic             *ha_rtagpar_top,				
+             svLogicVecVal       *ha_response_top, 		// 8 bits
+             svLogicVecVal       *ha_rcredits_top		// 9 bits
+             )
+{
+	int change = 0;
+	int invalidVal = 0;
+	if ( ha_pclock == sv_0 ) {
+	// Replication of aux2 method
+	  c_ah_jrunning  = (ah_jrunning_top & 0x2) ? 0 : (ah_jrunning_top & 0x1);
+          c_ah_jdone     = (ah_jdone_top & 0x2) ? 0 : (ah_jdone_top & 0x1);
+          c_ah_jcack     = (ah_jcack_top & 0x2) ? 0 : (ah_jcack_top & 0x1);
+          invalidVal = getMy64Bit(ah_jerror_top, &c_ah_jerror);
+//          if(invalidVal)
+//		info_message("jerror has either X or Z value =0x%016llx\n", (long long)c_ah_jerror);
+          c_ah_brlat     = ah_brlat_top->aval & 0x3;	// 4 bits	// FIXME: warning says the valid values are only 1 & 3, therefore changing the mask to 0x3
+          invalidVal     = ah_brlat_top->bval & 0x3;	
+          if(invalidVal)
+		info_message("ah_brlat_top has either X or Z value =0x%08llx\n", (long long)c_ah_brlat);
+          c_ah_jyield    = (ah_jyield & 0x2) ? 0 : (ah_jyield & 0x1);
+          c_ah_tbreq     = (ah_tbreq_top & 0x2) ? 0 : (ah_tbreq_top & 0x1);
+          c_ah_paren     = (ah_paren_top & 0x2) ? 0 : (ah_paren_top & 0x1);
+  	  change = test_change(event.job_done, c_ah_jdone, "jdone");
+	  if (change && (c_ah_jerror != 0x0))
+		info_message("jerror=0x%016llx\n", (long long)c_ah_jerror);
+	  change += test_change(event.job_running, c_ah_jrunning, "jrunning");
+	  change += test_change(event.job_cack_llcmd, c_ah_jcack, "jcack");
+	  change += test_change(event.job_yield, c_ah_jyield, "jyield");
+	  change += test_change(event.timebase_request, c_ah_tbreq, "jtbreq");
+	  change += test_change(event.parity_enable, c_ah_paren, "paren");
+	  change += test_change(event.buffer_read_latency, c_ah_brlat, "brlat");
+	  if (change)
+	    psl_afu_aux2_change(&event, c_ah_jrunning, c_ah_jdone, c_ah_jcack, c_ah_jerror,
+				    c_ah_jyield, c_ah_tbreq, c_ah_paren, c_ah_brlat);
+	// Replication of aux2 method - ends
+	// Replication of the mmio method - start
+	  c_ah_mmack = (ah_mmack_top & 0x2) ? 0 : (ah_mmack_top & 0x1);
+	  if(c_ah_mmack)
+          {
+            invalidVal = getMy64Bit(ah_mmdata_top, &c_ah_mmrdata);
+            if(invalidVal)
+		info_message("ah_mmdata has either X or Z value =0x%016llx\n", (long long)c_ah_mmrdata);
+            c_ah_mmrdatapar = (ah_mmdatapar_top & 0x2) ? 0 : (ah_mmdatapar_top & 0x1);
+            psl_afu_mmio_ack(&event, c_ah_mmrdata, c_ah_mmrdatapar);
+          }
+	// Replication of the mmio method - ends
+	// Replication of buffer_read method - start
+	  change = 0;
+	  c_ah_brvalid  = (ah_brvalid_top & 0x2) ? 0 : (ah_brvalid_top & 0x1);
+          if(c_ah_brvalid == sv_1)
+          {
+//	    printf("Command Valid: ah_brvalid=%d\n", c_ah_brvalid);
+            c_ah_brtag    = (ah_brtag_top->aval) & 0xFF;	// 8 bits
+            invalidVal     = ah_brtag_top->bval & 0xFF;	
+          if(invalidVal)
+		info_message("ah_brtag_top has either X or Z value =0x%08llx\n", (long long)c_ah_brtag);
+            c_ah_brpar    = (ah_brpar_top->aval) & 0xFFFF;	// 16 bits
+            invalidVal     = ah_brpar_top->bval & 0xFF;	
+          if(invalidVal)
+		info_message("ah_brpar_top has either X or Z value =0x%08llx\n", (long long)c_ah_brpar);
+	    uint16_t parity16;
+	    parity16 = (uint16_t) c_ah_brpar;
+	    parity16 = htons(parity16);		
+            getMyCacheLine(ah_brdata_top, c_ah_brdata);
+	    psl_afu_read_buffer_data(&event, CACHELINE_BYTES, c_ah_brdata,
+				 (uint8_t *) & parity16);
+	// Replication of buffer_read method - ends
+	  }
+	} else {
+	  //psl();	// the psl() function from PLI is going to be split into several subsidiary functions
+	  psl_control();
+	// Job
+	if (event.job_valid)
+	{
+	  // replicating set_job() function
+          setDpiSignal32(ha_jcom_top, event.job_code, 8);
+          *ha_jcompar_top  = (event.job_code_parity) & 0x1;
+	  setDpiSignal64(ha_jea_top, event.job_address);
+	  *ha_jeapar_top  = (event.job_address_parity) & 0x1;
+	  *ha_jval_top = 1;
+	  info_message("Job 0x%03x EA=0x%016llx\n", event.job_code,
+		     event.job_address);
+	  cl_jval = CLOCK_EDGE_DELAY;
+	  event.job_valid = 0;
+        }	
+	// MMIO
+	if (event.mmio_valid)
+	{
+	// replicating the set_mmio() function
+	  *ha_mmrnw_top = event.mmio_read;
+	  *ha_mmdw_top = event.mmio_double;
+	  setDpiSignal32(ha_mmad_top, event.mmio_address, 24);
+	  *ha_mmadpar_top = event.mmio_address_parity;
+	  setDpiSignal64(ha_mmdata_top, event.mmio_wdata);
+	  *ha_mmdatapar_top = (event.mmio_wdata_parity) & 0x1;		// 2016/05/11: UMA: checking whether ensuring bval is set always to 0b0 solves the MMIO parity error which is coming up
+	  *ha_mmcfg_top = event.mmio_afudescaccess;
+	  *ha_mmval_top = 1;
+	  info_message("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
+		     event.mmio_read, event.mmio_double, event.mmio_address,
+		     event.mmio_wdata);
+	  cl_mmio = CLOCK_EDGE_DELAY;
+	  event.mmio_valid = 0;
+        }	
+	// Buffer read
+	if (event.buffer_read)
+	{
+	// Replicating	set_buffer_read() function
+	  setDpiSignal32(ha_brtag_top, event.buffer_read_tag, 8);
+	  *ha_brtagpar_top = event.buffer_read_tag_parity;
+	  *ha_brvalid_top = 1;
+	  info_message("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
+	  cl_br = CLOCK_EDGE_DELAY;
+	  event.buffer_read = 0;
+        }	
+	// Buffer write
+	if (event.buffer_write)
+	{
+	// Replicating 	set_buffer_write() function
+	  bw_delay += 2;
+	  uint32_t parity;
+	  parity = (uint32_t) event.buffer_wparity[0];
+	  parity <<= 8;
+	  parity += (uint32_t) event.buffer_wparity[1];
+          parity = htons((uint16_t) parity);
+	  setDpiSignal32(ha_bwtag_top, event.buffer_write_tag, 8);
+	  *ha_bwtagpar_top = event.buffer_write_tag_parity;
+	  setMyCacheLine(ha_bwdata_top, event.buffer_wdata);
+	  setDpiSignal32(ha_bwpar_top, parity, 16);
+	  *ha_bwvalid_top = 1;
+	  info_message("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
+	  cl_bw = CLOCK_EDGE_DELAY;
+	  event.buffer_write = 0;
+	}
+	if (bw_delay > 0)
+		--bw_delay;
+	if (resp_list && !(bw_delay % 2))
+        {
+	// Replicating	set_response() function
+	  setDpiSignal32(ha_rtag_top, resp_list->tag, 8);
+	  *ha_rtagpar_top = resp_list->tagpar;
+	  setDpiSignal32(ha_response_top, resp_list->code, 8);
+	  setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
+	  *ha_rvalid_top = 1;
+	  info_message("Response tag=0x%02x code=0x%02x credits=%d\n",
+		     resp_list->tag, resp_list->code, resp_list->credits);
+	  struct resp_event *tmp;
+	  tmp = resp_list;
+	  resp_list = resp_list->__next;
+	  free(tmp);
+	  cl_rval = CLOCK_EDGE_DELAY;
+        }
+	// Response
+	if (event.response_valid)
+        {
+	// Not Replicating	add_response() function, just calling it
+		add_response();
+        }
+	// Croom
+	if (event.aux1_change) {
+		setDpiSignal32(ha_croom_top, event.room, 8);
+		event.aux1_change = 0;
+	}
+	// Replication of acceleartor command interface starts
+	  c_ah_cvalid = (ah_cvalid_top & 0x2) ? 0 : (ah_cvalid_top & 0x1);
+	  if(c_ah_cvalid == sv_1) 
+	  {
+	    c_ah_ctag    = (ah_ctag_top->aval) & 0xFF;	// 8 bits
+	    c_ah_ctagpar = (ah_ctagpar_top & 0x2) ? 0 : (ah_ctagpar_top & 0x1);
+	    c_ah_ccompar = (ah_compar_top & 0x2) ? 0 : (ah_compar_top & 0x1);
+	    c_ah_ccom    = (ah_com_top->aval) & 0x1FFF;	// 13 bits
+            invalidVal = getMy64Bit(ah_cea_top, &c_ah_cea);
+            if(invalidVal)
+		info_message("ah_cea has either X or Z value =0x%016llx\n", (long long)c_ah_cea);
+	    c_ah_ceapar  = (ah_ceapar_top & 0x2) ? 0 : (ah_ceapar_top & 0x1);
+	    c_ah_csize   = (ah_csize_top->aval) & 0xFFF;	// 12 bits
+	    c_ah_cabt    = (ah_cabt_top->aval) & 0x7;		// 3 bits
+	    c_ah_cch     = (ah_cch_top->aval) & 0xFFFF;		// 16 bits
+	    c_ha_croom   = (ha_croom_top->aval) & 0xFF;		// 8 bits
+		// FIXME: Need to check how to handle Croom on the event structure
+	    printf("Command Valid: ccom=0x%x\n", c_ah_ccom);
+  	    event.room   = c_ha_croom;
+  	    psl_afu_command(&event, c_ah_ctag, c_ah_ctagpar, c_ah_ccom, c_ah_ccompar, c_ah_cea, c_ah_ceapar, c_ah_csize,
+	 		   c_ah_cabt, c_ah_cch);
+	  }
+	  // Replication of acceleartor command interface ends
+	  // Copying over the rest of the assignments from the clock_edge function
+	  if (cl_jval) {
+	  	--cl_jval;
+	  	if (!cl_jval)
+	  		*ha_jval_top = 0;
+	  }
+	  if (cl_mmio) {
+	  	--cl_mmio;
+	  	if (!cl_mmio)
+	  		*ha_mmval_top = 0;
+	  }
+	  if (cl_br) {
+	  	--cl_br;
+	  	if (!cl_br)
+	  		*ha_brvalid_top = 0;
+	  }
+	  if (cl_bw) {
+	  	--cl_bw;
+	  	if (!cl_bw)
+	  		*ha_bwvalid_top = 0;
+	  }
+	  if (cl_rval) {
+	  	--cl_rval;
+	  	if (!cl_rval)
+	  		*ha_rvalid_top = 0;
+	  }
+	  return;
+        }
+}
 
+// Setup & facility functions
+static int getMy64Bit(const svLogicVecVal *my64bSignal, uint64_t *conv64bit)
+{
+    //gets the two 32bit values from the 4-state svLogicVec array
+    //and packs it into a 64bit in *conv64bit
+    //Also returns 1 if bval is non-zero (i.e. value contains Z, X or both)
+
+  uint32_t lsb32_aval, msb32_aval, lsb32_bval, msb32_bval;
+  lsb32_bval =  my64bSignal->bval;
+  msb32_bval = (my64bSignal+1)->bval;
+  lsb32_aval =  my64bSignal->aval;
+  msb32_aval = (my64bSignal+1)->aval;
+//    printf("msb32_aval=%08x, lsb32_aval=%08x\n", msb32_aval, lsb32_aval); 
+//    printf("msb32_bval=%08x, lsb32_bval=%08x\n", msb32_bval, lsb32_bval); 
+ 
+  *conv64bit = ((uint64_t) msb32_aval <<32) | (uint64_t) lsb32_aval;
+//    printf("conv64bit = %llx\n", (long long) *conv64bit);
+  if((lsb32_bval | msb32_bval) == 0){ return 0;}
+  return 1;
+}
+
+// The getMyCacheLine is a more specific version of the PLI function
+// get_signal_long. In here, we are specifically doing the conversion of 1024
+// bit long vector to 128 byte cacheline buffer. On VPI as well as DPI, the
+// 1024 bit vector is returned as array of 32bit entries. ie, array[0] will
+// contain the aval for bits [992:1023]. The PSLSE demands that the first
+// entry of the array has bits [0:31], hence we do a reversal of that array
+// the htonl std lib function will ensure that the byte ordering is maintained
+// based on the endianness of the processor
+int getMyCacheLine(const svLogicVecVal *myLongSignal, uint8_t myCacheData[CACHELINE_BYTES])
+{
+   int i, j;
+  //uint32_t get32aval, get32bval;
+  uint8_t errorVal = 0;
+  uint32_t *p32BitCacheWords = (uint32_t*)myCacheData;
+  for(i=0; i <(CACHELINE_BYTES/4 ); i++)
+  {
+    j = (CACHELINE_BYTES/4 ) - (i + 1);
+    if(myLongSignal[i].bval !=0){ errorVal=1; }
+    p32BitCacheWords[j] = myLongSignal[i].aval; 
+    p32BitCacheWords[j] = htonl(p32BitCacheWords[j]);
+  }
+  if(errorVal!=0){return 1;}
+  return 0;
+}
+
+void setMyCacheLine(svLogicVecVal *myLongSignal, uint8_t myCacheData[CACHELINE_BYTES])
+{
+   int i, j;
+  //uint32_t get32aval, get32bval;
+  uint32_t *p32BitCacheWords = (uint32_t*)myCacheData;
+  for(i=0; i <(CACHELINE_BYTES/4 ); i++)
+  {
+    j = (CACHELINE_BYTES/4 ) - (i + 1);
+    myLongSignal[j].aval = htonl(p32BitCacheWords[i]); 
+    myLongSignal[j].bval = 0;
+  }
+}
+
+void setDpiSignal32(svLogicVecVal *my32bSignal, uint32_t inData, int size)
+{
+  uint32_t myMask = ~(0xFFFFFFFF << size);
+  my32bSignal->aval = inData & myMask;
+  my32bSignal->bval = 0x0;
+}
+#ifdef OLD_PLI_CODE
+// kept here for reference
 PLI_INT32 register_clock()
 {
 	vpiHandle systfref, argsiter;
@@ -573,9 +959,10 @@ PLI_INT32 clear_rval()
 	set_signal32(rval, 0);
 	return 0;
 }
+#endif
 
 // AFU abstraction functions
-
+/*
 static void set_job()
 {
 	set_signal32(jcom, event.job_code);
@@ -587,13 +974,12 @@ static void set_job()
 #ifdef DEBUG
 	info_message("Job 0x%03x EA=0x%016llx\n", event.job_code,
 		     event.job_address);
-#endif				/* #ifdef DEBUG */
+#endif				
 
 	cl_jval = CLOCK_EDGE_DELAY;
 
 	event.job_valid = 0;
 }
-
 static void set_mmio()
 {
 	set_signal32(mmrnw, event.mmio_read);
@@ -609,7 +995,7 @@ static void set_mmio()
 	info_message("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
 		     event.mmio_read, event.mmio_double, event.mmio_address,
 		     event.mmio_wdata);
-#endif				/* #ifdef DEBUG */
+#endif				
 
 	cl_mmio = CLOCK_EDGE_DELAY;
 
@@ -624,7 +1010,7 @@ static void set_buffer_read()
 
 #ifdef DEBUG
 	info_message("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
-#endif				/* #ifdef DEBUG */
+#endif				
 
 	cl_br = CLOCK_EDGE_DELAY;
 
@@ -647,7 +1033,7 @@ static void set_buffer_write()
 
 #ifdef DEBUG
 	info_message("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
-#endif				/* #ifdef DEBUG */
+#endif				
 
 	cl_bw = CLOCK_EDGE_DELAY;
 
@@ -665,7 +1051,7 @@ static void set_response()
 #ifdef DEBUG
 	info_message("Response tag=0x%02x code=0x%02x credits=%d\n",
 		     resp_list->tag, resp_list->code, resp_list->credits);
-#endif				/* #ifdef DEBUG */
+#endif				
 
 	struct resp_event *tmp;
 	tmp = resp_list;
@@ -674,9 +1060,10 @@ static void set_response()
 
 	cl_rval = CLOCK_EDGE_DELAY;
 }
+*/
 
 // AFU functions
-
+/*
 static void psl()
 {
 	// Wait for clock edge from PSL
@@ -693,7 +1080,6 @@ static void psl()
 	// Error case
 	if (rc < 0) {
 		info_message("Socket closed: Ending Simulation.");
-		psl_close_afu_event(&event);
 #ifdef FINISH
 		vpi_control(vpiFinish, 1);
 #else
@@ -730,7 +1116,7 @@ static void psl()
 		event.aux1_change = 0;
 	}
 }
-
+*/
 PLI_INT32 afu_close()
 {
 	psl_close_afu_event(&event);
@@ -750,6 +1136,43 @@ PLI_INT32 afu_init()
 	return 0;
 }
 
+static void psl_control(void)
+{
+	// Wait for clock edge from PSL
+	fd_set watchset;
+	FD_ZERO(&watchset);
+	FD_SET(event.sockfd, &watchset);
+	select(event.sockfd + 1, &watchset, NULL, NULL, NULL);
+	int rc = psl_get_psl_events(&event);
+	// No clock edge
+	while (!rc) {
+		select(event.sockfd + 1, &watchset, NULL, NULL, NULL);
+		rc = psl_get_psl_events(&event);
+	}
+	// Error case
+	if (rc < 0) {
+		info_message("Socket closed: Ending Simulation.");
+#ifdef FINISH
+		vpi_control(vpiFinish, 1);
+#else
+		vpi_control(vpiStop, 1);
+#endif
+	}
+}
+
+void psl_bfm_init()
+{
+	int port = 32768;
+	while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
+		if (port == 65535) {
+			error_message("Unable to find open port!");
+		}
+		++port;
+	}
+	// set_callback_event(afu_close, cbEndOfSimulation);
+	return;
+}
+
 // Register VLI functions
 
 void registerAfuInitSystfs()
@@ -763,6 +1186,7 @@ void registerAfuInitSystfs()
 	vpi_register_systf(task_data_p);
 }
 
+#ifdef OLD_PLI_CODE
 void registerRegClockSystfs()
 {
 	s_vpi_systf_data task_data_s;
@@ -843,3 +1267,4 @@ void registerRegResponseSystfs()
 void (*vlog_startup_routines[]) () = {
 	registerAfuInitSystfs, registerRegClockSystfs, registerRegControlSystfs, registerRegMmioSystfs, registerRegCommandSystfs, registerRegRdBufferSystfs, registerRegWrBufferSystfs, registerRegResponseSystfs, 0	// last entry must be 0
 };
+#endif
