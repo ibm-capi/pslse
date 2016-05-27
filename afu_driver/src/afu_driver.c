@@ -105,6 +105,7 @@ static void psl(void);
 */
 // VPI abstraction functions
 
+#ifdef OLD_PLI_CODE
 static long long get_time()
 {
 	s_vpi_time time;
@@ -117,7 +118,6 @@ static long long get_time()
 	return (long long)long_time;
 }
 
-#ifdef OLD_PLI_CODE
 static void set_signal32(vpiHandle signal, uint32_t data)
 {
 	s_vpi_value value;
@@ -262,7 +262,9 @@ static vpiHandle set_callback_event(void *func, int event)
 static void error_message(const char *str)
 {
 	fflush(stdout);
-	fprintf(stderr, "%08lld: ERROR: %s\n", get_time(), str);
+//	fprintf(stderr, "%08lld: ERROR: %s\n", get_time(), str);
+//	Removing the get_time() from the function, since this is a VPI function unsupported on DPI
+	fprintf(stderr, " ERROR: %s\n",  str);
 	fflush(stderr);
 }
 
@@ -271,7 +273,7 @@ static int info_message(char *format, ...)
 	va_list args;
 	int ret;
 
-	printf("%08lld: ", get_time());
+//	printf("%08lld: ", get_time());
 	va_start(args, format);
 	ret = vprintf(format, args);
 	va_end(args);
