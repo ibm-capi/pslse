@@ -90,6 +90,7 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
         uint32_t c_ah_mmack;
         uint64_t c_ah_mmrdata;
         uint32_t c_ah_mmrdatapar;
+	uint64_t c_sim_time ;
 
 // Function declaration
 
@@ -259,15 +260,31 @@ static vpiHandle set_callback_event(void *func, int event)
 
 // Helper functions
 
+void set_simulation_time(const svLogicVecVal *simulationTime)
+{
+  
+   getMy64Bit(simulationTime, &c_sim_time);
+//  printf("inside C: time value  = %08lld\n", (long long) c_sim_time);
+}
+
 static void error_message(const char *str)
 {
 	fflush(stdout);
 //	fprintf(stderr, "%08lld: ERROR: %s\n", get_time(), str);
 //	Removing the get_time() from the function, since this is a VPI function unsupported on DPI
-	fprintf(stderr, " ERROR: %s\n",  str);
+	fprintf(stderr, "%08lld: ERROR: %s\n", (long long) c_sim_time, str);
 	fflush(stderr);
 }
 
+/*
+static int dpi_info_message(char *format)
+{
+	printf("%08lld: ", (long long) c_sim_time);
+	printf(format);
+	return 0;
+}
+*/
+#ifdef OLD_PLI_CODE
 static int info_message(char *format, ...)
 {
 	va_list args;
@@ -279,6 +296,7 @@ static int info_message(char *format, ...)
 	va_end(args);
 	return ret;
 }
+#endif
 
 // PSL functions
 
@@ -311,8 +329,10 @@ static int test_change(uint32_t previous, uint32_t current, const char *sig)
 
 	if (previous != current) {
 #ifdef DEBUG
-		if (current)
-			info_message("%s=%d\n", sig, current);
+	if (current){
+	printf("%08lld: ", (long long) c_sim_time);
+	printf("%s=%d\n", sig, current);
+        }
 #endif				/* #ifdef DEBUG */
 		return 1;
 	}
@@ -546,17 +566,23 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
           c_ah_jcack     = (ah_jcack_top & 0x2) ? 0 : (ah_jcack_top & 0x1);
           invalidVal = getMy64Bit(ah_jerror_top, &c_ah_jerror);
 //          if(invalidVal)
-//		info_message("jerror has either X or Z value =0x%016llx\n", (long long)c_ah_jerror);
+//		printf("jerror has either X or Z value =0x%016llx\n", (long long)c_ah_jerror);
           c_ah_brlat     = ah_brlat_top->aval & 0x3;	// 4 bits	// FIXME: warning says the valid values are only 1 & 3, therefore changing the mask to 0x3
           invalidVal     = ah_brlat_top->bval & 0x3;	
           if(invalidVal)
-		info_message("ah_brlat_top has either X or Z value =0x%08llx\n", (long long)c_ah_brlat);
+          {
+	    printf("%08lld: ", (long long) c_sim_time);
+	    printf("ah_brlat_top has either X or Z value =0x%08llx\n", (long long)c_ah_brlat);
+          }
           c_ah_jyield    = (ah_jyield & 0x2) ? 0 : (ah_jyield & 0x1);
           c_ah_tbreq     = (ah_tbreq_top & 0x2) ? 0 : (ah_tbreq_top & 0x1);
           c_ah_paren     = (ah_paren_top & 0x2) ? 0 : (ah_paren_top & 0x1);
   	  change = test_change(event.job_done, c_ah_jdone, "jdone");
 	  if (change && (c_ah_jerror != 0x0))
-		info_message("jerror=0x%016llx\n", (long long)c_ah_jerror);
+          {
+	     printf("%08lld: ", (long long) c_sim_time);
+	     printf("jerror=0x%016llx\n", (long long)c_ah_jerror);
+          }
 	  change += test_change(event.job_running, c_ah_jrunning, "jrunning");
 	  change += test_change(event.job_cack_llcmd, c_ah_jcack, "jcack");
 	  change += test_change(event.job_yield, c_ah_jyield, "jyield");
@@ -573,7 +599,10 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
           {
             invalidVal = getMy64Bit(ah_mmdata_top, &c_ah_mmrdata);
             if(invalidVal)
-		info_message("ah_mmdata has either X or Z value =0x%016llx\n", (long long)c_ah_mmrdata);
+            {
+	      printf("%08lld: ", (long long) c_sim_time);
+	      printf("ah_mmdata has either X or Z value =0x%016llx\n", (long long)c_ah_mmrdata);
+            }
             c_ah_mmrdatapar = (ah_mmdatapar_top & 0x2) ? 0 : (ah_mmdatapar_top & 0x1);
             psl_afu_mmio_ack(&event, c_ah_mmrdata, c_ah_mmrdatapar);
           }
@@ -586,12 +615,18 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 //	    printf("Command Valid: ah_brvalid=%d\n", c_ah_brvalid);
             c_ah_brtag    = (ah_brtag_top->aval) & 0xFF;	// 8 bits
             invalidVal     = ah_brtag_top->bval & 0xFF;	
-          if(invalidVal)
-		info_message("ah_brtag_top has either X or Z value =0x%08llx\n", (long long)c_ah_brtag);
+            if(invalidVal)
+            {
+	      printf("%08lld: ", (long long) c_sim_time);
+	      printf("ah_brtag_top has either X or Z value =0x%08llx\n", (long long)c_ah_brtag);
+            }
             c_ah_brpar    = (ah_brpar_top->aval) & 0xFFFF;	// 16 bits
             invalidVal     = ah_brpar_top->bval & 0xFF;	
-          if(invalidVal)
-		info_message("ah_brpar_top has either X or Z value =0x%08llx\n", (long long)c_ah_brpar);
+            if(invalidVal)
+            {
+	      printf("%08lld: ", (long long) c_sim_time);
+	      printf("ah_brpar_top has either X or Z value =0x%08llx\n", (long long)c_ah_brpar);
+            }
 	    uint16_t parity16;
 	    parity16 = (uint16_t) c_ah_brpar;
 	    parity16 = htons(parity16);		
@@ -612,8 +647,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal64(ha_jea_top, event.job_address);
 	  *ha_jeapar_top  = (event.job_address_parity) & 0x1;
 	  *ha_jval_top = 1;
-	  info_message("Job 0x%03x EA=0x%016llx\n", event.job_code,
-		     event.job_address);
+	  printf("%08lld: ", (long long) c_sim_time);
+	  printf("Job 0x%03x EA=0x%016llx\n", event.job_code, (long long)event.job_address);
 	  cl_jval = CLOCK_EDGE_DELAY;
 	  event.job_valid = 0;
         }	
@@ -629,9 +664,10 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  *ha_mmdatapar_top = (event.mmio_wdata_parity) & 0x1;		// 2016/05/11: UMA: checking whether ensuring bval is set always to 0b0 solves the MMIO parity error which is coming up
 	  *ha_mmcfg_top = event.mmio_afudescaccess;
 	  *ha_mmval_top = 1;
-	  info_message("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
+	  printf("%08lld: ", (long long) c_sim_time);
+	  printf("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
 		     event.mmio_read, event.mmio_double, event.mmio_address,
-		     event.mmio_wdata);
+		     (long long)event.mmio_wdata);
 	  cl_mmio = CLOCK_EDGE_DELAY;
 	  event.mmio_valid = 0;
         }	
@@ -642,7 +678,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal32(ha_brtag_top, event.buffer_read_tag, 8);
 	  *ha_brtagpar_top = event.buffer_read_tag_parity;
 	  *ha_brvalid_top = 1;
-	  info_message("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
+	  printf("%08lld: ", (long long) c_sim_time);
+	  printf("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
 	  cl_br = CLOCK_EDGE_DELAY;
 	  event.buffer_read = 0;
         }	
@@ -661,7 +698,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setMyCacheLine(ha_bwdata_top, event.buffer_wdata);
 	  setDpiSignal32(ha_bwpar_top, parity, 16);
 	  *ha_bwvalid_top = 1;
-	  info_message("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
+	  printf("%08lld: ", (long long) c_sim_time);
+	  printf("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
 	  cl_bw = CLOCK_EDGE_DELAY;
 	  event.buffer_write = 0;
 	}
@@ -675,7 +713,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal32(ha_response_top, resp_list->code, 8);
 	  setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
 	  *ha_rvalid_top = 1;
-	  info_message("Response tag=0x%02x code=0x%02x credits=%d\n",
+	  printf("%08lld: ", (long long) c_sim_time);
+	  printf("Response tag=0x%02x code=0x%02x credits=%d\n",
 		     resp_list->tag, resp_list->code, resp_list->credits);
 	  struct resp_event *tmp;
 	  tmp = resp_list;
@@ -704,13 +743,17 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    c_ah_ccom    = (ah_com_top->aval) & 0x1FFF;	// 13 bits
             invalidVal = getMy64Bit(ah_cea_top, &c_ah_cea);
             if(invalidVal)
-		info_message("ah_cea has either X or Z value =0x%016llx\n", (long long)c_ah_cea);
+            {
+	        printf("%08lld: ", (long long) c_sim_time);
+		printf("ah_cea has either X or Z value =0x%016llx\n", (long long)c_ah_cea);
+            }
 	    c_ah_ceapar  = (ah_ceapar_top & 0x2) ? 0 : (ah_ceapar_top & 0x1);
 	    c_ah_csize   = (ah_csize_top->aval) & 0xFFF;	// 12 bits
 	    c_ah_cabt    = (ah_cabt_top->aval) & 0x7;		// 3 bits
 	    c_ah_cch     = (ah_cch_top->aval) & 0xFFFF;		// 16 bits
 	    c_ha_croom   = (ha_croom_top->aval) & 0xFF;		// 8 bits
 		// FIXME: Need to check how to handle Croom on the event structure
+	    printf("%08lld: ", (long long) c_sim_time);
 	    printf("Command Valid: ccom=0x%x\n", c_ah_ccom);
   	    event.room   = c_ha_croom;
   	    psl_afu_command(&event, c_ah_ctag, c_ah_ctagpar, c_ah_ccom, c_ah_ccompar, c_ah_cea, c_ah_ceapar, c_ah_csize,
@@ -1153,7 +1196,8 @@ static void psl_control(void)
 	}
 	// Error case
 	if (rc < 0) {
-		info_message("Socket closed: Ending Simulation.");
+	  printf("%08lld: ", (long long) c_sim_time);
+	  printf("Socket closed: Ending Simulation.");
 #ifdef FINISH
 		vpi_control(vpiFinish, 1);
 #else

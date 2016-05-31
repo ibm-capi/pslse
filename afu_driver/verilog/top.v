@@ -21,6 +21,7 @@ module top (
 );
 
    import "DPI-C" function void psl_bfm_init( );
+   import "DPI-C" function void set_simulation_time(input [0:63] simulationTime);
    import "DPI-C" function void psl_bfm( input ha_pclock, 
              output          ha_jval_top, 
              output [0:7]    ha_jcom_top, 
@@ -241,6 +242,8 @@ module top (
   // Integers
 
   integer         i;
+//  reg  [0:31]            simulationTime ;
+  reg [0:63]            simulationTime ;
 
   // C code interface registration
 
@@ -335,6 +338,9 @@ module top (
   assign ha_jeapar    = ha_jeapar_top;
 
   always @ ( ha_pclock ) begin
+    simulationTime = $time;
+    set_simulation_time(simulationTime);
+//    $display("%d : Calling to C ", simulationTime);
     psl_bfm( ha_pclock, 
              ha_jval_top, 
              ha_jcom_top, 
