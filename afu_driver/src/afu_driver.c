@@ -91,6 +91,7 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
         uint64_t c_ah_mmrdata;
         uint32_t c_ah_mmrdatapar;
 	uint64_t c_sim_time ;
+        int      c_sim_error ;
 
 // Function declaration
 
@@ -265,6 +266,12 @@ void set_simulation_time(const svLogicVecVal *simulationTime)
   
    getMy64Bit(simulationTime, &c_sim_time);
 //  printf("inside C: time value  = %08lld\n", (long long) c_sim_time);
+}
+
+void get_simuation_error(svLogic *simulationError)
+{
+  *simulationError  = c_sim_error & 0x1;
+//  printf("inside C: error value  = %08d\n",  c_sim_error);
 }
 
 static void error_message(const char *str)
@@ -637,6 +644,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  }
 	} else {
 	  //psl();	// the psl() function from PLI is going to be split into several subsidiary functions
+ 	  c_sim_error = 0;
 	  psl_control();
 	// Job
 	if (event.job_valid)
@@ -1198,10 +1206,13 @@ static void psl_control(void)
 	if (rc < 0) {
 	  printf("%08lld: ", (long long) c_sim_time);
 	  printf("Socket closed: Ending Simulation.");
+	  c_sim_error = 1;
+#ifdef OLD_PLI_CODE
 #ifdef FINISH
 		vpi_control(vpiFinish, 1);
 #else
 		vpi_control(vpiStop, 1);
+#endif
 #endif
 	}
 }

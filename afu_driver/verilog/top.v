@@ -22,6 +22,7 @@ module top (
 
    import "DPI-C" function void psl_bfm_init( );
    import "DPI-C" function void set_simulation_time(input [0:63] simulationTime);
+   import "DPI-C" function void get_simuation_error(output simulationError);
    import "DPI-C" function void psl_bfm( input ha_pclock, 
              output          ha_jval_top, 
              output [0:7]    ha_jcom_top, 
@@ -242,8 +243,8 @@ module top (
   // Integers
 
   integer         i;
-//  reg  [0:31]            simulationTime ;
-  reg [0:63]            simulationTime ;
+  reg [0:63]      simulationTime ;
+  reg             simulationError;
 
   // C code interface registration
 
@@ -397,8 +398,15 @@ module top (
              );
   end
 
+  always @ (negedge ha_pclock) begin
+    get_simuation_error(simulationError);
+  end
+
   always @ (posedge ha_pclock) begin
     ah_jrunning_l <= ah_jrunning;
+    if(simulationError)
+      $finish;
+//      $stop;
   end
 
   assign ah_jrunning_top = ah_jrunning_l;
