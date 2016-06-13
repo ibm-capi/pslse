@@ -105,9 +105,10 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 	event->_next = NULL;
 
 	// debug the mmio and print the input address and the translated address
-	/* debug_msg("_add_event: %s: WRITE%d word=0x%05x (0x%05x) data=0x%s", */
-	/* 	  mmio->afu_name, event->dw ? 64 : 32, */
-	/* 	  event->addr, addr, event->data); */
+	// debug_msg("_add_event: %s: WRITE%d word=0x%05x (0x%05x) data=0x%s", 
+	 debug_msg("_add_event:: WRITE word=0x%05x (0x%05x) data=0x%x", 
+	 //	  mmio->afu_name, event->dw ? 64 : 32, 
+	 	  event->addr, addr, event->data); 
 
 	// Add to end of list
 	list = &(mmio->list);
@@ -219,16 +220,19 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
         //struct config_record *crptr = &cr_array;
         mmio->desc.crptr = cr_array;
 	// Queue mmio reads
-	eventdevven = _add_desc(mmio, 1, 1,crstart >> 2, 0L);
-	eventclass = _add_desc(mmio, 1, 1, (crstart+8) >> 2, 0L);
+	// Only do 32-bit mmio for config record data
+	//eventdevven = _add_desc(mmio, 1, 1,crstart >> 2, 0L);
+	eventdevven = _add_desc(mmio, 1, 0,crstart >> 2, 0L);
+	//eventclass = _add_desc(mmio, 1, 1, (crstart+8) >> 2, 0L);
+	eventclass = _add_desc(mmio, 1, 0, (crstart+8) >> 2, 0L);
 	
 	// Store data from reads
 	_wait_for_done(&(eventdevven->state), lock);
-	debug_msg("XXXX: DATA: = %016x\n", eventdevven->data);
-	cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 48) & 0xffffl;
-	//cr_array->cr_device = (uint16_t) (eventdevven->data >> 48) & 0xffffl;
-	//cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 32) & 0xffffl;
-	cr_array->cr_device = (uint16_t) (eventdevven->data >> 32) & 0xffffl;
+	//debug_msg("XXXX: DATA: = %08x\n", eventdevven->data);
+	//cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 48) & 0xffffl;
+	cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 16);
+	//cr_array->cr_device = (uint16_t) (eventdevven->data >> 32) 0xffffl;
+	cr_array->cr_device = (uint16_t) (eventdevven->data );
         debug_msg("%x:%x CR dev & vendor", cr_array->cr_device, cr_array->cr_vendor);
         free(eventdevven);
         	debug_msg("%x:%x CR dev & vendor swapped", ntohs(cr_array->cr_device),ntohs(cr_array->cr_vendor));

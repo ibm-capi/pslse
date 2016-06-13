@@ -131,7 +131,7 @@ static void _attach(struct psl *psl, struct client *client)
 	}
 
 	psl->attached_clients++;
-	info_msg( "Attached client context %d: current attached clients = %d\n", client->context, psl->attached_clients );
+	info_msg( "Attached client context %d: current attached clients = %d: client type = %c\n", client->context, psl->attached_clients, client->type );
 	
 	// for master and slave send llcmd add
         // master "wed" is 0x0005000000000000 can actually use client->context here as well since context = 0
