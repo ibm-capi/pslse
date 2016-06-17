@@ -27,6 +27,10 @@ struct parms {
 	unsigned int paged_percent;
 	unsigned int reorder_percent;
 	unsigned int buffer_percent;
+	unsigned int caia_version;
+	unsigned int psl_rev_level;
+	unsigned int image_loaded;
+	unsigned int base_image;
 };
 
 // Randomly decide to allow response to AFU

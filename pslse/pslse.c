@@ -114,8 +114,11 @@ static void _query(struct client *client, uint8_t id)
 	int size, offset;
 
 	psl = _find_psl(id, &major, &minor);
-	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process) +
-	    sizeof(client->max_irqs);
+	size = 1 + sizeof(psl->mmio->desc.num_ints_per_process) + sizeof(client->max_irqs) + 
+	    sizeof(psl->mmio->desc.req_prog_model) +
+	    sizeof(psl->mmio->desc.PerProcessPSA) + sizeof(psl->mmio->desc.PerProcessPSA_offset) +
+	    sizeof(psl->mmio->desc.AFU_EB_len) + sizeof(psl->mmio->desc.crptr->cr_device) +
+	    sizeof(psl->mmio->desc.crptr->cr_vendor) + sizeof(psl->mmio->desc.crptr->cr_class);
 	buffer = (uint8_t *) malloc(size);
 	buffer[0] = PSLSE_QUERY;
 	offset = 1;
@@ -127,6 +130,34 @@ static void _query(struct client *client, uint8_t id)
 		client->max_irqs = 2037 / psl->mmio->desc.num_of_processes;
 	memcpy(&(buffer[offset]),
 	       (char *)&(client->max_irqs), sizeof(client->max_irqs));
+        offset += sizeof(client->max_irqs);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.req_prog_model),
+	       sizeof(psl->mmio->desc.req_prog_model));
+        offset += sizeof(psl->mmio->desc.req_prog_model);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.PerProcessPSA),
+	       sizeof(psl->mmio->desc.PerProcessPSA));
+        offset += sizeof(psl->mmio->desc.PerProcessPSA);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.PerProcessPSA_offset),
+	       sizeof(psl->mmio->desc.PerProcessPSA_offset));
+        offset += sizeof(psl->mmio->desc.PerProcessPSA_offset);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.AFU_EB_len),
+	       sizeof(psl->mmio->desc.AFU_EB_len));
+        offset += sizeof(psl->mmio->desc.AFU_EB_len);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.crptr->cr_device),
+	       sizeof(psl->mmio->desc.crptr->cr_device));
+        offset += sizeof(psl->mmio->desc.crptr->cr_device);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.crptr->cr_vendor),
+	       sizeof(psl->mmio->desc.crptr->cr_vendor));
+        offset += sizeof(psl->mmio->desc.crptr->cr_vendor);
+	memcpy(&(buffer[offset]),
+	       (char *)&(psl->mmio->desc.crptr->cr_class),
+	       sizeof(psl->mmio->desc.crptr->cr_class));
 	if (put_bytes(client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
 		      client->context) < 0) {
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);

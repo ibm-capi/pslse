@@ -42,6 +42,14 @@
 #define DPRINTF(...)
 #endif
 
+#ifndef MAX
+#define MAX(a,b)(((a)>(b))?(a):(b))
+#endif /* #ifndef MAX */
+
+#ifndef MIN
+#define MIN(a,b)(((a)<(b))?(a):(b))
+#endif /* #ifndef MIN */
+
 /*
  * System constants
  */
@@ -51,6 +59,7 @@
 #define FOURK_MASK        0xFFFFFFFFFFFFF000L
 
 #define DSISR 0x4000000040000000L
+#define ERR_BUFF_MAX_COPY_SIZE 4096
 
 static int _delay_1ms()
 {
@@ -306,7 +315,7 @@ static void _handle_ack(struct cxl_afu_h *afu)
 	if (!afu)
 		fatal_msg("NULL afu passed to libcxl.c:_handle_ack");
 	DPRINTF("MMIO ACK\n");
-	if (afu->mmio.type == PSLSE_MMIO_READ64) {
+	if ((afu->mmio.type == PSLSE_MMIO_READ64)| (afu->mmio.type == PSLSE_MMIO_EBREAD)) {
 		if (get_bytes_silent(afu->fd, sizeof(uint64_t), data, 1000, 0) <
 		    0) {
 			warn_msg("Socket failure getting MMIO Ack");
@@ -505,6 +514,7 @@ static void *_psl_loop(void *ptr)
 	uint8_t size;
 	uint64_t addr;
 	uint16_t value;
+	uint32_t lvalue;
 	int rc;
 
 	if (!afu)
@@ -528,6 +538,7 @@ static void *_psl_loop(void *ptr)
 			case PSLSE_MMIO_WRITE32:
 				_mmio_write32(afu);
 				break;
+			case PSLSE_MMIO_EBREAD:
 			case PSLSE_MMIO_READ64:
 			case PSLSE_MMIO_READ32:	/*fall through */
 				_mmio_read(afu);
@@ -588,19 +599,39 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_max = ntohs(value);
 			afu->int_req.state = LIBCXL_REQ_IDLE;
 			break;
-		case PSLSE_QUERY:
-			size = sizeof(uint16_t) + sizeof(uint16_t);
+		case PSLSE_QUERY: {
+			size = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) +
+			    sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +  
+                            sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t);
 			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
 			    0) {
 				warn_msg("Socket failure getting PSLSE query");
 				_all_idle(afu);
 				break;
 			}
-			memcpy((char *)&value, (char *)&(buffer[1]), 2);
-			afu->irqs_min = (long)ntohs(value);
-			memcpy((char *)&value, (char *)&(buffer[3]), 2);
-			afu->irqs_max = (long)ntohs(value);
+			memcpy((char *)&value, (char *)&(buffer[0]), 2);
+			afu->irqs_min = (long)(value);
+			memcpy((char *)&value, (char *)&(buffer[2]), 2);
+			afu->irqs_max = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[4]), 2);
+			afu->modes_supported = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[6]), 8);
+			afu->mmio_len = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[14]), 8);
+			afu->mmio_off = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[22]), 8);
+			//afu->eb_len = (long)ntohll(value);
+			afu->eb_len = (long)(value);
+                	memcpy((char *)&value, (char *)&(buffer[30]), 2);
+			afu->cr_device = (long)ntohs(value);
+                        memcpy((char *)&value, (char *)&(buffer[32]), 2);
+			afu->cr_vendor = (long)ntohs(value);
+                        memcpy((char *)&lvalue, (char *)&(buffer[34]), 4);
+			afu->cr_class = ntohl(lvalue);
+			//no better place to put this right now
+			afu->prefault_mode = CXL_PREFAULT_MODE_NONE;
 			break;
+		}
 		case PSLSE_MEMORY_READ:
 			DPRINTF("AFU MEMORY READ\n");
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
@@ -1251,12 +1282,15 @@ struct cxl_afu_h *cxl_afu_open_h(struct cxl_afu_h *afu, enum cxl_views view)
 	switch (view) {
 	case CXL_VIEW_DEDICATED:
 		afu_type = 'd';
+		afu->mode = CXL_MODE_DEDICATED;
 		break;
 	case CXL_VIEW_MASTER:
 		afu_type = 'm';
+		afu->mode = CXL_MODE_DIRECTED;
 		break;
 	case CXL_VIEW_SLAVE:
 		afu_type = 's';
+		afu->mode = CXL_MODE_DIRECTED;
 		break;
 	default:
 		errno = ENODEV;
@@ -1377,7 +1411,7 @@ int cxl_afu_fd(struct cxl_afu_h *afu)
 
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if ((afu == NULL) || (!afu->opened))
 		return -1;
 	*valp = API_VERSION;
 	return 0;
@@ -1385,7 +1419,7 @@ int cxl_get_api_version(struct cxl_afu_h *afu, long *valp)
 
 int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if ((afu == NULL) || (!afu->opened))
 		return -1;
 	*valp = API_VERSION_COMPATIBLE;
 	return 0;
@@ -1393,19 +1427,41 @@ int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp)
 
 int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if (!afu) {
+		warn_msg("cxl_get_irqs_max: No AFU given");
+		errno = ENODEV;
 		return -1;
+	}
 	*valp = afu->irqs_max;
 	return 0;
 }
 
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp)
 {
-	if ((afu == NULL) || (afu->opened))
+	if (!afu) {
+		warn_msg("cxl_get_irqs_min: No AFU given");
+		errno = ENODEV;
 		return -1;
+	}
 	*valp = afu->irqs_min;
 	return 0;
 }
+
+int cxl_set_irqs_max(struct cxl_afu_h *afu, long value)
+{
+	if (!afu) {
+		warn_msg("cxl_set_irqs_max: No AFU given");
+		errno = ENODEV;
+		return -1;
+	}
+	if (value > afu->irqs_max)
+	 	warn_msg("cxl_set_irqs_max: value is greater than limit, ignoring \n");
+	else
+		afu->irqs_max = value;
+	//TODO	 Send the new irqs_max value back to psl's client struct
+	return 0;
+}
+
 
 int cxl_event_pending(struct cxl_afu_h *afu)
 {
@@ -1554,6 +1610,81 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	return -1;
 }
 
+int cxl_errinfo_read(struct cxl_afu_h *afu, void *dst, off_t off, size_t len)
+{
+        off_t aligned_start, last_byte;
+	off_t index1, index2;
+	uint8_t *buffer;
+	size_t total_read_length;
+
+	if ((afu == NULL) || !afu->mapped)
+		goto bread64_fail;
+	if (len == 0 || off < 0 || (size_t)off >= afu->eb_len)
+		return 0;
+
+	/* calculate aligned read window */
+	len = MIN((size_t)(afu->eb_len - off), len);
+	aligned_start = off & 0xfff8;
+	last_byte = aligned_start + len + (off & 0x7);
+	total_read_length = (((off & 0x7) + len + 0x7) >>3) << 3  ;
+	buffer = (uint8_t* )calloc(total_read_length +8, sizeof(uint8_t));
+	if (!buffer)
+		return -ENOMEM;
+	uint64_t *wbuf = (uint64_t *)buffer;
+	uint8_t *bbuf = (uint8_t *)buffer;
+
+	/* max we can copy in one read is PAGE_SIZE */
+	if (total_read_length > ERR_BUFF_MAX_COPY_SIZE) {
+		total_read_length = ERR_BUFF_MAX_COPY_SIZE;
+		len = ERR_BUFF_MAX_COPY_SIZE - (off & 0x7);
+	}
+
+	/* perform aligned read from the mmio region */
+        index1 = 0;
+	while (aligned_start <= last_byte)  {
+	// Send MMIO request to PSLSE
+		afu->mmio.type = PSLSE_MMIO_EBREAD;
+		afu->mmio.addr = (uint32_t) aligned_start ;
+		afu->mmio.state = LIBCXL_REQ_REQUEST;
+		while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
+			_delay_1ms();
+		if (!afu->opened)
+			goto bread64_fail;
+		// if offset, have to potentially do BE->LE swap
+        	if ((off & 0x7) >0) 
+                	afu->mmio.data = htonll(afu->mmio.data);
+        	wbuf[index1] = afu->mmio.data;
+        	aligned_start = aligned_start + 8;
+                ++index1;
+        }
+	memcpy(&wbuf[0], &bbuf[off & 0x7], len);
+	// if offset we have to do LE->BE swap back	
+ 	if ((off & 0x7) > 0)    {
+                index2 = 0;
+	       total_read_length = len;
+                while (total_read_length !=0)  {
+                        if (total_read_length < 8) 
+                        // set total_read_length to 0
+				total_read_length = 0;
+                        else                    {
+				wbuf[index2]= htonll(wbuf[index2]);
+                		++index2;
+                        	total_read_length = total_read_length -8; 
+                	}
+		}
+	} 
+	memcpy(dst, &wbuf[0], len);
+	free(buffer);
+	// return # of bytes read
+	return len;
+
+ bread64_fail:
+        if (buffer)
+          free(buffer);
+	errno = ENODEV;
+	return -1;
+}
+
 int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 {
 	if (offset & 0x3) {
@@ -1607,3 +1738,273 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	errno = ENODEV;
 	return -1;
 }
+
+int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+        //uint16_t crnum = cr_num;
+	// For now, don't worry about cr_num
+	//*valp =  htons(afu->cr_device);
+	*valp =  afu->cr_device;
+	return 0;
+}
+
+int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+        //uint16_t crnum = cr_num;
+	// For now, don't worry about cr_num
+	//*valp =  htons(afu->cr_vendor);
+	*valp =  afu->cr_vendor;
+	return 0;
+}
+
+int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+        //uint16_t crnum = cr_num;
+	// For now, don't worry about cr_num
+	//*valp =  htonl(afu->cr_class);
+	*valp =  afu->cr_class;
+	return 0;
+}
+
+int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = 0x04000000;
+        return 0;
+}
+
+int cxl_errinfo_size(struct cxl_afu_h *afu, size_t *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->eb_len;
+	return 0;
+}
+
+int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->mmio_len;
+	return 0;
+}
+
+int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->mmio_off;
+	return 0;
+}
+
+int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp)
+{
+//List of the modes this AFU supports. One per line.
+//Valid entries are: "dedicated_process" and "afu_directed"
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->modes_supported;
+	return 0;
+}
+
+int cxl_get_mode(struct cxl_afu_h *afu, long *valp)
+{
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->mode;
+	return 0;
+}
+
+int cxl_set_mode(struct cxl_afu_h *afu, long value)
+{
+//Writing will change the mode provided that no user contexts are attached.
+	if (afu == NULL) 
+		return -1;
+        //check to be sure no contexts are attached before setting this, could be hard to tell?
+	afu->mode = value;
+        // do we also need to change afu_type to match mode now??
+	return 0;
+}
+
+int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp)
+{
+//Get the mode for prefaulting in segments into the segment table
+//when performing the START_WORK ioctl. Possible values:
+//       none: No prefaulting (default)
+//       work_element_descriptor: Treat the work element
+//           descriptor as an effective address and
+//           prefault what it points to.
+//       all: all segments process calling START_WORK maps.
+	if (afu == NULL) 
+		return -1;
+	*valp =  afu->prefault_mode;
+	return 0;
+}
+
+int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value)
+{
+//Set the mode for prefaulting in segments into the segment table
+//when performing the START_WORK ioctl. Possible values:
+//       none: No prefaulting (default)
+//       work_element_descriptor: Treat the work element
+//           descriptor as an effective address and
+//           prefault what it points to.
+//       all: all segments process calling START_WORK maps.
+	if (afu == NULL) 
+		return -1;
+        if (value == CXL_PREFAULT_MODE_NONE || CXL_PREFAULT_MODE_WED || CXL_PREFAULT_MODE_ALL) 
+		afu->prefault_mode = value;
+//Probably should return error msg if value wasn't a "good" value
+	return 0;
+}
+
+int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = 0x0;
+        return 0;
+}
+
+
+int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,long *minorp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *majorp = 0x1;
+        *minorp = 0x0;
+        return 0;
+}
+
+int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = CXL_IMAGE_USER;
+        return 0;
+}
+
+int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp)
+{
+	if (adapter == NULL)
+                   return -1;
+        // for now just return constant, later will read value from file
+        *valp = 0x0;
+        return 0;
+}
+
+inline
+int cxl_afu_attach_work(struct cxl_afu_h *afu,
+			struct cxl_ioctl_start_work *work)
+{
+	if (afu == NULL ||  work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	afu->int_req.max = work->num_interrupts;
+;
+	return cxl_afu_attach(afu, work->work_element_descriptor);
+}
+
+inline
+struct cxl_ioctl_start_work *cxl_work_alloc()
+{
+	return calloc(1, sizeof(struct cxl_ioctl_start_work));
+}
+
+inline
+int cxl_work_free(struct cxl_ioctl_start_work *work)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	free(work);
+	return 0;
+}
+
+inline
+int cxl_work_get_amr(struct cxl_ioctl_start_work *work, __u64 *valp)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	*valp = work->amr;
+	return 0;
+}
+
+inline
+int cxl_work_get_num_irqs(struct cxl_ioctl_start_work *work, __s16 *valp)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	*valp = work->num_interrupts;
+	return 0;
+}
+
+inline
+int cxl_work_get_wed(struct cxl_ioctl_start_work *work, __u64 *valp)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	*valp = work->work_element_descriptor;
+	return 0;
+}
+
+inline
+int cxl_work_set_amr(struct cxl_ioctl_start_work *work, __u64 amr)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	work->amr = amr;
+	if (amr)
+		work->flags |= CXL_START_WORK_AMR;
+	else
+		work->flags &= ~(CXL_START_WORK_AMR);
+	return 0;
+}
+
+inline
+int cxl_work_set_num_irqs(struct cxl_ioctl_start_work *work, __s16 irqs)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	work->num_interrupts = irqs;
+	if (irqs >= 0)
+		work->flags |= CXL_START_WORK_NUM_IRQS;
+	else
+		work->flags &= ~(CXL_START_WORK_NUM_IRQS);
+	return 0;
+}
+
+inline
+int cxl_work_set_wed(struct cxl_ioctl_start_work *work, __u64 wed)
+{
+	if (work == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	work->work_element_descriptor = wed;
+	return 0;
+}
+

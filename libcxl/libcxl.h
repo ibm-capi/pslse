@@ -32,6 +32,7 @@
  */
 struct cxl_adapter_h;
 struct cxl_afu_h;
+struct cxl_ioctl_start_work;
 
 /*
  * Adapter Enumeration
@@ -92,9 +93,22 @@ int cxl_afu_opened(struct cxl_afu_h *afu);
 /*
  * Attach AFU context to this process
  */
+struct cxl_ioctl_start_work *cxl_work_alloc(void);
+int cxl_work_free(struct cxl_ioctl_start_work *work);
+int cxl_work_get_amr(struct cxl_ioctl_start_work *work, __u64 *valp);
+int cxl_work_get_num_irqs(struct cxl_ioctl_start_work *work, __s16 *valp);
+int cxl_work_get_wed(struct cxl_ioctl_start_work *work, __u64 *valp);
+int cxl_work_set_amr(struct cxl_ioctl_start_work *work, __u64 amr);
+int cxl_work_set_num_irqs(struct cxl_ioctl_start_work *work, __s16 num_irqs);
+int cxl_work_set_wed(struct cxl_ioctl_start_work *work, __u64 wed);
+
+int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed);
+int cxl_afu_attach_work(struct cxl_afu_h *afu,
+			struct cxl_ioctl_start_work *work);
+
+/* Deprecated interface */
 int cxl_afu_attach_full(struct cxl_afu_h *afu, uint64_t wed,
 			uint16_t num_interrupts, uint64_t amr);
-int cxl_afu_attach(struct cxl_afu_h *afu, uint64_t wed);
 
 /*
  * Get AFU process element
@@ -142,22 +156,22 @@ enum cxl_image {
 int cxl_get_api_version(struct cxl_afu_h *afu, long *valp);
 int cxl_get_api_version_compatible(struct cxl_afu_h *afu, long *valp);
 int cxl_get_irqs_max(struct cxl_afu_h *afu, long *valp);
-//int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
+int cxl_set_irqs_max(struct cxl_afu_h *afu, long value);
 int cxl_get_irqs_min(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
-//int cxl_set_mode(struct cxl_afu_h *afu, long value);
-//int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp);
-//int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value);
+int cxl_get_mmio_size(struct cxl_afu_h *afu, long *valp);
+int cxl_get_mode(struct cxl_afu_h *afu, long *valp);
+int cxl_set_mode(struct cxl_afu_h *afu, long value);
+int cxl_get_modes_supported(struct cxl_afu_h *afu, long *valp);
+int cxl_get_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode *valp);
+int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value);
 //int cxl_get_dev(struct cxl_afu_h *afu, long *majorp, long *minorp);
-//int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp);
-//int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp);
-//int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,
-//                       long *minorp);
-//int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp);
-//int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp);
+int cxl_get_pp_mmio_len(struct cxl_afu_h *afu, long *valp);
+int cxl_get_pp_mmio_off(struct cxl_afu_h *afu, long *valp);
+int cxl_get_base_image(struct cxl_adapter_h *adapter, long *valp);
+int cxl_get_caia_version(struct cxl_adapter_h *adapter, long *majorp,
+                       long *minorp);
+int cxl_get_image_loaded(struct cxl_adapter_h *adapter, enum cxl_image *valp);
+int cxl_get_psl_revision(struct cxl_adapter_h *adapter, long *valp);
 
 /*
  * Events
@@ -209,37 +223,18 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data);
  *
  * Call this once per process prior to any MMIO accesses.
  */
-//int cxl_mmio_install_sigbus_handler();
-
-/* FIXME FIXME Replace me with real functionality */
-static inline int
-cxl_get_cr_class(struct cxl_afu_h *afu __attribute__((unused)),
-		 long cr_num __attribute__((unused)),
-		 long *valp)
+//use JK's temp fix for this
+static inline int cxl_mmio_install_sigbus_handler(void)
 {
-	if (valp)
-		*valp = 0x00120000; /* accelerator */
-	return 0;
+/* nothing to be done yet */
+return 0;
 }
+int cxl_get_cr_device(struct cxl_afu_h *afu, long cr_num, long *valp);
+int cxl_get_cr_vendor(struct cxl_afu_h *afu, long cr_num, long *valp);
+int cxl_get_cr_class(struct cxl_afu_h *afu, long cr_num, long *valp);
+int cxl_errinfo_size(struct cxl_afu_h *afu, size_t *valp);
+int cxl_errinfo_read(struct cxl_afu_h *afu, void *dst, off_t off, size_t len);
 
-static inline int
-cxl_get_cr_device(struct cxl_afu_h *afu __attribute__((unused)),
-		  long cr_num __attribute__((unused)),
-		  long *valp)
-{
-	if (valp)
-		*valp = 0x00000602; /* CGzip */
-	return 0;
-}
 
-static inline int
-cxl_get_cr_vendor(struct cxl_afu_h *afu __attribute__((unused)),
-		  long cr_num __attribute__((unused)),
-		  long *valp)
-{
-	if (valp)
-		*valp = 0x00001014; /* IBM */
-	return 0;
-}
 
 #endif

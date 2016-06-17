@@ -49,11 +49,12 @@ private:
     void reset_machine_controllers ();
 
     bool get_mmio_read_parity ();
+    bool set_jerror_not_run;
 
 public:
     /* constructor sets up descriptor from config file, establishes server socket connection
        and waits for client to connect */
-    AFU (int port, std::string filename, bool parity);
+    AFU (int port, std::string filename, bool parity, bool jerror);
 
     /* starts the main loop of the afu test platform */
     void start ();

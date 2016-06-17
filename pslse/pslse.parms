@@ -22,8 +22,8 @@
 
 # Randomization seed.  Set this to force reproducible sequence of event
 # NOTE: Must be a single value, not a min,max range
-SEED:13
-
+#SEED:13
+SEED:1461247482
 # Percentage chance of PSL driving any pending responses in a clock cycle.
 # Can not be 0 otherwise PSL will never generate responses to commands.
 # Setting to 100 will cause all responses to be very rapid and generally
@@ -33,10 +33,18 @@ SEED:13
 RESPONSE_PERCENT:10,20
 
 # Percentage chance of PSL responding with PAGED for any command response.
-PAGED_PERCENT:2,4
+#PAGED_PERCENT:2,4
+PAGED_PERCENT:0
 
 # Percentage chance of PSL reordering the execution of commands.
 REORDER_PERCENT:80,90
 
 # Percentage chance of PSL generating extra buffer read/write activity.
 BUFFER_PERCENT:80,90
+
+# VSEC data lines 
+#CAIA_VERSION:0100
+#PSL_REV_LEVEL:0
+#IMAGE_LOADED:1
+#BASE_IMAGE_REV_LEVEL:0
+

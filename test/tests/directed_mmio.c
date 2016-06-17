@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
-	sleep(60); // pause to let me run another version of this...
+	sleep(10); // pause to let me run another version of this...
 
 	// Check WED is found
 	if (wed_check != wed) {

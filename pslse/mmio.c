@@ -75,7 +75,7 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 		return event;
 	event->rnw = rnw;
 	event->dw = dw;
-	if (client == NULL) {
+	if (client == NULL)  {
 	  // don't try to recalculate the address
 	  event->addr = addr;
 	} else {
@@ -105,9 +105,10 @@ static struct mmio_event *_add_event(struct mmio *mmio, struct client *client,
 	event->_next = NULL;
 
 	// debug the mmio and print the input address and the translated address
-	/* debug_msg("_add_event: %s: WRITE%d word=0x%05x (0x%05x) data=0x%s", */
-	/* 	  mmio->afu_name, event->dw ? 64 : 32, */
-	/* 	  event->addr, addr, event->data); */
+	// debug_msg("_add_event: %s: WRITE%d word=0x%05x (0x%05x) data=0x%s", 
+	 debug_msg("_add_event:: WRITE word=0x%05x (0x%05x) data=0x%x", 
+	 //	  mmio->afu_name, event->dw ? 64 : 32, 
+	 	  event->addr, addr, event->data); 
 
 	// Add to end of list
 	list = &(mmio->list);
@@ -208,6 +209,38 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 		return -1;
 	}
 
+        // NEW BLOCK add code to check for CRs and read them in if available
+        struct mmio_event *eventdevven, *eventclass;
+        uint32_t crstart;
+        uint16_t crnum = mmio->desc.num_of_afu_CRs;
+        if ( crnum > 0) {
+        crstart = mmio->desc.AFU_CR_offset;
+        // allocate 
+        struct config_record *cr_array = malloc(crnum * sizeof(struct config_record *));
+        //struct config_record *crptr = &cr_array;
+        mmio->desc.crptr = cr_array;
+	// Queue mmio reads
+	// Only do 32-bit mmio for config record data
+	//eventdevven = _add_desc(mmio, 1, 1,crstart >> 2, 0L);
+	eventdevven = _add_desc(mmio, 1, 0,crstart >> 2, 0L);
+	//eventclass = _add_desc(mmio, 1, 1, (crstart+8) >> 2, 0L);
+	eventclass = _add_desc(mmio, 1, 0, (crstart+8) >> 2, 0L);
+	
+	// Store data from reads
+	_wait_for_done(&(eventdevven->state), lock);
+	//debug_msg("XXXX: DATA: = %08x\n", eventdevven->data);
+	//cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 48) & 0xffffl;
+	cr_array->cr_vendor = (uint16_t) (eventdevven->data >> 16);
+	//cr_array->cr_device = (uint16_t) (eventdevven->data >> 32) 0xffffl;
+	cr_array->cr_device = (uint16_t) (eventdevven->data );
+        debug_msg("%x:%x CR dev & vendor", cr_array->cr_device, cr_array->cr_vendor);
+        free(eventdevven);
+        	debug_msg("%x:%x CR dev & vendor swapped", ntohs(cr_array->cr_device),ntohs(cr_array->cr_vendor));
+        _wait_for_done(&(eventclass->state), lock);
+	cr_array->cr_class = (uint32_t) (eventclass->data >> 32) & 0xffffffffl;
+        free(eventclass);
+        }
+        // end of NEW BLOCK`
 	return 0;
 }
 
@@ -416,9 +449,38 @@ static struct mmio_event *_handle_mmio_read(struct mmio *mmio,
 	return NULL;
 }
 
+// Add mmio read event of error buffer at offset to list
+static struct mmio_event *_handle_mmio_read_eb(struct mmio *mmio,
+					    struct client *client, int dw)
+{
+	struct mmio_event *event;
+	uint32_t offset;
+	int fd = client->fd;
+
+	if (get_bytes_silent(fd, 4, (uint8_t *) & offset, mmio->timeout,
+			     &(client->abort)) < 0) {
+		goto read_fail;
+	}
+	offset = ntohl(offset);
+        offset = offset + (uint32_t)mmio->desc.AFU_EB_offset;
+        debug_msg("offset for eb read is %x\n", offset);
+//	event = _add_event(mmio, client, 1, dw, offset>>2, 1, 0);
+	event = _add_desc(mmio, 1, dw, offset>>2, 0);
+//        _wait_for_done(&(event->state), psl->lock);
+	return event;
+
+ read_fail:
+	// Socket connection is dead
+	debug_msg("%s:_handle_mmio_read failed context=%d",
+		  mmio->afu_name, client->context);
+	client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+	return NULL;
+}
+
+
 // Handle MMIO request from client
 struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
-			       int rnw, int dw)
+			       int rnw, int dw, int eb_rd)
 {
 	uint8_t ack;
 
@@ -431,6 +493,10 @@ struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
 		}
 		return NULL;
 	}
+
+	if (eb_rd) 
+		return _handle_mmio_read_eb(mmio, client, dw);
+
 	if (rnw)
 		return _handle_mmio_read(mmio, client, dw);
 	else

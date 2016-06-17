@@ -131,7 +131,7 @@ static void _attach(struct psl *psl, struct client *client)
 	}
 
 	psl->attached_clients++;
-	info_msg( "Attached client context %d: current attached clients = %d\n", client->context, psl->attached_clients );
+	info_msg( "Attached client context %d: current attached clients = %d: client type = %c\n", client->context, psl->attached_clients, client->type );
 	
 	// for master and slave send llcmd add
         // master "wed" is 0x0005000000000000 can actually use client->context here as well since context = 0
@@ -262,6 +262,8 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 			debug_msg("%s:_handle_aux2: JOB done", job->afu_name);
 			dbg_aux2 |= DBG_AUX2_DONE;
 			*error = job_error;
+		        //debug_msg("%s,%d:_handle_aux2, jerror is %x ", 
+			//	  job->afu_name, job->dbg_id, job_error );
 			if (job->job != NULL) {
 				event = job->job;
 				// Is job_done for reset or start?
@@ -406,6 +408,7 @@ static void _handle_afu(struct psl *psl)
 		buffer[0] = PSLSE_AFU_ERROR;
 		error = htonll(error);
 		memcpy((char *)&(buffer[1]), (char *)&error, sizeof(error));
+	        warn_msg("%s: Received JERROR: 0x%016"PRIx64" in afu-dedicated mode", psl->name, error);
 		if (put_bytes
 		    (client->fd, size, buffer, psl->dbg_fp, psl->dbg_id,
 		     0) < 0) {
@@ -445,6 +448,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 	struct cmd_event *cmd;
 	uint8_t buffer[MAX_LINE_CHARS];
 	int dw = 0;
+	int eb_rd = 0;
 
 	// Handle MMIO done
 	if (client->mmio_access != NULL) {
@@ -490,12 +494,14 @@ static void _handle_client(struct psl *psl, struct client *client)
 		case PSLSE_MMIO_WRITE64:
 			dw = 1;
 		case PSLSE_MMIO_WRITE32:	/*fall through */
-			mmio = handle_mmio(psl->mmio, client, 0, dw);
+			mmio = handle_mmio(psl->mmio, client, 0, dw, 0);
 			break;
-		case PSLSE_MMIO_READ64:
+		case PSLSE_MMIO_EBREAD:
+                        eb_rd = 1;
+		case PSLSE_MMIO_READ64: /*fall through */
 			dw = 1;
 		case PSLSE_MMIO_READ32:	/*fall through */
-			mmio = handle_mmio(psl->mmio, client, 1, dw);
+			mmio = handle_mmio(psl->mmio, client, 1, dw, eb_rd);
 			break;
 		default:
 		  error_msg("Unexpected 0x%02x from client on socket", buffer[0], client->fd);
@@ -771,6 +777,11 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 		perror("cmd_init");
 		goto init_fail;
 	}
+	// Load in VSEC data (read in from pslse.parms file)
+	psl->vsec_caia_version = parms->caia_version;
+	psl->vsec_psl_rev_level= parms->psl_rev_level;
+	psl->vsec_image_loaded= parms->image_loaded;
+	psl->vsec_base_image= parms->base_image;
 	// Set credits for AFU
 	if (psl_aux1_change(psl->afu_event, psl->cmd->credits) != PSL_SUCCESS) {
 		warn_msg("Unable to set credits");

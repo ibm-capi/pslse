@@ -42,12 +42,19 @@
 struct mmio_event {
 	uint32_t rnw;
 	uint32_t dw;
+	uint32_t eb_rd;
 	uint32_t addr;
 	uint32_t desc;
 	uint64_t data;
 	uint32_t parity;
 	enum pslse_state state;
 	struct mmio_event *_next;
+};
+
+struct config_record  {
+        uint16_t cr_device;
+        uint16_t cr_vendor;
+        uint32_t cr_class;
 };
 
 struct afu_descriptor {
@@ -64,6 +71,7 @@ struct afu_descriptor {
 	uint64_t PerProcessPSA_offset;
 	uint64_t AFU_EB_len;
 	uint64_t AFU_EB_offset;
+        struct config_record * crptr;
 };
 
 struct mmio {
@@ -92,7 +100,7 @@ void handle_mmio_ack(struct mmio *mmio, uint32_t parity_enabled);
 void handle_mmio_map(struct mmio *mmio, struct client *client);
 
 struct mmio_event *handle_mmio(struct mmio *mmio, struct client *client,
-			       int rnw, int dw);
+			       int rnw, int dw, int eb_rd);
 
 struct mmio_event *handle_mmio_done(struct mmio *mmio, struct client *client);
 

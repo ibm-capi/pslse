@@ -184,6 +184,18 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 				parms->buffer_percent = data;
 			debug_parm(dbg_fp, DBG_PARM_BUFFER_PERCENT,
 				   parms->buffer_percent);
+		} else if (!(strcmp(parm, "CAIA_VERSION"))) {
+			parms->caia_version = atoi(value);
+			debug_parm(dbg_fp, DBG_CAIA_VERSION, parms->caia_version);
+		} else if (!(strcmp(parm, "PSL_REV_LEVEL"))) {
+			parms->psl_rev_level = atoi(value);
+			debug_parm(dbg_fp, DBG_PSL_REV_LVL, parms->psl_rev_level);
+		} else if (!(strcmp(parm, "IMAGE_LOADED"))) {
+			parms->image_loaded = atoi(value);
+			debug_parm(dbg_fp, DBG_IMAGE_LOADED, parms->image_loaded);
+		} else if (!(strcmp(parm, "BASE_IMAGE_REV_LEVEL"))) {
+			parms->base_image = atoi(value);
+			debug_parm(dbg_fp, DBG_BASE_IMAGE, parms->base_image);
 		} else {
 			warn_msg("Ignoring invalid parm in %s: %s\n",
 				 filename, parm);
@@ -208,6 +220,11 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 	printf("\tPaged    = %d%%\n", parms->paged_percent);
 	printf("\tReorder  = %d%%\n", parms->reorder_percent);
 	printf("\tBuffer   = %d%%\n", parms->buffer_percent);
+//When we start reading these values in from pslse.parms, uncomment
+//	printf("\tCAIA_Ver     = %4d\n", parms->caia_version);
+//	printf("\tPSL_REV      = %d\n", parms->psl_rev_level);
+//	printf("\tImage_Loaded = %d\n", parms->image_loaded);
+//	printf("\tBase_Image   = %d\n", parms->base_image);
 
 	// Adjust timeout to milliseconds
 	parms->timeout *= 1000;

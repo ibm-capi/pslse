@@ -55,6 +55,9 @@ static int _parse_parm(FILE * fp)
 	case DBG_PARM_TIMEOUT:
 		printf("PARM:TIMEOUT=%d\n", value);
 		break;
+	case DBG_PARM_CREDITS:
+		printf("PARM:CREDITS=%d\n", value);
+		break;
 	case DBG_PARM_RESP_PERCENT:
 		printf("PARM:REPSONSE_PERCENT=%d\n", value);
 		break;
@@ -159,6 +162,54 @@ static int _parse_job(FILE * fp, DBG_HEADER header)
 	default:
 		printf("Unknown:0x%08x", code);
 	}
+	printf("\n");
+	free(name);
+	return 0;
+}
+
+static int _parse_pe(FILE * fp, DBG_HEADER header)
+{
+	uint32_t code;
+	uint8_t id;
+	uint64_t addr;
+	char *name;
+
+	if (debug_get_8(fp, &id) < 1)
+		return -1;
+	if (debug_get_32(fp, &code) < 1)
+		return -1;
+	name = _afu_name(id);
+
+	printf("%s:JOB: ", name);
+	switch (header) {
+	case DBG_HEADER_PE_ADD:
+		printf("Added ");
+		break;
+	case DBG_HEADER_PE_SEND:
+		printf("Sent ");
+		break;
+	default:
+		free(name);
+		return -1;
+	}
+	printf("LLCMD ");
+	if (debug_get_64(fp, &addr) < 1) {
+		printf("No LLCMD addr?");
+		return -1;
+ 		}
+	switch (addr) {
+		case PSL_LLCMD_ADD:
+			printf("ADD");
+			break;
+		case PSL_LLCMD_REMOVE:
+			printf("REMOVE");
+			break;
+		case PSL_LLCMD_TERMINATE:	
+			printf("TERMINATE");
+			break;
+		default:
+			printf(" Unknown LLCMD:0x%016"PRIx64, addr);
+		}		
 	printf("\n");
 	free(name);
 	return 0;
@@ -581,6 +632,11 @@ int main(int argc, char **argv)
 		case DBG_HEADER_JOB_ADD:
 		case DBG_HEADER_JOB_SEND:
 			if (_parse_job(fp, header) < 0)
+				return -1;
+			break;
+		case DBG_HEADER_PE_ADD:
+		case DBG_HEADER_PE_SEND:
+			if (_parse_pe(fp, header) < 0)
 				return -1;
 			break;
 		case DBG_HEADER_JOB_AUX2:
