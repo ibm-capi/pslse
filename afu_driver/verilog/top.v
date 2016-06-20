@@ -63,7 +63,7 @@ module top (
              output [0:7]    ha_brtag_top, 
              output          ha_brtagpar_top, 
              input [0:1023]  ah_brdata_top, 
-             input [0:7]     ah_brpar_top, 
+             input [0:15]    ah_brpar_top, 
              input           ah_brvalid_top, 
              input [0:7]     ah_brtag_top,
              output          ha_bwvalid_top, 
