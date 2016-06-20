@@ -20,6 +20,63 @@ module top (
   output          breakpoint
 );
 
+   import "DPI-C" function void psl_bfm_init( );
+   import "DPI-C" function void set_simulation_time(input [0:63] simulationTime);
+   import "DPI-C" function void get_simuation_error(output simulationError);
+   import "DPI-C" function void psl_bfm( input ha_pclock, 
+             output          ha_jval_top, 
+             output [0:7]    ha_jcom_top, 
+             output          ha_jcompar_top, 
+             output [0:63]   ha_jea_top,
+	     output          ha_jeapar_top, 
+             input           ah_jrunning_top,  
+             input           ah_jdone_top,
+	     input           ah_jcack_top, 
+             input  [0:63]   ah_jerror_top, 
+             input  [0:3]    ah_brlat_top,  
+             input           ah_jyield,
+	     input           ah_tbreq_top, 
+             input           ah_paren_top, 
+             output          ha_mmval_top,
+             output          ha_mmcfg_top, 
+             output          ha_mmrnw_top, 
+             output          ha_mmdw_top,
+             output [0:23]   ha_mmad_top, 
+             output          ha_mmadpar_top, 
+             output [0:63]   ha_mmdata_top, 
+             output          ha_mmdatapar_top,
+             input           ah_mmack_top, 
+             input [0:63]    ah_mmdata_top, 
+             input           ah_mmdatapar_top,
+             output [0:7]    ha_croom_top,
+             input           ah_cvalid_top, 
+             input  [0:7]    ah_ctag_top, 
+             input           ah_ctagpar_top, 
+             input  [0:12]   ah_com_top, 
+             input           ah_compar_top, 
+             input  [0:2]    ah_cabt_top, 
+             input  [0:63]   ah_cea_top, 
+             input           ah_ceapar_top, 
+             input  [0:15]   ah_cch_top, 
+             input  [0:11]   ah_csize_top, 
+             output          ha_brvalid_top, 
+             output [0:7]    ha_brtag_top, 
+             output          ha_brtagpar_top, 
+             input [0:1023]  ah_brdata_top, 
+             input [0:7]     ah_brpar_top, 
+             input           ah_brvalid_top, 
+             input [0:7]     ah_brtag_top,
+             output          ha_bwvalid_top, 
+             output [0:7]    ha_bwtag_top, 		// 8 bits
+             output          ha_bwtagpar_top,
+             output [0:1023] ha_bwdata_top, 		// 1024 bits
+             output [0:15]   ha_bwpar_top,	// 16 bits
+             output          ha_rvalid_top, 
+             output [0:7]    ha_rtag_top, 		// 8 bits
+             output          ha_rtagpar_top,
+             output [0:7]    ha_response_top, 		// 8 bits
+             output [0:8]    ha_rcredits_top		// 9 bits
+             );
   // Input
   reg    [0:7]    ha_croom_top;
   reg             ha_brvalid_top;
@@ -186,6 +243,8 @@ module top (
   // Integers
 
   integer         i;
+  reg [0:63]      simulationTime ;
+  reg             simulationError;
 
   // C code interface registration
 
@@ -227,8 +286,10 @@ module top (
     ha_jea_top <= 0;
     ha_jeapar_top <= 0;
     ha_pclock <= 0;
-    $afu_init;
-    $register_clock(ha_pclock);
+    // $afu_init;
+     psl_bfm_init();
+    // $register_clock(ha_pclock);
+/*
     $register_control(ha_jval_top, ha_jcom_top, ha_jcompar_top, ha_jea_top,
                       ha_jeapar_top, ah_jrunning_top, ah_jdone_top,
                       ah_jcack_top, ah_jerror_top, ah_brlat_top, ah_jyield,
@@ -246,6 +307,7 @@ module top (
                         ha_bwdata_top, ha_bwpar_top);
     $register_response(ha_rvalid_top, ha_rtag_top, ha_rtagpar_top,
                        ha_response_top, ha_rcredits_top);
+*/
   end
 
   // Clock generation
@@ -276,8 +338,75 @@ module top (
   assign ha_jea       = ha_jea_top;
   assign ha_jeapar    = ha_jeapar_top;
 
+  always @ ( ha_pclock ) begin
+    simulationTime = $time;
+    set_simulation_time(simulationTime);
+//    $display("%d : Calling to C ", simulationTime);
+    psl_bfm( ha_pclock, 
+             ha_jval_top, 
+             ha_jcom_top, 
+             ha_jcompar_top, 
+             ha_jea_top,
+	     ha_jeapar_top, 
+             ah_jrunning_top,  
+             ah_jdone_top,
+	     ah_jcack_top, 
+             ah_jerror_top, 
+             ah_brlat_top,  
+             ah_jyield,
+	     ah_tbreq_top, 
+             ah_paren_top, 
+             ha_mmval_top,
+             ha_mmcfg_top, 
+             ha_mmrnw_top, 
+             ha_mmdw_top,
+             ha_mmad_top, 
+             ha_mmadpar_top, 
+             ha_mmdata_top, 
+             ha_mmdatapar_top,
+             ah_mmack_top, 
+             ah_mmdata_top, 
+             ah_mmdatapar_top,
+             ha_croom_top,
+             ah_cvalid_top, 
+             ah_ctag_top, 
+             ah_ctagpar_top, 
+             ah_com_top, 
+             ah_compar_top, 
+             ah_cabt_top, 
+             ah_cea_top, 
+             ah_ceapar_top, 
+             ah_cch_top, 
+             ah_csize_top, 
+             ha_brvalid_top, 
+             ha_brtag_top, 
+             ha_brtagpar_top, 
+             ah_brdata_top, 
+             ah_brpar_top, 
+             ah_brvalid_top, 
+             ah_brtag_top,
+             ha_bwvalid_top, 
+             ha_bwtag_top, 		// 8 bits
+             ha_bwtagpar_top,
+             ha_bwdata_top, 		// 1024 bits
+             ha_bwpar_top,	// 16 bits
+             ha_rvalid_top, 
+             ha_rtag_top, 		// 8 bits
+             ha_rtagpar_top,
+             ha_response_top, 		// 8 bits
+             ha_rcredits_top		// 9 bits
+             );
+  end
+
+  always @ (negedge ha_pclock) begin
+    get_simuation_error(simulationError);
+  end
+
   always @ (posedge ha_pclock) begin
     ah_jrunning_l <= ah_jrunning;
+    if(simulationError)
+      $finish;
+//      $stop;
   end
 
   assign ah_jrunning_top = ah_jrunning_l;
