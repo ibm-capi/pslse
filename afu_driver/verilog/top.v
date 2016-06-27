@@ -22,13 +22,13 @@ module top (
 
    import "DPI-C" function void psl_bfm_init( );
    import "DPI-C" function void set_simulation_time(input [0:63] simulationTime);
-   import "DPI-C" function void get_simuation_error(output simulationError);
+   import "DPI-C" function void get_simuation_error(inout simulationError);
    import "DPI-C" function void psl_bfm( input ha_pclock, 
-             output          ha_jval_top, 
-             output [0:7]    ha_jcom_top, 
-             output          ha_jcompar_top, 
-             output [0:63]   ha_jea_top,
-	     output          ha_jeapar_top, 
+             inout           ha_jval_top, 
+             inout  [0:7]    ha_jcom_top, 
+             inout           ha_jcompar_top, 
+             inout  [0:63]   ha_jea_top,
+	     inout           ha_jeapar_top, 
              input           ah_jrunning_top,  
              input           ah_jdone_top,
 	     input           ah_jcack_top, 
@@ -37,18 +37,18 @@ module top (
              input           ah_jyield,
 	     input           ah_tbreq_top, 
              input           ah_paren_top, 
-             output          ha_mmval_top,
-             output          ha_mmcfg_top, 
-             output          ha_mmrnw_top, 
-             output          ha_mmdw_top,
-             output [0:23]   ha_mmad_top, 
-             output          ha_mmadpar_top, 
-             output [0:63]   ha_mmdata_top, 
-             output          ha_mmdatapar_top,
+             inout           ha_mmval_top,
+             inout           ha_mmcfg_top, 
+             inout           ha_mmrnw_top, 
+             inout           ha_mmdw_top,
+             inout  [0:23]   ha_mmad_top, 
+             inout           ha_mmadpar_top, 
+             inout  [0:63]   ha_mmdata_top, 
+             inout           ha_mmdatapar_top,
              input           ah_mmack_top, 
              input [0:63]    ah_mmdata_top, 
              input           ah_mmdatapar_top,
-             output [0:7]    ha_croom_top,
+             inout  [0:7]    ha_croom_top,
              input           ah_cvalid_top, 
              input  [0:7]    ah_ctag_top, 
              input           ah_ctagpar_top, 
@@ -59,23 +59,23 @@ module top (
              input           ah_ceapar_top, 
              input  [0:15]   ah_cch_top, 
              input  [0:11]   ah_csize_top, 
-             output          ha_brvalid_top, 
-             output [0:7]    ha_brtag_top, 
-             output          ha_brtagpar_top, 
+             inout           ha_brvalid_top, 
+             inout  [0:7]    ha_brtag_top, 
+             inout           ha_brtagpar_top, 
              input [0:1023]  ah_brdata_top, 
              input [0:15]    ah_brpar_top, 
              input           ah_brvalid_top, 
              input [0:7]     ah_brtag_top,
-             output          ha_bwvalid_top, 
-             output [0:7]    ha_bwtag_top, 		// 8 bits
-             output          ha_bwtagpar_top,
-             output [0:1023] ha_bwdata_top, 		// 1024 bits
-             output [0:15]   ha_bwpar_top,	// 16 bits
-             output          ha_rvalid_top, 
-             output [0:7]    ha_rtag_top, 		// 8 bits
-             output          ha_rtagpar_top,
-             output [0:7]    ha_response_top, 		// 8 bits
-             output [0:8]    ha_rcredits_top		// 9 bits
+             inout           ha_bwvalid_top, 
+             inout  [0:7]    ha_bwtag_top, 		// 8 bits
+             inout           ha_bwtagpar_top,
+             inout  [0:1023] ha_bwdata_top, 		// 1024 bits
+             inout  [0:15]   ha_bwpar_top,	// 16 bits
+             inout           ha_rvalid_top, 
+             inout  [0:7]    ha_rtag_top, 		// 8 bits
+             inout           ha_rtagpar_top,
+             inout  [0:7]    ha_response_top, 		// 8 bits
+             inout  [0:8]    ha_rcredits_top		// 9 bits
              );
   // Input
   reg    [0:7]    ha_croom_top;
