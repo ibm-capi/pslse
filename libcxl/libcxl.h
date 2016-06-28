@@ -18,7 +18,7 @@
 #define _LIBCXL_H
 
 //#include <linux/types.h>
-#include <../common/misc/cxl.h>
+#include <misc/cxl.h>
 #include <stdbool.h>
 #include <stdint.h>
 
