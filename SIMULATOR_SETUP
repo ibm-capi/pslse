@@ -79,3 +79,19 @@ C) VCS
 		the needed header files, compile your AFU source code 
 		(additional flags may need to be passed for VHDL), link 
 		everything, then run the simulation with a gui.
+
+D) XSIM
+	1) Set the VPI_USER_H_DIR environment variable to 
+		"$XSIM_HOME/../data/xsim/include"
+
+        2) Compile the files using xvlog
+
+        3) Create a softlink of the libdpi.so created upon compiling the afu_driver
+
+        4) elaborate the design using
+		"xelab -timescale 1ns/1ps -svlog $TESTB/top.v -sv_root $ROOT_DIR -sv_lib libdpi -debug all"
+		where the env variable $TESTB points to the pslse/afu_driver/verilog directory, while the $ROOT_DIR points to the run directory, from where the sim is being run
+
+	5) Invoke the simulator using the command
+		xsim -g work.top &
+			and then follow the instructions in the QUICK_START guide for further connecting to the pslse

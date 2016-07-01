@@ -13,12 +13,12 @@ ifndef VPI_USER_H_DIR
 $(error Must set VPI_USER_H_DIR to point to include path for the simulator)
 endif
 
-all: veriuser.sl libvpi.so
+all: veriuser.sl libdpi.so
 
-veriuser.sl libvpi.so : afu_driver.o psl_interface.o
+veriuser.sl libdpi.so : afu_driver.o psl_interface.o
 	$(call Q,CC, $(CC) $(LINK_FLAGS) -o $@ $^, $@)
 
 afu_driver.o: CFLAGS += -I$(VPI_USER_H_DIR) -I$(COMMON_DIR)
 
 clean:
-	rm -f *.[od] veriuser.sl libvpi.so
+	rm -f *.[od] veriuser.sl libdpi.so
