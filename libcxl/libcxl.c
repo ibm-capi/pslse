@@ -1617,8 +1617,10 @@ int cxl_errinfo_read(struct cxl_afu_h *afu, void *dst, off_t off, size_t len)
 	uint8_t *buffer;
 	size_t total_read_length;
 
-	if ((afu == NULL) || !afu->mapped)
-		goto bread64_fail;
+	if ((afu == NULL) || !afu->mapped)   {
+		errno = ENODEV;
+		return -1;
+	}
 	if (len == 0 || off < 0 || (size_t)off >= afu->eb_len)
 		return 0;
 
