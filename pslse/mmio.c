@@ -240,6 +240,13 @@ int read_descriptor(struct mmio *mmio, pthread_mutex_t * lock)
 	cr_array->cr_class = (uint32_t) (eventclass->data >> 32) & 0xffffffffl;
         free(eventclass);
         }
+	else { /* always make a fake cr */
+	struct config_record *cr_array = malloc(sizeof(struct config_record *));
+	mmio->desc.crptr = cr_array;
+	cr_array->cr_vendor = 0;
+	cr_array->cr_device = 0;
+	cr_array->cr_class = 0;
+	}
         // end of NEW BLOCK`
 	return 0;
 }

@@ -515,6 +515,7 @@ static void *_psl_loop(void *ptr)
 	uint64_t addr;
 	uint16_t value;
 	uint32_t lvalue;
+	uint64_t llvalue;
 	int rc;
 
 	if (!afu)
@@ -615,13 +616,12 @@ static void *_psl_loop(void *ptr)
 			afu->irqs_max = (long)(value);
                 	memcpy((char *)&value, (char *)&(buffer[4]), 2);
 			afu->modes_supported = (long)(value);
-                	memcpy((char *)&value, (char *)&(buffer[6]), 8);
-			afu->mmio_len = (long)(value);
-                	memcpy((char *)&value, (char *)&(buffer[14]), 8);
-			afu->mmio_off = (long)(value);
-                	memcpy((char *)&value, (char *)&(buffer[22]), 8);
-			//afu->eb_len = (long)ntohll(value);
-			afu->eb_len = (long)(value);
+                	memcpy((char *)&llvalue, (char *)&(buffer[6]), 8);
+			afu->mmio_len = (long)(llvalue & 0x00ffffffffffffff);
+                	memcpy((char *)&llvalue, (char *)&(buffer[14]), 8);
+			afu->mmio_off = (long)(llvalue);
+                	memcpy((char *)&llvalue, (char *)&(buffer[22]), 8);
+			afu->eb_len = (long)(llvalue);
                 	memcpy((char *)&value, (char *)&(buffer[30]), 2);
 			afu->cr_device = (long)ntohs(value);
                         memcpy((char *)&value, (char *)&(buffer[32]), 2);
@@ -1617,8 +1617,10 @@ int cxl_errinfo_read(struct cxl_afu_h *afu, void *dst, off_t off, size_t len)
 	uint8_t *buffer;
 	size_t total_read_length;
 
-	if ((afu == NULL) || !afu->mapped)
-		goto bread64_fail;
+	if ((afu == NULL) || !afu->mapped)   {
+		errno = ENODEV;
+		return -1;
+	}
 	if (len == 0 || off < 0 || (size_t)off >= afu->eb_len)
 		return 0;
 
