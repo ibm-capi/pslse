@@ -1862,7 +1862,9 @@ int cxl_set_prefault_mode(struct cxl_afu_h *afu, enum cxl_prefault_mode value)
 //       all: all segments process calling START_WORK maps.
 	if (afu == NULL) 
 		return -1;
-        if (value == CXL_PREFAULT_MODE_NONE || CXL_PREFAULT_MODE_WED || CXL_PREFAULT_MODE_ALL) 
+ if ((value == CXL_PREFAULT_MODE_NONE) |
+    (value == CXL_PREFAULT_MODE_WED) |
+    (value == CXL_PREFAULT_MODE_ALL)) 
 		afu->prefault_mode = value;
 //Probably should return error msg if value wasn't a "good" value
 	return 0;
