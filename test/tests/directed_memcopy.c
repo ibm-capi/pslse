@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
 	unsigned seed;
 	int i, quadrant, byte, opt, option_index;
 	int response;
+	int context, machine_number;
 
 	name = strrchr(argv[0], '/');
 	if (name)
@@ -81,16 +82,21 @@ int main(int argc, char *argv[])
 	srand(seed);
 	printf("%s: seed=%d\n", name, seed);
 
-	// Open first AFU found
-	struct cxl_afu_h *afu_h;
-	afu_h = cxl_afu_next(NULL);
+	// find first AFU found
+	struct cxl_afu_h *afu_h, *afu_m, *afu_s;
+	afu_m = afu_s = NULL;
+	
+        afu_h = cxl_afu_next(NULL);
 	if (!afu_h) {
 		fprintf(stderr, "\nNo AFU found!\n\n");
 		goto done;
 	}
-	afu_h = cxl_afu_open_h(afu_h, CXL_VIEW_MASTER);
-	if (!afu_h) {
-		perror("cxl_afu_open_h");
+	
+        
+        // afu master 
+	afu_m = cxl_afu_open_h(afu_h, CXL_VIEW_MASTER);
+	if (!afu_m) {
+		perror("cxl_afu_open_h for master");
 		goto done;
 	}
 
@@ -98,17 +104,28 @@ int main(int argc, char *argv[])
 	wed = rand();
 	wed <<= 32;
 	wed |= rand();
-	// Start AFU
-	cxl_afu_attach(afu_h, wed);
+
+	// Start AFU for master
+	printf("Attach AFU master\n");
+	if (cxl_afu_attach(afu_m, wed) < 0) {
+            perror("FAILED:cxl_afu_attach for master");
+		goto done;
+        }
+
+	printf("wed = 0x%"PRIx64"\n", wed);
 
 	// Map AFU MMIO registers
-	printf("Mapping AFU registers...\n");
-	if ((cxl_mmio_map(afu_h, CXL_MMIO_BIG_ENDIAN)) < 0) {
-		perror("cxl_mmio_map");
+	printf("Mapping AFU master registers...\n");
+	if ((cxl_mmio_map(afu_m, CXL_MMIO_BIG_ENDIAN)) < 0) {
+		perror("cxl_mmio_map for master");
 		goto done;
 
 	}
+	printf("End AFU master mmio map\n");
 
+	context = cxl_afu_get_process_element(afu_m);
+
+	printf("Master context = %d\n", context);
 	// Allocate aligned memory for two cachelines
 	if (posix_memalign((void **)&cacheline0, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
 		perror("FAILED:posix_memalign");
@@ -124,15 +141,18 @@ int main(int argc, char *argv[])
 		cacheline0[i] = rand();
 
 	// Initialize machine configuration
+	printf("initialize machine\n");
 	init_machine(&machine);
+	printf("End init machine\n");
 
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DEDICATED)) < 0)
+	printf("Configure, enable and run machine\n");
+	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED_M)) < 0)
 	{
-		printf("FAILED:config_enable_and_run_machine");
+		printf("FAILED:config_enable_and_run_machine for master\n");
 		goto done;
 	}
-
+	printf("End configure enable and run machine\n");
 	// Check for valid response
 	if (response != PSL_RESPONSE_DONE)
 	{
@@ -143,9 +163,115 @@ int main(int argc, char *argv[])
 	printf("Completed cacheline read\n");
 
 	// Use AFU Machine 1 to write the data to the second cacheline
-	if ((response = config_enable_and_run_machine(afu_h, &machine, 1, 0, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DEDICATED)) < 0)
+	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED_M)) < 0)
 	{
-		printf("FAILED:config_enable_and_run_machine");
+		printf("FAILED:config_enable_and_run_machine for master");
+		goto done;
+	}
+	printf("End configure enable and run machine psl write\n");
+	// Check for valid response
+	if (response != PSL_RESPONSE_DONE)
+	{
+		printf("FAILED: Unexpected response code 0x%x\n", response);
+		goto done;
+	}
+
+	// Test if copy from cacheline0 to cacheline1 was successful
+	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
+		printf("FAILED:memcmp\n");
+		for (quadrant = 0; quadrant < 4; quadrant++) {
+			printf("DEBUG: Expected  Q%d 0x", quadrant);
+			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
+				printf("%02x", cacheline0[byte+(quadrant*32)]);
+			}
+			printf("\n");
+		}
+		for (quadrant = 0; quadrant < 4; quadrant++) {
+			printf("DEBUG: Actual  Q%d 0x", quadrant);
+			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
+				printf("%02x", cacheline1[byte+(quadrant*32)]);
+			}
+			printf("\n");
+		}
+		goto done;
+	}
+
+	printf("Master AFU: PASSED\n");
+        
+        // afu slave
+        // find next afu
+        afu_h = cxl_afu_next(NULL);
+	if (!afu_h) {
+		fprintf(stderr, "\nNo AFU found!\n\n");
+		goto done;
+	}
+	afu_s = cxl_afu_open_h(afu_h, CXL_VIEW_SLAVE);
+	if (!afu_s) {
+		perror("cxl_afu_open_h for slave");
+		goto done;
+	}
+
+	// Set WED to random value
+	wed = rand();
+	wed <<= 32;
+	wed |= rand();
+	// Start AFU for slave
+	if (cxl_afu_attach(afu_s, wed) < 0) {
+            perror("FAILED:cxl_afu_attach for slave");
+		goto done;
+        }
+
+	// Map AFU MMIO registers
+	printf("Mapping AFU slave registers...\n");
+	if ((cxl_mmio_map(afu_s, CXL_MMIO_BIG_ENDIAN)) < 0) {
+		perror("cxl_mmio_map for slave");
+		goto done;
+	}
+	printf("End AFU slave mmio map\n");
+
+	context = cxl_afu_get_process_element(afu_s);
+	printf("Slave context = %d\n", context);
+
+	machine_number = 20;
+
+        // Allocate aligned memory for two cachelines
+	if (posix_memalign((void **)&cacheline0, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
+		perror("FAILED:posix_memalign");
+		goto done;
+	}
+	if (posix_memalign((void **)&cacheline1, CACHELINE_BYTES, CACHELINE_BYTES) != 0) {
+		perror("FAILED:posix_memalign");
+		goto done;
+	}
+
+	// Pollute first cacheline with random values
+	for (i = 0; i < CACHELINE_BYTES; i++)
+		cacheline0[i] = rand();
+
+	// Initialize machine configuration
+	//init_machine(&machine);
+
+	// Use AFU Machine 1 to read the first cacheline from memory to AFU
+	printf("Start config enable and run machine for slave\n");
+	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_READ_CL_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
+	{
+		printf("FAILED:config_enable_and_run_machine for slave");
+		goto done;
+	}
+	printf("End config enable and run machine for slave\n");
+	// Check for valid response
+	if (response != PSL_RESPONSE_DONE)
+	{
+		printf("FAILED: Unexpected response code 0x%x\n", response);
+		goto done;
+	}
+
+	printf("Completed cacheline read for slave\n");
+
+	// Use AFU Machine 1 to write the data to the second cacheline
+	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_WRITE_NA, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED)) < 0)
+	{
+		printf("FAILED:config_enable_and_run_machine for slave");
 		goto done;
 	}
 
@@ -176,16 +302,23 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
-	printf("PASSED\n");
-
+	printf("Slave AFU: PASSED\n");
+        
 done:
-	if (afu_h) {
+        // unmap and free slave afu 
+        if (afu_s) {
+            cxl_mmio_unmap(afu_s);
+            cxl_afu_free(afu_s);
+        }
+        // unmap and free master afu
+	if (afu_m) {
 		// Unmap AFU MMIO registers
-		cxl_mmio_unmap(afu_h);
+		cxl_mmio_unmap(afu_m);
 
 		// Free AFU
-		cxl_afu_free(afu_h);
+		cxl_afu_free(afu_m);
 	}
+       
 
 	return 0;
 }
