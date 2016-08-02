@@ -10,6 +10,10 @@ SETUP:
 	"libvpi.so" for your simulator.  Refer to your simulator's
 	documentation for details on how to use Verilog VPI.  You will only
 	need 1 of these files.  Which one will depend on your simulator.
+	- Update done to migrate the VPI usage on the afu_driver.c to the DPI constructs
+	- we need to point to the "svdpi.h" file which will be present at the simulation tool's 
+	  "include" directory
+	- the Makefile ensures that the appropriate env variable "VPI_USER_H_DIR" is set
 
 2) Use top.v in afu_driver/verilog as a top level wrapper around your AFU
 	Verilog.  Build a model as required for your simulator.

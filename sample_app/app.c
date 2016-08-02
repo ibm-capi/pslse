@@ -3,8 +3,8 @@
  */
 
 #include <inttypes.h>
-#include <libcxl.h>
 #include <stdio.h>
+#include <libcxl.h>
 
 #define CACHELINE_BYTES 128
 
