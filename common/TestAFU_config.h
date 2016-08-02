@@ -26,6 +26,7 @@
 
 #define DEDICATED 1
 #define DIRECTED 0
+#define DIRECTED_M 2
 #define PPPSA_OFFSET 0x1000
 #define PPPSA_SIZE 0x1000
 

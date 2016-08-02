@@ -62,6 +62,7 @@ static int _machine_base_address_index(uint16_t index, int dedicated)
 	machine_config_base_address = index << 5;
 	if (dedicated)
 		machine_config_base_address += 0x1000;
+
 	return machine_config_base_address;
 }
 
@@ -71,6 +72,20 @@ int enable_machine(struct cxl_afu_h *afu, MachineConfig *machine,
 {
 	int i;
 	int machineConfig_baseaddress = _machine_base_address_index(index, dedicated);
+
+	//printf("enable machine: base address = 0x%016x\n", machineConfig_baseaddress);
+	// add support for Directed mode
+	switch (!dedicated) {
+		case DIRECTED_M:
+		//	machineConfig_baseaddress += 0x1000 + (index << 12);
+			machineConfig_baseaddress += 0x1000 ;
+			break;
+		default:
+//			machineConfig_baseaddress += index << 12;
+			break;
+	}
+
+	//printf("enable machine: base address = 0x%016x\n", machineConfig_baseaddress);
 	for (i = 3; i >= 0; --i){
 		uint64_t data = machine->config[i];
 		if (cxl_mmio_write64(afu, machineConfig_baseaddress + (i * 8),
