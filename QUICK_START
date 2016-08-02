@@ -18,9 +18,11 @@ SETUP:
 2) Use top.v in afu_driver/verilog as a top level wrapper around your AFU
 	Verilog.  Build a model as required for your simulator.
 
-3) Use "make" to compile the code in the directory pslse.  This creates a
-	stand-alone executable that mimics the behavior of PSL/CAPP and the
-	kernel code that supports it.
+3) Use "make" to compile the code in the directory pslse. You will have to first
+        set the appropriate #define in common/psl_interface_t.h to select the PSL
+        version you want to work with; be sure to do a "make clean" before your make. 
+	This creates a stand-alone executable that mimics the behavior of 
+	PSL/CAPP and the kernel code that supports it.
 
 4) Use "make" to compile the code in the directory libcxl.  This creates both
 	libcxl.a archive library version of libcxl as well as libcxl.so shared

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,33 @@
 #include <stdio.h>
 #include <unistd.h>
 
+// Choose ONE to define what PSL support level will be
+#define PSL8 1
+//#define PSL9lite 1
+//#define PSL9 1
+
 #define PSL_BUFFER_SIZE 200
+#ifdef PSL8
 #define PROTOCOL_PRIMARY 0
 #define PROTOCOL_SECONDARY 9908
 #define PROTOCOL_TERTIARY 1
+#endif /* PSL8 */
+#ifdef PSL9lite
+#define PROTOCOL_PRIMARY 1
+#define PROTOCOL_SECONDARY 0000
+#define PROTOCOL_TERTIARY 0
+#endif /* PSL9lite */
+#ifdef PSL9
+#define PROTOCOL_PRIMARY 2
+#define PROTOCOL_SECONDARY 0000
+#define PROTOCOL_TERTIARY 0
+#endif /* PSL9 */
+
+/* Select # of DMA interfaces, per config options in CH 17 of workbook */
+#ifdef PSL9
+#define PSL_DMA_A_SUPPORT 1
+#define PSL_DMA_B_SUPPORT 0
+#endif /* ifdef PSL9 config for DMA ports */
 
 /* Return codes for interface functions */
 
@@ -82,6 +105,12 @@
 #define PSL_RESPONSE_FAILED 8
 #define PSL_RESPONSE_PAGED 10
 #define PSL_RESPONSE_CONTEXT 11
+//#ifdef PSL9  /* new response codes for CAIA2 */
+#if defined  PSL9 || defined PSL9lite  /* new response codes for CAIA2 */
+#define PSL_RESPONSE_COMP_EQ 12
+#define PSL_RESPONSE_COMP_NEQ 13
+#define PSL_RESPONSE_CAS_INV 14
+#endif /*#ifdef PSL9 new response codes for CAIA2 */
 
 /* Command codes for AFU commands */
 
@@ -109,6 +138,38 @@
 #define PSL_COMMAND_LOCK         0x016B
 #define PSL_COMMAND_UNLOCK       0x017B
 #define PSL_COMMAND_RESTART      0x0001
+//not a psl9 cmd, but wasn't in 9908
+#define PSL_COMMAND_ZERO_M	 0x1260
+// add new CAIA2 commands
+//#ifdef PSL9
+#if defined  PSL9 || defined PSL9lite  /* new commands for CAIA2 */
+#define PSL_COMMAND_CAS_E_4B	 0x0180
+#define PSL_COMMAND_CAS_NE_4B	 0x0181
+#define PSL_COMMAND_CAS_U_4B	 0x0182
+#define PSL_COMMAND_CAS_E_8B	 0x0183
+#define PSL_COMMAND_CAS_NE_8B	 0x0184
+#define PSL_COMMAND_CAS_U_8B	 0x0185
+#define PSL_COMMAND_ASBNOT	 0x0103
+#define PSL_COMMAND_ARMW_CAS_T	 0x1000
+#define PSL_COMMAND_ARMW_ADD	 0x1001
+#define PSL_COMMAND_ARMW_AND	 0x1002
+#define PSL_COMMAND_ARMW_XOR	 0x1003
+#define PSL_COMMAND_ARMW_OR	 0x1004
+#define PSL_COMMAND_ARMW_CAS_MAX_U	 0x1005
+#define PSL_COMMAND_ARMW_CAS_MAX_S	 0x1006
+#define PSL_COMMAND_ARMW_CAS_MIN_U	 0x1007
+#define PSL_COMMAND_ARMW_CAS_MIN_S	 0x1008
+#endif /* ifdef PSL9 add new commands for CAIA2 */
+#ifdef PSL9 /* new DMA related commands */
+#define PSL_COMMAND_XLAT_RD_P0	 0x1F00
+#define PSL_COMMAND_XLAT_WR_P0	 0x1F01
+#define PSL_COMMAND_XLAT_RD_P1	 0x1F08
+#define PSL_COMMAND_XLAT_WR_P1	 0x1F09
+#define PSL_COMMAND_ITAG_ABRT_RD 0x1F02
+#define PSL_COMMAND_ITAG_ABRT_WR 0x1F03
+#define PSL_COMMAND_XLAT_RD_TOUCH 0x1F10
+#define PSL_COMMAND_XLAT_WR_TOUCH 0x1F11
+#endif /* ifdef PSL9 add new commands for CAIA2 */
 
 /* Create one of these structures to interface to an AFU model and use the functions below to manipulate it */
 
@@ -152,6 +213,12 @@ struct AFU_EVENT {
   uint32_t cache_state;               /* cache state granted to the AFU as documented in the PSL workbook */
   uint32_t cache_position;            /* The cache position assigned by PSL */
   uint32_t response_tag_parity;       /* Odd parity for ha_rtag valid with ha_rvalid */
+  #ifdef PSL9 /* add new PSL response interface signals for CAIA2 */
+  uint32_t response_dma_x_tag;        /* DMA translation tag for xlat_ *requests */
+  uint32_t response_dma_x_tag_parity; /* DMA translation tag parity   */
+  uint32_t response_extra;            /* extra response information received from xlate logic */
+  uint32_t response_r_pgsize;         /* command translated page size. values defined in CAIA2 workbook */
+  #endif /* ifdef PSL9 */
   uint32_t buffer_read;               /* AFU event contains a valid buffer read request */
   uint32_t buffer_read_tag;           /* tag from command in PSL_EVENT which requested the buffer read */
   uint32_t buffer_read_tag_parity;    /* Odd parity for buffer read tag */
@@ -181,6 +248,27 @@ struct AFU_EVENT {
   uint32_t command_abort;             /* indicates that the command may be aborted */
   uint32_t command_handle;            /* Context handle (Process Element ID) */
   uint32_t aux2_change;               /* The value of one of the auxilliary signals has changed (running, job done or error, read latency) */
+//#ifdef PSL9 /* new cmd int signals for CAIA2 */
+#if defined  PSL9 || defined PSL9lite  /* new cmd int signals for CAIA2 */
+  uint32_t command_cpagesize;	      /*  Page size hint used by PSL for predicting page size during ERAT lookup & paged xlation ordering..codes documented in PSL workbook tbl 1-1 */
+#endif /* new cmd int signals  */
+#ifdef PSL9 /* new dma0 interface signals for CAIA2 */
+  uint32_t dma0_dvalid;     	      /* DMA request from AFU is valid */
+  uint32_t dma0_req_utag;	      /* DMA transaction request user transaction tag */
+  uint32_t dma0_req_itag;     	      /* DMA transaction request user translation identifier */
+  uint32_t dma0_req_type;	      /* DMA transaction request transaction type.  */
+  uint32_t dma0_req_size;	      /* DMA transaction request transaction size in bytes */
+  unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
+  uint32_t dma0_sent_utag_valid;      /* DMA request sent by PSL */
+  uint32_t dma0_sent_utag;    	      /* DMA sent request indicates the UTAG of the request sent by PSL */
+  uint32_t dma0_sent_utag_status;     /* DMA sent request indicates the status of the command that was sent by PSL. */
+  uint32_t dma0_completion_valid;     /* DMA completion received  */
+  uint32_t dma0_completion_utag;      /* DMA completion indicates the UTAG associated with the received completion data */
+  uint32_t dma0_completion_type;      /* DMA completion indicates the type of response received with the current completion */
+  uint32_t dma0_completion_size;      /* DMA completion indicates size of completion received */
+  unsigned char dma0_completion_data[128];  /* DMA completion data alignment is First Byte first */
+#endif /* ifdef PSL9 */
+
 };
 /* *INDENT-ON* */
 

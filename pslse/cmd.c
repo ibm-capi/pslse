@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,6 +82,10 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 	cmd->afu_name = afu_name;
 	cmd->dbg_fp = dbg_fp;
 	cmd->dbg_id = dbg_id;
+#ifdef PSL9
+	cmd->dma_rd_credits = 4;
+	cmd->dma_wr_credits = 4;
+#endif /* #ifdef PSL9 */
 	return cmd;
 }
 
@@ -245,6 +249,56 @@ static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	_add_cmd(cmd, handle, tag, command, abort, CMD_OTHER, 0, 0, MEM_DONE,
 		 resp, 0);
 }
+
+#ifdef PSL9
+// Format and add new p9. commands to list
+static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
+		       uint32_t command, uint32_t abort, uint32_t resp)
+{
+	switch (command) {
+		case PSL_COMMAND_XLAT_RD_P0:
+			if (!cmd->dma_rd_credits) {
+			    resp = PSL_RESPONSE_FAILED;
+			    warn_msg("CMD:requesting a dma rd xlate with 4 dma rd ops pending");
+			} else   {
+                          cmd->dma_rd_credits--;
+			/* generate a tag and make it reserved */
+ 			}
+			break;
+		case PSL_COMMAND_XLAT_WR_P0:
+			if (!cmd->dma_wr_credits) {
+			    resp = PSL_RESPONSE_FAILED;
+			    warn_msg("CMD:requesting a dma wr xlate with 4 dma wr ops pending");
+			} else   {
+                          cmd->dma_wr_credits--;
+			/* generate a tag and make it reserved */
+ 			}
+			break;
+		case PSL_COMMAND_XLAT_RD_TOUCH:
+			/* eventually do mem rd touch */;
+			break;
+		case PSL_COMMAND_XLAT_WR_TOUCH:
+			/* eventually do mem wr touch */;
+			break;
+		case PSL_COMMAND_ITAG_ABRT_RD:
+			/* if tag is in reserved state, go ahead and abort */
+			/* otherwise, send back FAIL and warn msg */
+			cmd->dma_rd_credits++;
+			break;
+		case PSL_COMMAND_ITAG_ABRT_WR:
+			/* if tag is in reserved state, go ahead and abort */
+			/* otherwise, send back FAIL and warn msg */
+			cmd->dma_wr_credits++;
+			break;
+		default:
+			warn_msg("Unsupported command 0x%04x", cmd);
+			break;
+
+}
+	_add_cmd(cmd, handle, tag, command, abort, CMD_CAIA2, 0, 0, MEM_DONE,
+		 resp, 0);
+}
+#endif /* ifdef PSL9 */
 
 // Check address alignment
 static int _aligned(uint64_t addr, uint32_t size)
@@ -429,6 +483,16 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_READ_PE:	/*fall through */
 		_add_read_pe(cmd, handle, tag, command, abort, addr, size);
 		break;
+#ifdef PSL9
+	case PSL_COMMAND_XLAT_RD_P0:
+	case PSL_COMMAND_XLAT_WR_P0:
+	case PSL_COMMAND_XLAT_RD_TOUCH:
+	case PSL_COMMAND_XLAT_WR_TOUCH:
+	case PSL_COMMAND_ITAG_ABRT_RD:
+	case PSL_COMMAND_ITAG_ABRT_WR:
+		_add_caia2(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE);
+		break;
+#endif /* ifdef PSL9 */
 	default:
 		warn_msg("Unsupported command 0x%04x", cmd);
 		_add_other(cmd, handle, tag, command, abort,
@@ -1028,6 +1092,16 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 	debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 			 event->context, event->resp);
 }
+
+//#ifdef PSL9
+#if defined PSL9lite || defined PSL9
+//placeholder to handle things like xlat, tag and cmp cmd requests
+void handle_caia2_cmds(struct cmd *cmd)
+{
+	//debug_msg("%s:handle caia2 cmd called", cmd->afu_name);
+   	return;
+   }
+#endif /* ifdef PSL9 */
 
 // Send a randomly selected pending response back to AFU
 void handle_response(struct cmd *cmd)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,10 @@ enum cmd_type {
 	CMD_TOUCH,
 	CMD_INTERRUPT,
 	CMD_READ_PE,
+//#ifdef PSL9
+#if defined PSL9lite || defined PSL9
+	CMD_CAIA2,
+#endif /* ifdef PSL9 define new cmd type */
 	CMD_OTHER
 };
 
@@ -97,6 +101,10 @@ struct cmd {
 	int max_clients;
 	uint16_t irq;
 	int locked;
+#ifdef PSL9
+	uint16_t dma_rd_credits;
+	uint16_t dma_wr_credits;
+#endif /* #ifdef PSL9 */
 };
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
@@ -122,6 +130,12 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd);
 void handle_aerror(struct cmd *cmd, struct cmd_event *event);
 
 void handle_response(struct cmd *cmd);
+
+//#ifdef PSL9
+#if defined PSL9lite || defined PSL9
+void handle_caia2_cmds(struct cmd *cmd);
+#endif /* ifdef PSL9 */
+
 
 int client_cmd(struct cmd *cmd, struct client *client);
 
