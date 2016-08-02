@@ -20,7 +20,9 @@
 //#include <linux/types.h>
 #include <misc/cxl.h>
 #include <stdbool.h>
+#include <stddef.h>  // for size_t
 #include <stdint.h>
+#include <stdio.h>  // for off_t
 
 #define CXL_KERNEL_API_VERSION 1
 
