@@ -47,6 +47,7 @@ static uint32_t genoddParitybitperbytes(uint64_t data)
 static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
 			       uint32_t secondary, uint32_t tertiary)
 {
+		printf("PSL_SOCKET:\tEntering set_protocol_level.\n");
 	if ((event->proto_primary != primary) ||
 	    (event->proto_secondary != secondary) ||
 	    (event->proto_tertiary != tertiary)) {
@@ -150,7 +151,24 @@ static int establish_protocol(struct AFU_EVENT *event)
 		       primary, secondary, tertiary);
 		return PSL_BAD_SOCKET;
 	}
+	
+	// Check for mis-matched primary level and error out if found
+	if (primary != event->proto_primary) {
+		printf("ERROR: Remote psl_interface code using different PSL revision level!!\n");
+		printf("\tLocal psl_interface level:%d.%d.%d\n",
+		       event->proto_primary, event->proto_secondary,
+		       event->proto_tertiary);
+		printf("\tRemote psl_interface level:%d.%d.%d\n",
+		       primary, secondary, tertiary);
+		printf("Please check your #define setting in common/psl_interface_t.h!!\n");
+		printf("Please recompile libcxl, pslse, your AFU and your application before rerunning!!\n");
+		return PSL_BAD_SOCKET;
+	}
+	else 
+		return PSL_SUCCESS;
 
+
+         /* comment out for now
 	// Test if other side with adjust protocol level down
 	if (primary > event->proto_primary)
 		return PSL_SUCCESS;
@@ -159,7 +177,7 @@ static int establish_protocol(struct AFU_EVENT *event)
 	if (tertiary > event->proto_tertiary)
 		return PSL_SUCCESS;
 
-	// Adjust protocol level down on this side if neccesary
+        // Adjust protocol level down on this side if neccesary
 	if (primary < event->proto_primary)
 		set_protocol_level(event, primary, secondary, tertiary);
 	else if (secondary < event->proto_secondary)
@@ -167,7 +185,7 @@ static int establish_protocol(struct AFU_EVENT *event)
 	else if (tertiary < event->proto_tertiary)
 		set_protocol_level(event, primary, secondary, tertiary);
 
-	return PSL_SUCCESS;
+	return PSL_SUCCESS; */
 }
 
 /* Call this at startup to reset all the event indicators */
