@@ -162,7 +162,7 @@ static int establish_protocol(struct AFU_EVENT *event)
 		       primary, secondary, tertiary);
 		printf("Please check your #define setting in common/psl_interface_t.h!!\n");
 		printf("Please recompile libcxl, pslse, your AFU and your application before rerunning!!\n");
-		return PSL_BAD_SOCKET;
+		return PSL_VERSION_ERROR;
 	}
 	else 
 		return PSL_SUCCESS;

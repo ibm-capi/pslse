@@ -27,9 +27,9 @@
 #include <unistd.h>
 
 // Choose ONE to define what PSL support level will be
-#define PSL8 1
+//#define PSL8 1
 //#define PSL9lite 1
-//#define PSL9 1
+#define PSL9 1
 
 #define PSL_BUFFER_SIZE 200
 #ifdef PSL8
@@ -70,6 +70,7 @@
 					   available */
 #define PSL_BAD_SOCKET 16	/* The socket connection could
 				   not be established */
+#define PSL_VERSION_ERROR 48	/* The PSL versions in use on local & remote do not match */
 #define PSL_TRANSMISSION_ERROR 64	/* There was an error sending
 					   data across the socket
 					   interface */
