@@ -5,12 +5,16 @@ include Makefile.rules
 
 OBJS = afu_driver.o psl_interface.o
 
-ifdef CDS_INST_DIR
-  VPI_USER_H_DIR=$(CDS_INST_DIR)/tools/include
+# if VPI_USER_H_DIR is not set, try to default it to the Cadence install dir path
+ifndef VPI_USER_H_DIR
+  ifdef CDS_INST_DIR
+    VPI_USER_H_DIR=$(CDS_INST_DIR)/tools/include
+  endif
 endif
 
+# if VPI_USER_H_DIR is STILL not set, print an error message
 ifndef VPI_USER_H_DIR
-$(error Must set VPI_USER_H_DIR to point to include path for the simulator)
+  $(error Must set VPI_USER_H_DIR to point to include path for the simulator)
 endif
 
 all: veriuser.sl libdpi.so
