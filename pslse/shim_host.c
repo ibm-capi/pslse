@@ -36,6 +36,7 @@ uint16_t parse_host_data(struct psl ** head, struct parms * parms,
 	uint16_t location, afu_map;
 	int port;
 
+        printf("DEBUG: parse_host_data parsing %s\n", filename);
 	afu_map = 0;
 	*head = NULL;
 	fp = fopen(filename, "r");
