@@ -522,6 +522,7 @@ int main(int argc, char **argv)
 	socklen_t client_len;
 	sigset_t set;
 	struct sigaction action;
+	char *parms_path;
 	struct parms *parms;
 	char *ip;
 
@@ -557,9 +558,11 @@ int main(int argc, char **argv)
 	debug_send_version(fp, PSLSE_VERSION_MAJOR, PSLSE_VERSION_MINOR);
 
 	// Parse parameters file
-	parms = parse_parms("pslse.parms", fp);
+	parms_path = getenv("PSLSE_PARMS")
+	if (!parms_path) parms_path = "pslse.parms";
+	parms = parse_parms(parms_path, fp);
 	if (parms == NULL) {
-		error_msg("Unable to parse pslse.parms file");
+		error_msg("Unable to parse params file \"%s\"", parms_path);
 		return -1;
 	}
 	timeout = parms->timeout;

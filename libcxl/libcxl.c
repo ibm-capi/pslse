@@ -724,6 +724,7 @@ static void *_psl_loop(void *ptr)
 
 static int _pslse_connect(uint16_t * afu_map, int *fd)
 {
+	char *pslse_server_dat_path;
 	FILE *fp;
 	uint8_t buffer[MAX_LINE_CHARS];
 	struct sockaddr_in ssadr;
@@ -733,7 +734,9 @@ static int _pslse_connect(uint16_t * afu_map, int *fd)
 
 	// Get hostname and port of PSLSE server
 	DPRINTF("AFU CONNECT\n");
-	fp = fopen("pslse_server.dat", "r");
+	pslse_server_dat_path = getenv("PSLSE_SERVER_DAT");
+	if (!pslse_server_dat_path) pslse_server_dat_path = "pslse_server.dat";
+	fp = fopen(pslse_server_dat_path, "r");
 	if (!fp) {
 		perror("fopen:pslse_server.dat");
 		goto connect_fail;
