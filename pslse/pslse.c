@@ -528,10 +528,10 @@ int main(int argc, char **argv)
 
 	// Open debug.log file
 	fp = fopen("debug.log", "w");
-        if (!fp) {
-          error_msg("Could not open debug.log");
-          return -1;
-        }
+	if (!fp) {
+		error_msg("Could not open debug.log");
+		return -1;
+	}
 
 	// Mask SIGPIPE signal for all threads
 	sigemptyset(&set);
