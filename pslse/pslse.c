@@ -528,6 +528,10 @@ int main(int argc, char **argv)
 
 	// Open debug.log file
 	fp = fopen("debug.log", "w");
+	if (!fp) {
+		error_msg("Could not open debug.log");
+		return -1;
+	}
 
 	// Mask SIGPIPE signal for all threads
 	sigemptyset(&set);
@@ -558,7 +562,7 @@ int main(int argc, char **argv)
 	debug_send_version(fp, PSLSE_VERSION_MAJOR, PSLSE_VERSION_MINOR);
 
 	// Parse parameters file
-	parms_path = getenv("PSLSE_PARMS")
+	parms_path = getenv("PSLSE_PARMS");
 	if (!parms_path) parms_path = "pslse.parms";
 	parms = parse_parms(parms_path, fp);
 	if (parms == NULL) {
