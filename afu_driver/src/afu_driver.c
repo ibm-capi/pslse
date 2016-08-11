@@ -1219,15 +1219,20 @@ static void psl_control(void)
 
 void psl_bfm_init()
 {
-	int port = 32768;
-	while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
-		if (port == 65535) {
-			error_message("Unable to find open port!");
-		}
-		++port;
-	}
-	// set_callback_event(afu_close, cbEndOfSimulation);
-	return;
+  int port = 32768;
+  while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
+    if (psl_serv_afu_event(&event, port) == PSL_BAD_SOCKET) {
+      printf("%08lld: ", (long long) c_sim_time);
+      printf("Socket closed: Ending Simulation.");
+      c_sim_error = 1;
+    }
+    if (port == 65535) {
+      error_message("Unable to find open port!");
+    }
+    ++port;
+  }
+  // set_callback_event(afu_close, cbEndOfSimulation);
+  return;
 }
 
 // Register VLI functions
