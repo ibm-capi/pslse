@@ -172,6 +172,26 @@
 #define PSL_COMMAND_XLAT_WR_TOUCH 0x1F11
 #endif /* ifdef PSL9 add new commands for CAIA2 */
 
+
+#ifdef PSL9  /* new DMA transaction type, sent status & completion status codes */
+#define DMA_DTYPE_RD_REQ	0x1
+#define DMA_DTYPE_WR_REQ_128	0x2
+#define DMA_DTYPE_WR_REQ_MORE	0x3
+#define DMA_DTYPE_ATOMIC	0x4
+#define DMA_DTYPE_BARRIER	0x5
+
+#define DMA_SENT_UTAG_STS_RD	0x0
+#define DMA_SENT_UTAG_STS_WR	0x1
+#define DMA_SENT_UTAG_STS_FAIL	0x2
+#define DMA_SENT_UTAG_STS_FLUSH	0x3
+
+#define DMA_CPL_TYPE_RD_128	0x0
+#define DMA_CPL_TYPE_TBD	0x1
+#define DMA_CPL_TYPE_ERR	0x2
+#define DMA_CPL_TYPE_RD_MORE	0x3
+#endif /* new DMA type & status defs */
+
+
 /* Create one of these structures to interface to an AFU model and use the functions below to manipulate it */
 
 /* *INDENT-OFF* */
