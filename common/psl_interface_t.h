@@ -215,8 +215,8 @@ struct AFU_EVENT {
   uint32_t cache_position;            /* The cache position assigned by PSL */
   uint32_t response_tag_parity;       /* Odd parity for ha_rtag valid with ha_rvalid */
   #ifdef PSL9 /* add new PSL response interface signals for CAIA2 */
-  uint32_t response_dma_x_tag;        /* DMA translation tag for xlat_ *requests */
-  uint32_t response_dma_x_tag_parity; /* DMA translation tag parity   */
+  uint32_t response_dma0_itag;        /* DMA translation tag for xlat_ *requests */
+  uint32_t response_dma0_itag_parity; /* DMA translation tag parity   */
   uint32_t response_extra;            /* extra response information received from xlate logic */
   uint32_t response_r_pgsize;         /* command translated page size. values defined in CAIA2 workbook */
   #endif /* ifdef PSL9 */

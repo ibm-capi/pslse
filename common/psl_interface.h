@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,6 +69,10 @@ int psl_mmio_write(struct AFU_EVENT *event,
 int psl_response(struct AFU_EVENT *event,
 		 uint32_t tag,
 		 uint32_t response_code,
+#ifdef PSL9
+		// uint32_t response_extra, uint32_t response_r_pgsize,
+		// uint32_t response_dma_x_tag, uint32_t response_dma_x_tag_parity,
+#endif
 		 int credits, uint32_t cache_state, uint32_t cache_position);
 
 /* Call this to read a buffer.  Length must be either 64 or 128 which is the
@@ -77,6 +81,16 @@ int psl_response(struct AFU_EVENT *event,
 
 int psl_buffer_read(struct AFU_EVENT *event,
 		    uint32_t tag, uint64_t address, uint32_t length);
+
+#ifdef PSL9
+/* Call this to read the DMA 0 bus buffer to get the write data and DMA operation specific data. 
+ * Length must be 128 which is the transfer size in bytes. DMA operation specific data is utag, itag,
+ * type and size in bytes. (only size supported now is 128)   */
+
+int psl_dma0_data_buffer_read(struct AFU_EVENT *event,
+		    uint32_t tag, uint64_t address, uint32_t length);
+
+#endif
 
 /* Call this to write a buffer, write_data is a 32 element array of 32-bit
  * values, write_parity is a 4 element array of 32-bit values.  Length must be
@@ -88,6 +102,20 @@ int psl_buffer_write(struct AFU_EVENT *event,
 		     uint64_t address,
 		     uint32_t length,
 		     uint8_t * write_data, uint8_t * write_parity);
+
+#ifdef PSL9
+/* Call this to write the DMA 0 read completion buffer, write_data is a 32 element array of 32-bit
+ * values, write_parity is a 4 element array of 32-bit values.  Length must be 128
+ * which is the transfer size in bytes.  */
+
+int psl_dma0_cpl_buffer_write(struct AFU_EVENT *event,
+		     uint32_t tag,
+		     uint64_t address,
+		     uint32_t length,
+		     uint8_t * write_data, uint8_t * write_parity);
+
+
+#endif
 
 /* Call after an event is received from the AFU to see if previous MMIO
  * operation has been acknowledged and extract read MMIO data if available. */

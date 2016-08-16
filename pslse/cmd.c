@@ -83,8 +83,8 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 	cmd->dbg_fp = dbg_fp;
 	cmd->dbg_id = dbg_id;
 #ifdef PSL9
-	cmd->dma_rd_credits = 4;
-	cmd->dma_wr_credits = 4;
+	cmd->dma0_rd_credits = 4;
+	cmd->dma0_wr_credits = 4;
 #endif /* #ifdef PSL9 */
 	return cmd;
 }
@@ -257,20 +257,27 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 {
 	switch (command) {
 		case PSL_COMMAND_XLAT_RD_P0:
-			if (!cmd->dma_rd_credits) {
+			if (!cmd->dma0_rd_credits) {
 			    resp = PSL_RESPONSE_FAILED;
 			    warn_msg("CMD:requesting a dma rd xlate with 4 dma rd ops pending");
 			} else   {
-                          cmd->dma_rd_credits--;
+                          cmd->dma0_rd_credits--;
+			cmd->afu_event->response_dma0_itag = 0x139;
+			cmd->afu_event->response_dma0_itag_parity = 0x0;
+			info_msg("dma0_itag for read is 0x%x", cmd->afu_event->response_dma0_itag);
+
 			/* generate a tag and make it reserved */
  			}
 			break;
 		case PSL_COMMAND_XLAT_WR_P0:
-			if (!cmd->dma_wr_credits) {
+			if (!cmd->dma0_wr_credits) {
 			    resp = PSL_RESPONSE_FAILED;
 			    warn_msg("CMD:requesting a dma wr xlate with 4 dma wr ops pending");
 			} else   {
-                          cmd->dma_wr_credits--;
+                          cmd->dma0_wr_credits--;
+			cmd->afu_event->response_dma0_itag = 0x154;
+			cmd->afu_event->response_dma0_itag_parity = 0x1;
+			info_msg("dma0_itag for wrte is 0x%x", cmd->afu_event->response_dma0_itag);
 			/* generate a tag and make it reserved */
  			}
 			break;
@@ -283,12 +290,16 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 		case PSL_COMMAND_ITAG_ABRT_RD:
 			/* if tag is in reserved state, go ahead and abort */
 			/* otherwise, send back FAIL and warn msg */
-			cmd->dma_rd_credits++;
+			cmd->dma0_rd_credits++;
+			cmd->afu_event->response_dma0_itag = 0x0;
+			cmd->afu_event->response_dma0_itag_parity = 0x0;
 			break;
 		case PSL_COMMAND_ITAG_ABRT_WR:
 			/* if tag is in reserved state, go ahead and abort */
 			/* otherwise, send back FAIL and warn msg */
-			cmd->dma_wr_credits++;
+			cmd->dma0_wr_credits++;
+			cmd->afu_event->response_dma0_itag = 0x0;
+			cmd->afu_event->response_dma0_itag_parity = 0x0;
 			break;
 		default:
 			warn_msg("Unsupported command 0x%04x", cmd);

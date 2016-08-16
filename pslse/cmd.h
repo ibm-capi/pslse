@@ -102,8 +102,10 @@ struct cmd {
 	uint16_t irq;
 	int locked;
 #ifdef PSL9
-	uint16_t dma_rd_credits;
-	uint16_t dma_wr_credits;
+	uint16_t dma0_rd_credits;
+	uint16_t dma0_wr_credits;
+	uint64_t dma0_rd_EAs[4];
+	uint64_t dma0_wr_EAs[4];
 #endif /* #ifdef PSL9 */
 };
 
