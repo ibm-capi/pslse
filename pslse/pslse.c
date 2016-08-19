@@ -522,12 +522,16 @@ int main(int argc, char **argv)
 	socklen_t client_len;
 	sigset_t set;
 	struct sigaction action;
+	char *shim_host_path;
 	char *parms_path;
+	char *debug_log_path;
 	struct parms *parms;
 	char *ip;
 
 	// Open debug.log file
-	fp = fopen("debug.log", "w");
+	debug_log_path = getenv("DEBUG_LOG_PATH");
+	if (!debug_log_path) debug_log_path = "debug.log";
+	fp = fopen(debug_log_path, "w");
 	if (!fp) {
 		error_msg("Could not open debug.log");
 		return -1;
@@ -564,7 +568,9 @@ int main(int argc, char **argv)
 	// Connect to simulator(s) and start psl thread(s)
 	pthread_mutex_init(&lock, NULL);
 	pthread_mutex_lock(&lock);
-	afu_map = parse_host_data(&psl_list, parms, "shim_host.dat", &lock, fp);
+	shim_host_path = getenv("SHIM_HOST_DAT");
+	if (!shim_host_path) shim_host_path = "shim_host.dat";
+	afu_map = parse_host_data(&psl_list, parms, shim_host_path, &lock, fp);
 	if (psl_list == NULL) {
 		free(parms);
 		fclose(fp);
