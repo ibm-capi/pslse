@@ -763,18 +763,21 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 	debug_afu_connect(psl->dbg_fp, psl->dbg_id);
 
 	// Initialize job handler
+	debug_msg("%s @ %s:%d: job_init", psl->name, psl->host, psl->port);
 	if ((psl->job = job_init(psl->afu_event, &(psl->state), psl->name,
 				 psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("job_init");
 		goto init_fail;
 	}
 	// Initialize mmio handler
+	debug_msg("%s @ %s:%d: mmio_init", psl->name, psl->host, psl->port);
 	if ((psl->mmio = mmio_init(psl->afu_event, psl->timeout, psl->name,
 				   psl->dbg_fp, psl->dbg_id)) == NULL) {
 		perror("mmio_init");
 		goto init_fail;
 	}
 	// Initialize cmd handler
+	debug_msg("%s @ %s:%d: cmd_init", psl->name, psl->host, psl->port);
 	if ((psl->cmd = cmd_init(psl->afu_event, parms, psl->mmio,
 				 &(psl->state), psl->name, psl->dbg_fp,
 				 psl->dbg_id))
@@ -811,12 +814,15 @@ uint16_t psl_init(struct psl **head, struct parms *parms, char *id, char *host,
 	*head = psl;
 
 	// Send reset to AFU
+	debug_msg("%s @ %s:%d: Sending reset job.", psl->name, psl->host, psl->port);
 	reset = add_job(psl->job, PSL_JOB_RESET, 0L);
 	while (psl->job->job == reset) {	/*infinite loop */
 		lock_delay(psl->lock);
 	}
 
 	// Read AFU descriptor
+	debug_msg("%s @ %s:%d: Reading AFU descriptor.", psl->name, psl->host,
+	          psl->port);
 	psl->state = PSLSE_DESC;
 	read_descriptor(psl->mmio, psl->lock);
 

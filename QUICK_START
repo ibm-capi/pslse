@@ -1,6 +1,5 @@
 PSLSE Quick Start Guide
 
-
 SETUP:
 
 1) Use "make" to build the code in afu_driver/src.  You will have to first set
@@ -47,25 +46,36 @@ SETUP:
 RUNNING:
 
 1) Start your simulator with the model that uses top.v as it's top level and
-	uses the afu_driver/src code for VPI functions.  You should get a
-	message in the simulator output similiar to this:
-	"AFU Server is waiting for connection on machine.domain.com:32768"
+   uses the afu_driver/src code for VPI functions.  You should get a message in
+   the simulator output similiar to this: "AFU Server is waiting for connection
+   on machine.domain.com:32768"
 
 2) Edit pslse/shim_host.dat to point an AFU at your simulator.  For example:
-	afu0.0,machine.domain.com:32768
+     afu0.0,machine.domain.com:32768
+   If necessary, set the SHIM_HOST_DAT environment variable to override the
+   path to this file.
 
 3) Edit pslse/pslse.parms as desired, or leave the defaults to get started.
+   If necessary, override the path to this file using the PSLSE_PARMS
+   environment variable.
 
-4) Start pslse with ./pslse in pslse directory.  You will see a message from
-	pslse with a hostname and port similiar to this:
-	"INFO : Started PSLSE server, listening on machine.domain.com:16384"
+4) Optional: If you need to specify a non-default path for configuration or log
+   files, use these environment variables:
+     SHIM_HOST_DAT: specifies path to the `shim_host.dat` file.
+     PSLSE_PARMS: specifies path to the `pslse.parms` file.
 
-5) In the directory where you will run your application code create the file
-	pslse_server.dat and put the host:port provided by pslse in it.
-	For example:
-	machine.domain.com:16384
+5) Start pslse with ./pslse in pslse directory.  You will see a message from
+   pslse with a hostname and port similiar to this:
+     "INFO : Started PSLSE server, listening on machine.domain.com:16384"
 
-6) Start your application.  Run your application multiple times if desired.
+6) In the directory where you will run your application code create the file
+   pslse_server.dat and put the host:port provided by pslse in it.  For
+   example:
+     machine.domain.com:16384
 
-7) When run is complete you can stop pslse executable with Ctrl-C to cleanly
-	disconnect from the simulator.
+7) Start your application.  Run your application multiple times if desired.
+   If necessary, override the path to the `pslse_server.dat` file using the
+   PSLSE_SERVER_DAT environment variable.
+
+8) When run is complete you can stop pslse executable with Ctrl-C to cleanly
+   disconnect from the simulator.

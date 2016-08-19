@@ -91,8 +91,11 @@ static int establish_protocol(struct AFU_EVENT *event)
 	}
 	while (bp < bl) {
 		bc = send(event->sockfd, event->tbuf + bp, bl - bp, 0);
-		if (bc < 0)
+		if (bc < 0) {
+			fprintf(stderr, "ERROR: establish_protocol: send failed: %s\n",
+							strerror(errno));
 			return PSL_TRANSMISSION_ERROR;
+		}
 		bp += bc;
 	}
 
@@ -117,8 +120,16 @@ static int establish_protocol(struct AFU_EVENT *event)
 	}
 	event->rbp = 0;
 
-	if (strcmp((char *)event->rbuf, "PSL"))
+	if (strcmp((char *)event->rbuf, "PSL") != 0) {
+		if (strcmp((char *)event->rbuf, "PSLSE") == 0) {
+			fprintf(stderr, "ERROR: establish_protocol: PSLSE client attempted"
+							" to connect directly, instead of relaying through the"
+							" pslse server.\n");
+		} else {
+			fprintf(stderr, "ERROR: establish_protocol: Unrecognized protocol.\n");
+		}
 		return PSL_BAD_SOCKET;
+	}
 
 	primary = 0;
 	for (i = 4; i < 8; i++) {
