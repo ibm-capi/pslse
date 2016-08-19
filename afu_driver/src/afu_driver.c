@@ -1221,7 +1221,7 @@ void psl_bfm_init()
 {
   int port = 32768;
   while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
-    if (psl_serv_afu_event(&event, port) == PSL_BAD_SOCKET) {
+    if (psl_serv_afu_event(&event, port) == PSL_VERSION_ERROR) {
       printf("%08lld: ", (long long) c_sim_time);
       printf("Socket closed: Ending Simulation.");
       c_sim_error = 1;
