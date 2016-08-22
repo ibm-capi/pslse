@@ -83,6 +83,30 @@ struct cmd_event {
 	struct cmd_event *_next;
 };
 
+#ifdef PSL9
+struct dma_event {
+	uint64_t addr;
+	int32_t context;
+	uint32_t command;
+	uint32_t itag;
+	uint32_t utag;
+	uint32_t abt;
+	uint32_t size;
+	uint32_t dtype;
+	uint32_t sent_sts;
+	uint32_t cpl_type;
+	uint8_t unlock;
+	uint8_t buffer_activity;
+	uint8_t *data;
+	uint8_t *parity;
+	int *abort;
+	enum cmd_type type;
+	enum mem_state state;
+	enum client_state client_state;
+	struct dma_event *_next;
+};
+#endif
+
 struct cmd {
 	struct AFU_EVENT *afu_event;
 	struct cmd_event *list;
@@ -91,6 +115,13 @@ struct cmd {
 	struct parms *parms;
 	struct client **client;
 	struct pages page_entries;
+#ifdef PSL9
+	struct dma_event *dma_op;
+	uint16_t dma0_rd_credits;
+	uint16_t dma0_wr_credits;
+	uint64_t dma0_rd_EAs[4];
+	uint64_t dma0_wr_EAs[4];
+#endif
 	volatile enum pslse_state *psl_state;
 	char *afu_name;
 	FILE *dbg_fp;
@@ -101,12 +132,6 @@ struct cmd {
 	int max_clients;
 	uint16_t irq;
 	int locked;
-#ifdef PSL9
-	uint16_t dma0_rd_credits;
-	uint16_t dma0_wr_credits;
-	uint64_t dma0_rd_EAs[4];
-	uint64_t dma0_wr_EAs[4];
-#endif /* #ifdef PSL9 */
 };
 
 struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,

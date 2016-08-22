@@ -85,7 +85,17 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 #ifdef PSL9
 	cmd->dma0_rd_credits = 4;
 	cmd->dma0_wr_credits = 4;
-#endif /* #ifdef PSL9 */
+
+	// Initialize caia2 handler
+	cmd->dma_op = (struct dma_event *)calloc(1, sizeof(struct dma_event));
+	if (!cmd->dma_op) {
+		perror("dma_op init");
+		exit(-1);
+	}
+        
+
+cmd->afu_event->dma0_dvalid = 0;
+	#endif /* #ifdef PSL9 */
 	return cmd;
 }
 
@@ -253,7 +263,7 @@ static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
 #ifdef PSL9
 // Format and add new p9. commands to list
 static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint32_t abort, uint32_t resp)
+		       uint32_t command, uint32_t abort, uint64_t addr, uint32_t resp)
 {
 	switch (command) {
 		case PSL_COMMAND_XLAT_RD_P0:
@@ -261,7 +271,8 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 			    resp = PSL_RESPONSE_FAILED;
 			    warn_msg("CMD:requesting a dma rd xlate with 4 dma rd ops pending");
 			} else   {
-                          cmd->dma0_rd_credits--;
+			cmd->dma0_rd_EAs[cmd->dma0_rd_credits] = addr;
+                         cmd->dma0_rd_credits--;
 			cmd->afu_event->response_dma0_itag = 0x139;
 			cmd->afu_event->response_dma0_itag_parity = 0x0;
 			info_msg("dma0_itag for read is 0x%x", cmd->afu_event->response_dma0_itag);
@@ -274,6 +285,7 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 			    resp = PSL_RESPONSE_FAILED;
 			    warn_msg("CMD:requesting a dma wr xlate with 4 dma wr ops pending");
 			} else   {
+			cmd->dma0_wr_EAs[cmd->dma0_wr_credits] = addr;
                           cmd->dma0_wr_credits--;
 			cmd->afu_event->response_dma0_itag = 0x154;
 			cmd->afu_event->response_dma0_itag_parity = 0x1;
@@ -501,7 +513,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_XLAT_WR_TOUCH:
 	case PSL_COMMAND_ITAG_ABRT_RD:
 	case PSL_COMMAND_ITAG_ABRT_WR:
-		_add_caia2(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE);
+		_add_caia2(cmd, handle, tag, command, abort,addr, PSL_RESPONSE_DONE);
 		break;
 #endif /* ifdef PSL9 */
 	default:
@@ -1106,12 +1118,26 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
-//placeholder to handle things like xlat, tag and cmp cmd requests
-void handle_caia2_cmds(struct cmd *cmd)
+// handle things like dma requests
+void handle_caia2_cmds(struct cmd *cmd) 
 {
-	//debug_msg("%s:handle caia2 cmd called", cmd->afu_name);
+
+	if (cmd->afu_event->dma0_dvalid == 1)  {
+	cmd->dma_op->itag = cmd->afu_event->dma0_req_itag;
+	cmd->dma_op->utag = cmd->afu_event->dma0_req_utag;
+	cmd->dma_op->type = cmd->afu_event->dma0_req_type;
+	cmd->dma_op->size = cmd->afu_event->dma0_req_size;
+	if (cmd->dma_op->type == 0x1)
+		cmd->dma_op->addr = cmd->dma0_rd_EAs[cmd->dma_op->itag];
+	if (cmd->dma_op->type == 0x2)
+		cmd->dma_op->addr = cmd->dma0_wr_EAs[cmd->dma_op->itag];
+
+//debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
+	//	  cmd->dma_op->itag, cmd->dma_op->utag, cmd->dma_op->addr, cmd->dma_op->type, cmd->dma_op->size);
+	}
+
    	return;
-   }
+}
 #endif /* ifdef PSL9 */
 
 // Send a randomly selected pending response back to AFU

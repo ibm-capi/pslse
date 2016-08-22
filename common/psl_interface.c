@@ -586,8 +586,9 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	event->clock = 1;
 	event->tbuf[0] = 0x40;
 #ifdef PSL9
-/*		if (event->dma0_completion_valid != 0) {
-		event->tbuf[0] = event->tbuf[0] | 0x48;
+		if (event->dma0_completion_valid != 0) {
+printf("i should not be here there is no dma completion!!! \n");
+		event->tbuf[0] = event->tbuf[0] | 0x85;
 		event->tbuf[bp++] = ((event->dma0_completion_utag) >> 8) & 0x3;
 		event->tbuf[bp] = event->tbuf[bp] | (((event->dma0_completion_type) << 4) & 0x7);
 		event->tbuf[bp++] = event->dma0_completion_utag & 0xFF;
@@ -599,13 +600,13 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->dma0_completion_valid = 0;
 	}
 	if (event->dma0_sent_utag_valid != 0) {
-		event->tbuf[0] = event->tbuf[0] | 0x40;
+printf("i should not be her there is no utag valid sent!!! \n");
+		event->tbuf[0] = event->tbuf[0] | 0x83;
 		event->tbuf[bp++] = (event->dma0_sent_utag >> 8) & 0x03;
 		event->tbuf[bp] = event->tbuf[bp] | (((event->dma0_sent_utag_status) << 4) & 0x3);
 		event->tbuf[bp++] = event->dma0_sent_utag & 0xFF;
 		event->dma0_sent_utag_valid = 0;
 	}
-*/
 #endif
 	if (event->aux1_change != 0) {
 		event->tbuf[0] = event->tbuf[0] | 0x20;
@@ -664,14 +665,8 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		    (((event->credits) >> 8) & 1);
 		event->tbuf[bp++] = event->credits & 0xFF;
 #ifdef PSL9
-		printf("PSL_SIGNAL_AFU_MODEL:bp is 0x%x \n", bp);
-		event->tbuf[bp++] = ((((event->response_dma0_itag) >> 8) & 0x1) | ((event->response_dma0_itag_parity & 0x1) << 4));
-
-		printf("PSL_SIGNAL_AFU_MODEL:dma0_itag-full is 0x%x \n", event->response_dma0_itag);
-		printf("PSL_SIGNAL_AFU_MODEL:dma0_itag-upper+parity is 0x%x \n", event->tbuf[7]);
-		printf("PSL_SIGNAL_AFU_MODEL:bp is 0x%x \n", bp);
+		event->tbuf[bp++] = (((event->response_dma0_itag & 0x100) >> 8) | (event->response_dma0_itag_parity  << 4));
 		event->tbuf[bp++] = event->response_dma0_itag & 0xFF;
-		printf("PSL_SIGNAL_AFU_MODEL:dma0_itag-lower is 0x%x \n", event->tbuf[8]);
 #endif
 		event->response_valid = 0;
 	}
@@ -788,7 +783,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		event->command_valid = 0;
 	}
 #ifdef PSL9
-/*	if (event->dma0_dvalid)  {
+	if (event->dma0_dvalid)  {
 // dma0 request read or write  
 		event->tbuf[0] = event->tbuf[0] | 0x10;
 		event->tbuf[bp++] = (event->dma0_req_utag >> 8 ) & 0x3;
@@ -806,7 +801,6 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 
 		event->dma0_dvalid = 0;
 	}
-*/
 #endif
 
 	bl = bp;
@@ -954,8 +948,9 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		event->command_valid = 0;
 	}
 #ifdef PSL9
-/*	if ((event->rbuf[0] & 0x10) != 0) {
+	if ((event->rbuf[0] & 0x20) != 0) {
 		event->dma0_dvalid = 1;
+printf("event->dma0_dvalid is 1");
 		for (bc = 0; bc < 2; bc++) {
 			event->dma0_req_utag =
 			    ((event->dma0_req_utag) << 8) | event->rbuf[rbc++];
@@ -976,7 +971,6 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		event->dma0_dvalid = 0;
 
 	}
-*/
 #endif
 	event->rbp = 0;
 	return 1;
@@ -1041,7 +1035,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		return 0;
 	rbc = 1;
 #ifdef PSL9
-/*	if (event->rbuf[0] & 0x48) {
+	if (event->rbuf[0] == 0xc5) {
 		event->dma0_completion_valid = 1;
 		event->dma0_completion_type = ((event->rbuf[rbc] >> 4 ) & 0x7);
 		event->dma0_completion_utag = event->rbuf[rbc];
@@ -1056,7 +1050,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	}else {
 		event->dma0_completion_valid = 0;
 	}
-	if (event->rbuf[0] & 0x40) {
+	if (event->rbuf[0] == 0xc3) {
 		event->dma0_sent_utag_valid = 1;
 		event->dma0_sent_utag_status = ((event->rbuf[rbc] >> 4 ) & 0x7);
 		event->dma0_sent_utag = event->rbuf[rbc];
@@ -1065,7 +1059,6 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	}else {
 		event->dma0_completion_valid = 0;
 	}
-*/		
 #endif 
 
 	if (event->rbuf[0] & 0x20) {
@@ -1119,9 +1112,8 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		event->credits = (event->rbuf[rbc++] << 8) & 0x100;
 		event->credits = event->credits | event->rbuf[rbc++];
 #ifdef PSL9
-printf("PSL_GET_PSL_EVENTS:rbc is 0x%x \n", rbc);
 		event->response_dma0_itag_parity = (((event->rbuf[rbc++]) & 0x10) >>4);
-		event->response_dma0_itag = event->rbuf[rbc];
+		event->response_dma0_itag = event->rbuf[rbc-1];
 		event->response_dma0_itag =
 		    (((event->response_dma0_itag) & 0x1) << 8) | event->rbuf[rbc++];
 		printf("PSL_GET_PSL_EVENTS:dma0_itag-full is 0x%x \n", event->response_dma0_itag);
