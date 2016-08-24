@@ -219,4 +219,18 @@ int psl_get_aux2_change(struct AFU_EVENT *event,
 			uint32_t * job_yield,
 			uint32_t * tb_request,
 			uint32_t * par_enable, uint32_t * read_latency);
+
+#ifdef PSL9
+/* Call this on AFU side to send a DM0 request to PSL */
+
+int psl_afu_dma0_req(struct AFU_EVENT *event,
+		uint32_t utag,
+		uint32_t itag,
+		uint32_t type,
+		uint32_t size,
+		unsigned char dma0_req_data[128] );
+
+
+#endif /* ifdef PSL9 */
+
 #endif

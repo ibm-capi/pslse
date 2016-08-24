@@ -272,6 +272,7 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 			    warn_msg("CMD:requesting a dma rd xlate with 4 dma rd ops pending");
 			} else   {
 			cmd->dma0_rd_EAs[cmd->dma0_rd_credits] = addr;
+			printf("address is 0x%016x \n", cmd->dma0_rd_EAs[cmd->dma0_rd_credits]);
                          cmd->dma0_rd_credits--;
 			cmd->afu_event->response_dma0_itag = 0x139;
 			cmd->afu_event->response_dma0_itag_parity = 0x0;
@@ -775,6 +776,46 @@ void handle_buffer_read(struct cmd *cmd)
 	}
 }
 
+#ifdef PSL9
+// Handle randomly selected pending dma0 read
+void handle_dma0_read(struct cmd *cmd)
+{
+	struct cmd_event *event;
+
+	// Check that cmd struct is valid buffer read is available
+	if ((cmd == NULL) || (cmd->buffer_read != NULL))
+		return;
+
+	// Randomly select a pending write (or none)
+	event = cmd->list;
+	while (event != NULL) {
+		if ((event->type == CMD_WRITE) &&
+		    (event->state == MEM_TOUCHED) &&
+		    ((event->client_state != CLIENT_VALID) ||
+		     !allow_reorder(cmd->parms))) {
+			break;
+		}
+		event = event->_next;
+	}
+
+	// Test for client disconnect
+	if ((event == NULL) || (_get_client(cmd, event) == NULL))
+		return;
+
+	// Send buffer read request to AFU.  Setting cmd->buffer_read
+	// will block any more buffer read requests until buffer read
+	// data is returned and handled in handle_buffer_data().
+	debug_msg("%s:BUFFER READ tag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
+		  event->tag, event->addr);
+	if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
+			    CACHELINE_BYTES) == PSL_SUCCESS) {
+		cmd->buffer_read = event;
+		debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id, event->tag);
+		event->state = MEM_BUFFER;
+	}
+}
+
+#endif /* ifdef PSL9 */
 // Handle randomly selected memory touch
 void handle_touch(struct cmd *cmd)
 {
@@ -1132,8 +1173,9 @@ void handle_caia2_cmds(struct cmd *cmd)
 	if (cmd->dma_op->type == 0x2)
 		cmd->dma_op->addr = cmd->dma0_wr_EAs[cmd->dma_op->itag];
 
-//debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
-	//	  cmd->dma_op->itag, cmd->dma_op->utag, cmd->dma_op->addr, cmd->dma_op->type, cmd->dma_op->size);
+debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
+		  cmd->dma_op->itag, cmd->dma_op->utag, cmd->dma_op->addr, cmd->dma_op->type, cmd->dma_op->size);
+	cmd->afu_event->dma0_dvalid = 0;
 	}
 
    	return;

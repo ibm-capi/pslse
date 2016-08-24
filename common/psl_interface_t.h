@@ -61,6 +61,10 @@
 				   before the preceeding
 				   command of the same type has
 				   been acknowledged */
+#ifdef PSL9
+#define PSL_DOUBLE_DMA0_REQ 2
+#endif
+
 #define PSL_MMIO_ACK_NOT_VALID 4	/* Read data from previos MMIO
 					   read is not available */
 #define PSL_BUFFER_READ_DATA_NOT_VALID 8	/* Read data from previous

@@ -68,6 +68,10 @@
 #define PSLSE_AFU_ERROR		0x14
 #define PSLSE_MMIO_EBREAD	0x15
 #define PSLSE_VSEC_INFO		0x16
+#ifdef PSL9
+#define PSLSE_DMA0_RD		0x21
+#define PSLSE_DMA0_WR		0x22
+#endif /*ifdef PSL9 */
 
 // PSLSE states
 enum pslse_state {

@@ -442,6 +442,9 @@ static void _handle_afu(struct psl *psl)
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
 		handle_caia2_cmds(psl->cmd);
+		//handle_dma0_write(psl->cmd);
+		//handle_dma0_read(psl->cmd);
+		//handle_dma0_buffer_data(psl->cmd, psl->parity_enabled);
 #endif /* ifdef PSL9 */
 
 	}
