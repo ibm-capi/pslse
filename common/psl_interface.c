@@ -919,7 +919,8 @@ printf("oops..bc is %2d..\n", bc);
 		return 0;
 
 	rbc = 1;
-	if ((event->rbuf[0] & 0x08) != 0) {
+	//if ((event->rbuf[0] & 0x08) != 0) {
+	if (((event->rbuf[0] & 0x08) != 0) && ((event->rbuf[0] & 0x20) != 0x20))  {
 		event->aux2_change = 1;
 		event->buffer_read_latency = (event->rbuf[rbc]) >> 4;
 		event->job_running = ((event->rbuf[rbc]) >> 1) & 0x01;
@@ -936,7 +937,9 @@ printf("oops..bc is %2d..\n", bc);
 	} else {
 		event->aux2_change = 0;
 	}
-	if ((event->rbuf[0] & 0x04) != 0) {
+	//if ((event->rbuf[0] & 0x04) != 0) {
+	if (((event->rbuf[0] & 0x04) != 0) && ((event->rbuf[0] & 0x20) != 0x20))  {
+
 		event->mmio_ack = 1;
 		event->mmio_rdata = 0;
 		for (bc = 0; bc < 8; bc++) {
@@ -947,7 +950,9 @@ printf("oops..bc is %2d..\n", bc);
 	} else {
 		event->mmio_ack = 0;
 	}
-	if ((event->rbuf[0] & 0x02) != 0) {
+	//if ((event->rbuf[0] & 0x02) != 0) {
+	if (((event->rbuf[0] & 0x02) != 0) && ((event->rbuf[0] & 0x20) != 0x20))  {
+
 		event->buffer_rdata_valid = 1;
 		for (bc = 0; bc < 128; bc++) {
 			event->buffer_rdata[bc] = event->rbuf[rbc++];
@@ -958,7 +963,9 @@ printf("oops..bc is %2d..\n", bc);
 	} else {
 		event->buffer_rdata_valid = 0;
 	}
-	if ((event->rbuf[0] & 0x01) != 0) {
+	//if ((event->rbuf[0] & 0x01) != 0)  {
+	if (((event->rbuf[0] & 0x01) != 0) && ((event->rbuf[0] & 0x20) != 0x20))  {
+printf("i see a cmd, rbuf[0] is 0x%2x \n", event->rbuf[0]);
 		event->command_valid = 1;
 		event->command_tag = event->rbuf[rbc++];
 		event->command_abort = (event->rbuf[rbc] >> 5) & 0x7;
