@@ -545,6 +545,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
              const svLogic       ah_ceapar_top, 
              const svLogicVecVal *ah_cch_top, 		// 16 bits
              const svLogicVecVal *ah_csize_top, 		//12 bits
+             const svLogicVecVal *ah_cpagesize_top, 		//4 bits	: TODO - processing of this o/p
              svLogic             *ha_brvalid_top,
              svLogicVecVal       *ha_brtag_top, 		// 8 bits
                    svLogic       *ha_brtagpar_top, 
@@ -560,8 +561,46 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
              svLogic             *ha_rvalid_top, 
              svLogicVecVal       *ha_rtag_top, 		// 8 bits
              svLogic             *ha_rtagpar_top,				
+             svLogicVecVal       *ha_rditag_top, 		// 9 bits	: TODO - processing of this port
+             svLogic             *ha_rditagpar_top,		// : TODO - processing of this port
              svLogicVecVal       *ha_response_top, 		// 8 bits
-             svLogicVecVal       *ha_rcredits_top		// 9 bits
+             svLogicVecVal       *ha_response_ext_top, 		// 8 bits	: TODO - processing of this port
+             svLogicVecVal       *ha_rpagesize_top, 		// 4 bits	: TODO - processing of this port
+             svLogicVecVal       *ha_rcachestate_top, 		// 2 bits	: TODO - processing of this port
+             svLogicVecVal       *ha_rcachepos_top, 		// 13 bits	: TODO - processing of this port
+             svLogicVecVal       *ha_rcredits_top,		// 9 bits
+	     const svLogic	 d0h_dvalid_top,		// TODO: all the following ports are to be processed
+	     const svLogicVecVal *d0h_req_utag_top,		// 10 bits
+	     const svLogicVecVal *d0h_req_itag_top,		// 9 bits
+	     const svLogicVecVal *d0h_dtype_top,		// 3 bits
+	     const svLogicVecVal *d0h_dsize_top,		// 10 bits
+	     const svLogicVecVal *d0h_ddata_top,		// 1024 bits
+	           svLogic       *hd0_sent_utag_valid_top,  
+	           svLogicVecVal *hd0_sent_utag_top,  
+	           svLogicVecVal *hd0_sent_utag_sts_top,  
+	           svLogic       *hd0_cpl_valid_top,  
+	           svLogicVecVal *hd0_cpl_utag_top,  
+	           svLogicVecVal *hd0_cpl_type_top,  
+	           svLogicVecVal *hd0_cpl_size_top,  
+	           svLogicVecVal *hd0_cpl_laddr_top,  
+	           svLogicVecVal *hd0_cpl_byte_count_top,  
+	           svLogicVecVal *hd0_cpl_data_top,  
+	     const svLogic	 d1h_dvalid_top,		// TODO: all the following ports are to be processed
+	     const svLogicVecVal *d1h_req_utag_top,		// 10 bits
+	     const svLogicVecVal *d1h_req_itag_top,		// 9 bits
+	     const svLogicVecVal *d1h_dtype_top,		// 3 bits
+	     const svLogicVecVal *d1h_dsize_top,		// 10 bits
+	     const svLogicVecVal *d1h_ddata_top,		// 1024 bits
+	           svLogic       *hd1_sent_utag_valid_top,  
+	           svLogicVecVal *hd1_sent_utag_top,  
+	           svLogicVecVal *hd1_sent_utag_sts_top,  
+	           svLogic       *hd1_cpl_valid_top,  
+	           svLogicVecVal *hd1_cpl_utag_top,  
+	           svLogicVecVal *hd1_cpl_type_top,  
+	           svLogicVecVal *hd1_cpl_size_top,  
+	           svLogicVecVal *hd1_cpl_laddr_top,  
+	           svLogicVecVal *hd1_cpl_byte_count_top,  
+	           svLogicVecVal *hd1_cpl_data_top
              )
 {
 	int change = 0;
@@ -720,6 +759,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  *ha_rtagpar_top = resp_list->tagpar;
 	  setDpiSignal32(ha_response_top, resp_list->code, 8);
 	  setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
+	// TODO: add code to handle ha_response_ext_top, ha_rpagesize_top, ha_rcachestate_top, ha_rcachepos_top
 	  *ha_rvalid_top = 1;
 	  printf("%08lld: ", (long long) c_sim_time);
 	  printf("Response tag=0x%02x code=0x%02x credits=%d\n",

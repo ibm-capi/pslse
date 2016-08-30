@@ -59,6 +59,7 @@ module top (
              input           ah_ceapar_top, 
              input  [0:15]   ah_cch_top, 
              input  [0:11]   ah_csize_top, 
+             input  [0:3]    ah_cpagesize_top, 
              inout           ha_brvalid_top, 
              inout  [0:7]    ha_brtag_top, 
              inout           ha_brtagpar_top, 
@@ -74,8 +75,46 @@ module top (
              inout           ha_rvalid_top, 
              inout  [0:7]    ha_rtag_top, 		// 8 bits
              inout           ha_rtagpar_top,
+             inout  [0:8]    ha_rditag_top,
+             inout           ha_rditagpar_top,
              inout  [0:7]    ha_response_top, 		// 8 bits
-             inout  [0:8]    ha_rcredits_top		// 9 bits
+             inout  [0:7]    ha_response_ext_top, 	// 8 bits
+             inout  [0:3]    ha_rpagesize_top, 		// 4 bits
+             inout  [0:1]    ha_rcachestate_top, 	// 2 bits
+             inout  [0:12]   ha_rcachepos_top, 		// 13 bits
+             inout  [0:8]    ha_rcredits_top,		// 9 bits
+             input           d0h_dvalid_top,
+             input  [0:9]    d0h_req_utag_top,
+             input  [0:8]    d0h_req_itag_top,
+             input  [0:2]    d0h_dtype_top,
+             input  [0:9]    d0h_dsize_top,
+             input  [0:1023] d0h_ddata_top,
+	     inout           hd0_sent_utag_valid_top, 
+	     inout  [0:9]    hd0_sent_utag_top, 
+	     inout  [0:2]    hd0_sent_utag_sts_top, 
+	     inout           hd0_cpl_valid_top, 
+	     inout  [0:9]    hd0_cpl_utag_top, 
+	     inout  [0:2]    hd0_cpl_type_top, 
+	     inout  [0:9]    hd0_cpl_size_top, 
+	     inout  [0:9]    hd0_cpl_laddr_top, 
+	     inout  [0:9]    hd0_cpl_byte_count_top, 
+             inout  [0:1023] hd0_cpl_data_top,
+             input           d1h_dvalid_top,
+             input  [0:9]    d1h_req_utag_top,
+             input  [0:8]    d1h_req_itag_top,
+             input  [0:2]    d1h_dtype_top,
+             input  [0:9]    d1h_dsize_top,
+             input  [0:1023] d1h_ddata_top,
+	     inout           hd1_sent_utag_valid_top, 
+	     inout  [0:9]    hd1_sent_utag_top, 
+	     inout  [0:2]    hd1_sent_utag_sts_top, 
+	     inout           hd1_cpl_valid_top, 
+	     inout  [0:9]    hd1_cpl_utag_top, 
+	     inout  [0:2]    hd1_cpl_type_top, 
+	     inout  [0:9]    hd1_cpl_size_top, 
+	     inout  [0:9]    hd1_cpl_laddr_top, 
+	     inout  [0:9]    hd1_cpl_byte_count_top, 
+             inout  [0:1023] hd1_cpl_data_top
              );
   // Input
   reg    [0:7]    ha_croom_top;
@@ -112,6 +151,26 @@ module top (
   reg    [0:63]   ha_jea_top;
   reg             ha_jeapar_top;
   reg             ha_pclock;
+  reg             hd0_sent_utag_valid_top;
+  reg    [0:9]    hd0_sent_utag_top;
+  reg    [0:2]    hd0_sent_utag_sts_top;
+  reg             hd0_cpl_valid_top;
+  reg    [0:9]    hd0_cpl_utag_top;
+  reg    [0:2]    hd0_cpl_type_top;
+  reg    [0:9]    hd0_cpl_size_top;
+  reg    [0:9]    hd0_cpl_laddr_top;
+  reg    [0:9]    hd0_cpl_byte_count_top;
+  reg    [0:1023] hd0_cpl_data_top;
+  reg             hd1_sent_utag_valid_top;
+  reg    [0:9]    hd1_sent_utag_top;
+  reg    [0:2]    hd1_sent_utag_sts_top;
+  reg             hd1_cpl_valid_top;
+  reg    [0:9]    hd1_cpl_utag_top;
+  reg    [0:2]    hd1_cpl_type_top;
+  reg    [0:9]    hd1_cpl_size_top;
+  reg    [0:9]    hd1_cpl_laddr_top;
+  reg    [0:9]    hd1_cpl_byte_count_top;
+  reg    [0:1023] hd1_cpl_data_top;
 
   // Output
   reg             ah_cvalid_top;
@@ -124,6 +183,7 @@ module top (
   reg             ah_ceapar_top;
   reg    [0:15]   ah_cch_top;
   reg    [0:11]   ah_csize_top;
+  reg    [0:3]    ah_cpagesize_top;
   wire   [0:1023] ah_brdata_top;
   wire   [0:15]   ah_brpar_top;
   wire            ah_brvalid_top;
@@ -138,6 +198,18 @@ module top (
   reg             ah_jyield_top;
   reg             ah_tbreq_top;
   reg             ah_paren_top;
+  reg             d0h_dvalid_top;
+  reg    [0:9]    d0h_req_utag_top;
+  reg    [0:8]    d0h_req_itag_top;
+  reg    [0:2]    d0h_dtype_top;
+  reg    [0:9]    d0h_dsize_top;
+  reg    [0:1023] d0h_ddata_top;
+  reg             d1h_dvalid_top;
+  reg    [0:9]    d1h_req_utag_top;
+  reg    [0:8]    d1h_req_itag_top;
+  reg    [0:2]    d1h_dtype_top;
+  reg    [0:9]    d1h_dsize_top;
+  reg    [0:1023] d1h_ddata_top;
 
   // Registers
   reg             ah_jrunning_l;
@@ -229,14 +301,23 @@ module top (
 //  reg             brhalf;
 //  reg    [0:511]  brdata_delay;
   reg    [0:7]    brpar_delay;
-  reg             hd0_sent_utag_valid;
-  reg    [0:9]    hd0_sent_utag;
-  reg    [0:1]    hd0_sent_utag_sts;
   reg             hd0_cpl_valid;
   reg    [0:9]    hd0_cpl_utag;
   reg    [0:2]    hd0_cpl_type;
-  reg    [0:11]   hd0_cpl_size;
+  reg    [0:9]    hd0_cpl_size;
+  reg    [0:9]    hd0_cpl_laddr;
+  reg    [0:9]    hd0_cpl_byte_count;
   reg    [0:1023] hd0_cpl_data;
+  reg             hd1_sent_utag_valid;
+  reg    [0:9]    hd1_sent_utag;
+  reg    [0:2]    hd1_sent_utag_sts;
+  reg             hd1_cpl_valid;
+  reg    [0:9]    hd1_cpl_utag;
+  reg    [0:2]    hd1_cpl_type;
+  reg    [0:9]    hd1_cpl_size;
+  reg    [0:9]    hd1_cpl_laddr;
+  reg    [0:9]    hd1_cpl_byte_count;
+  reg    [0:1023] hd1_cpl_data;
 //  reg    [0:15]   hd0_cpl_dpar;
 
   // Wires
@@ -290,7 +371,16 @@ module top (
   wire   [0:2]    d0h_dtype;
   wire   [0:9]    d0h_dsize;
   wire   [0:1023] d0h_ddata;
+  wire            d1h_dvalid;
+  wire   [0:9]    d1h_req_utag;
+  wire   [0:8]    d1h_req_itag;
+  wire   [0:2]    d1h_dtype;
+  wire   [0:9]    d1h_dsize;
+  wire   [0:1023] d1h_ddata;
 //  wire   [0:15]   d0h_dpar;
+  wire            hd0_sent_utag_valid;
+  wire   [0:9]    hd0_sent_utag;
+  wire   [0:2]    hd0_sent_utag_sts;
 
   // Integers
 
@@ -342,16 +432,26 @@ module top (
     ha_jea_top <= 0;
     ha_jeapar_top <= 0;
     ha_pclock <= 0;
-
-// Unused
-  hd0_sent_utag_valid	<= 0;
-  hd0_sent_utag	<= 0;
-  hd0_sent_utag_sts	<= 0;
-  hd0_cpl_valid	<= 0;
-  hd0_cpl_utag	<= 0;
-  hd0_cpl_type	<= 0;
-  hd0_cpl_size	<= 0;
-  hd0_cpl_data	<= 0;
+    hd0_sent_utag_valid_top <= 0;
+    hd0_sent_utag_top <= 0;
+    hd0_sent_utag_sts_top <= 0;
+    hd0_cpl_valid_top <= 0;
+    hd0_cpl_utag_top <= 0;
+    hd0_cpl_type_top <= 0;
+    hd0_cpl_size_top <= 0;
+    hd0_cpl_laddr_top <= 0;
+    hd0_cpl_byte_count_top <= 0;
+    hd0_cpl_data_top <= 0;
+    hd1_sent_utag_valid_top <= 0;
+    hd1_sent_utag_top <= 0;
+    hd1_sent_utag_sts_top <= 0;
+    hd1_cpl_valid_top <= 0;
+    hd1_cpl_utag_top <= 0;
+    hd1_cpl_type_top <= 0;
+    hd1_cpl_size_top <= 0;
+    hd1_cpl_laddr_top <= 0;
+    hd1_cpl_byte_count_top <= 0;
+    hd1_cpl_data_top <= 0;
 //  hd0_cpl_dpar	<= 0;
     // $afu_init;
      psl_bfm_init();
@@ -400,6 +500,26 @@ module top (
   assign ha_jcompar   = ha_jcompar_top;
   assign ha_jea       = ha_jea_top;
   assign ha_jeapar    = ha_jeapar_top;
+  assign hd0_sent_utag_valid    = hd0_sent_utag_valid_top;
+  assign hd0_sent_utag    	= hd0_sent_utag_top;
+  assign hd0_sent_utag_sts    	= hd0_sent_utag_sts_top;
+  assign hd0_cpl_valid    	= hd0_cpl_valid_top;
+  assign hd0_cpl_utag    	= hd0_cpl_utag_top;
+  assign hd0_cpl_type    	= hd0_cpl_type_top;
+  assign hd0_cpl_size    	= hd0_cpl_size_top;
+  assign hd0_cpl_laddr    	= hd0_cpl_laddr_top;
+  assign hd0_cpl_byte_count    	= hd0_cpl_byte_count_top;
+  assign hd0_cpl_data    	= hd0_cpl_data_top;
+  assign hd1_sent_utag_valid    = hd1_sent_utag_valid_top;
+  assign hd1_sent_utag    	= hd1_sent_utag_top;
+  assign hd1_sent_utag_sts    	= hd1_sent_utag_sts_top;
+  assign hd1_cpl_valid    	= hd1_cpl_valid_top;
+  assign hd1_cpl_utag    	= hd1_cpl_utag_top;
+  assign hd1_cpl_type    	= hd1_cpl_type_top;
+  assign hd1_cpl_size    	= hd1_cpl_size_top;
+  assign hd1_cpl_laddr    	= hd1_cpl_laddr_top;
+  assign hd1_cpl_byte_count    	= hd1_cpl_byte_count_top;
+  assign hd1_cpl_data    	= hd1_cpl_data_top;
 
   always @ ( ha_pclock ) begin
     simulationTime = $time;
@@ -441,6 +561,7 @@ module top (
              ah_ceapar_top, 
              ah_cch_top, 
              ah_csize_top, 
+             ah_cpagesize_top, 
              ha_brvalid_top, 
              ha_brtag_top, 
              ha_brtagpar_top, 
@@ -456,8 +577,46 @@ module top (
              ha_rvalid_top, 
              ha_rtag_top, 		// 8 bits
              ha_rtagpar_top,
+             ha_rditag_top,		// 9 bits
+             ha_rditagpar_top,
              ha_response_top, 		// 8 bits
-             ha_rcredits_top		// 9 bits
+             ha_response_ext_top, 	// 8 bits
+             ha_rpagesize_top,	 	// 4 bits
+             ha_rcachestate_top, 	// 2 bits
+             ha_rcachepos_top, 		// 13 bits
+             ha_rcredits_top,		// 9 bits
+             d0h_dvalid_top, 		// DMA Port 0
+             d0h_req_utag_top, 
+             d0h_req_itag_top, 
+             d0h_dtype_top, 
+             d0h_dsize_top, 
+             d0h_ddata_top, 
+	     hd0_sent_utag_valid_top, 
+	     hd0_sent_utag_top, 
+	     hd0_sent_utag_sts_top, 
+	     hd0_cpl_valid_top,  
+	     hd0_cpl_utag_top,  
+	     hd0_cpl_type_top,  
+	     hd0_cpl_size_top,  
+	     hd0_cpl_laddr_top,  
+	     hd0_cpl_byte_count_top,  
+	     hd0_cpl_data_top,  
+             d1h_dvalid_top, 		// DMA Port 1
+             d1h_req_utag_top, 
+             d1h_req_itag_top, 
+             d1h_dtype_top, 
+             d1h_dsize_top, 
+             d1h_ddata_top, 
+	     hd1_sent_utag_valid_top, 
+	     hd1_sent_utag_top, 
+	     hd1_sent_utag_sts_top, 
+	     hd1_cpl_valid_top,  
+	     hd1_cpl_utag_top,  
+	     hd1_cpl_type_top,  
+	     hd1_cpl_size_top,  
+	     hd1_cpl_laddr_top,  
+	     hd1_cpl_byte_count_top,  
+	     hd1_cpl_data_top
              );
   end
 
@@ -486,6 +645,7 @@ module top (
     ah_ceapar_top <= ah_ceapar;
     ah_cch_top <= ah_cch;
     ah_csize_top <= ah_csize;
+    ah_cpagesize_top <= ah_cpagesize;
     ah_mmdata_top <= ah_mmdata;
     ah_mmdatapar_top <= ah_mmdatapar;
     ah_jerror_top <= ah_jerror;
@@ -497,6 +657,18 @@ module top (
     ah_cvalid_top <= ah_cvalid;
     ah_mmack_top <= ah_mmack;
     ah_jcack_top <= ah_jcack;
+    d0h_dvalid_top <= d0h_dvalid;
+    d0h_req_utag_top <= d0h_req_utag;
+    d0h_req_itag_top <= d0h_req_itag;
+    d0h_dtype_top <= d0h_dtype;
+    d0h_dsize_top <= d0h_dsize;
+    d0h_ddata_top <= d0h_ddata;
+    d1h_dvalid_top <= d1h_dvalid;
+    d1h_req_utag_top <= d1h_req_utag;
+    d1h_req_itag_top <= d1h_req_itag;
+    d1h_dtype_top <= d1h_dtype;
+    d1h_dsize_top <= d1h_dsize;
+    d1h_ddata_top <= d1h_ddata;
   end
 
   // Breakpoint output, need at least 1 output or Quartus will optimize away
@@ -832,7 +1004,7 @@ module top (
     .ha_rcachestate(ha_rcachestate),
     .ha_rcachepos(ha_rcachepos),
     .ha_rcredits(ha_rcredits),
-    .ha_reoa(ha_reoa),
+//    .ha_reoa(ha_reoa),	- mcp004 does not seem to have this port
     // MMIO interface
     .ha_mmval(ha_mmval),
     .ha_mmcfg(ha_mmcfg),
@@ -855,11 +1027,11 @@ module top (
     .ah_jdone(ah_jdone),
     .ah_jcack(ah_jcack),
     .ah_jerror(ah_jerror),
-    .ah_jyield(ah_jyield),
+//    .ah_jyield(ah_jyield),	- mcp004 does not seem to have this port
     .ah_tbreq(ah_tbreq),
     .ah_paren(ah_paren),
     .ha_pclock(ha_pclock),
-    // DMA Req interface
+    // DMA 0 Req interface
     .d0h_dvalid(d0h_dvalid),
     .d0h_req_utag(d0h_req_utag),
     .d0h_req_itag(d0h_req_itag),
@@ -867,17 +1039,38 @@ module top (
     .d0h_dsize(d0h_dsize),
     .d0h_ddata(d0h_ddata),
 //    .d0h_dpar(d0h_dpar),
-    // DMA Sent interface
+    // DMA 0 Sent interface
     .hd0_sent_utag_valid(hd0_sent_utag_valid),
     .hd0_sent_utag(hd0_sent_utag),
     .hd0_sent_utag_sts(hd0_sent_utag_sts),
-    // DMA CPL interface
+    // DMA 0 CPL interface
     .hd0_cpl_valid(hd0_cpl_valid),
     .hd0_cpl_utag(hd0_cpl_utag),
     .hd0_cpl_type(hd0_cpl_type),
     .hd0_cpl_size(hd0_cpl_size),
-    .hd0_cpl_data(hd0_cpl_data)//,
+    .hd0_cpl_laddr(hd0_cpl_laddr),
+    .hd0_cpl_byte_count(hd0_cpl_byte_count),
+    .hd0_cpl_data(hd0_cpl_data),
 //    .hd0_cpl_dpar(hd0_cpl_dpar)
+    // DMA 1 Req interface
+    .d1h_dvalid(d1h_dvalid),
+    .d1h_req_utag(d1h_req_utag),
+    .d1h_req_itag(d1h_req_itag),
+    .d1h_dtype(d1h_dtype),
+    .d1h_dsize(d1h_dsize),
+    .d1h_ddata(d1h_ddata),
+    // DMA 1 Sent interface
+    .hd1_sent_utag_valid(hd1_sent_utag_valid),
+    .hd1_sent_utag(hd1_sent_utag),
+    .hd1_sent_utag_sts(hd1_sent_utag_sts),
+    // DMA 1 CPL interface
+    .hd1_cpl_valid(hd1_cpl_valid),
+    .hd1_cpl_utag(hd1_cpl_utag),
+    .hd1_cpl_type(hd1_cpl_type),
+    .hd1_cpl_size(hd1_cpl_size),
+    .hd1_cpl_laddr(hd1_cpl_laddr),
+    .hd1_cpl_byte_count(hd1_cpl_byte_count),
+    .hd1_cpl_data(hd1_cpl_data)
   );
 
 endmodule
