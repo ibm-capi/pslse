@@ -42,6 +42,10 @@ enum cmd_type {
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
 	CMD_CAIA2,
+	CMD_XLAT_RD,
+	CMD_XLAT_WR,
+	CMD_DMA_RD,
+	CMD_DMA_WR,
 #endif /* ifdef PSL9 define new cmd type */
 	CMD_OTHER
 };
@@ -53,8 +57,29 @@ enum mem_state {
 	MEM_BUFFER,
 	MEM_REQUEST,
 	MEM_RECEIVED,
+#ifdef PSL9
+	DMA_ITAG_REQ,
+	DMA_ITAG_RET,
+	DMA_PENDING,
+	DMA_OP_REQ,
+	DMA_SENT_ACK,
+	DMA_MEM_REQ,
+	DMA_MEM_RESP,
+	DMA_CPL_SENT,
+#endif /* ifdef PSL9 */
 	MEM_DONE
 };
+
+/*enum dma_state {
+	DMA_ITAG_REQ,
+	DMA_ITAG_RET,
+	DMA_OP_REQ,
+	DMA_BUFFER_WR,
+	DMA_SENT_ACK,
+	DMA_MEM_REQ,
+	DMA_BUFFER_RD,
+	DMA_CPL_SENT
+}; */
 
 struct pages {
 	uint64_t entry[PAGE_ENTRIES][PAGE_WAYS];
@@ -72,6 +97,15 @@ struct cmd_event {
 	uint32_t abt;
 	uint32_t size;
 	uint32_t resp;
+#ifdef PSL9
+	uint32_t port;
+	uint32_t itag;
+	uint32_t utag;
+	uint32_t dsize;
+	uint32_t dtype;
+	uint32_t sent_sts;
+	uint32_t cpl_type;
+#endif /*ifdef PSL9 */
 	uint8_t unlock;
 	uint8_t buffer_activity;
 	uint8_t *data;
@@ -83,11 +117,12 @@ struct cmd_event {
 	struct cmd_event *_next;
 };
 
-#ifdef PSL9
+/* #ifdef PSL9
 struct dma_event {
 	uint64_t addr;
 	int32_t context;
 	uint32_t command;
+	uint32_t port;
 	uint32_t itag;
 	uint32_t utag;
 	uint32_t abt;
@@ -100,13 +135,14 @@ struct dma_event {
 	uint8_t *data;
 	uint8_t *parity;
 	int *abort;
-	enum cmd_type type;
+	enum cmd_type type; // may nt be needed anymore
 	enum mem_state state;
+//	enum dma_state dstate;
 	enum client_state client_state;
 	struct dma_event *_next;
 };
 #endif
-
+*/
 struct cmd {
 	struct AFU_EVENT *afu_event;
 	struct cmd_event *list;
@@ -116,7 +152,7 @@ struct cmd {
 	struct client **client;
 	struct pages page_entries;
 #ifdef PSL9
-	struct dma_event *dma_op;
+//	struct dma_event *dma_op;
 	uint16_t dma0_rd_credits;
 	uint16_t dma0_wr_credits;
 	uint64_t dma0_rd_EAs[4];
@@ -161,6 +197,8 @@ void handle_response(struct cmd *cmd);
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
 void handle_caia2_cmds(struct cmd *cmd);
+void handle_dma0_read(struct cmd *cmd);
+void handle_dma0_write(struct cmd *cmd);
 #endif /* ifdef PSL9 */
 
 

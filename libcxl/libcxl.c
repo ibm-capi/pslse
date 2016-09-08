@@ -677,6 +677,57 @@ static void *_psl_loop(void *ptr)
 			}
 			_handle_write(afu, addr, size, buffer);
 			break;
+#ifdef PSL9
+		case PSLSE_DMA0_RD:
+			DPRINTF("AFU DMA0 MEMORY READ\n");
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg
+				    ("Socket failure getting memory read size");
+				_all_idle(afu);
+				break;
+			}
+			size = (uint8_t) buffer[0];
+			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
+					     -1, 0) < 0) {
+				warn_msg
+				    ("Socket failure getting memory read addr");
+				_all_idle(afu);
+				break;
+			}
+			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
+			addr = ntohll(addr);
+			_handle_read(afu, addr, size);
+			break;
+
+
+		case PSLSE_DMA0_WR:
+			DPRINTF("AFU DMA0 MEMORY WRITE\n");
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg
+				    ("Socket failure getting memory write size");
+				_all_idle(afu);
+				break;
+			}
+			size = (uint8_t) buffer[0];
+			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
+					     -1, 0) < 0) {
+				_all_idle(afu);
+				break;
+			}
+			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
+			addr = ntohll(addr);
+			if (get_bytes_silent(afu->fd, size, buffer, 1000, 0) <
+			    0) {
+				warn_msg
+				    ("Socket failure getting memory write data");
+				_all_idle(afu);
+				break;
+			}
+			_handle_write(afu, addr, size, buffer);
+			break;
+
+
+#endif /* ifdef PSL9 */
 		case PSLSE_MEMORY_TOUCH:
 			DPRINTF("AFU MEMORY TOUCH\n");
 			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {

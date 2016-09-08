@@ -70,8 +70,8 @@ int psl_response(struct AFU_EVENT *event,
 		 uint32_t tag,
 		 uint32_t response_code,
 #ifdef PSL9
-		// uint32_t response_extra, uint32_t response_r_pgsize,
-		// uint32_t response_dma_x_tag, uint32_t response_dma_x_tag_parity,
+//		 uint32_t response_extra, uint32_t response_r_pgsize,
+		// uint32_t response_dma0_itag, uint32_t response_dma0_itag_parity,
 #endif
 		 int credits, uint32_t cache_state, uint32_t cache_position);
 
@@ -104,16 +104,21 @@ int psl_buffer_write(struct AFU_EVENT *event,
 		     uint8_t * write_data, uint8_t * write_parity);
 
 #ifdef PSL9
-/* Call this to write the DMA 0 read completion buffer, write_data is a 32 element array of 32-bit
- * values, write_parity is a 4 element array of 32-bit values.  Length must be 128
- * which is the transfer size in bytes.  */
+/* Call this to write the DMA0 read completion buffer, write_data is a 32 element array of 32-bit
+ * values.  Size must be 128 at least initially, which is transfer size in bytes  */
 
-int psl_dma0_cpl_buffer_write(struct AFU_EVENT *event,
-		     uint32_t tag,
-		     uint64_t address,
-		     uint32_t length,
-		     uint8_t * write_data, uint8_t * write_parity);
+int psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
+		     uint32_t utag,
+		     uint32_t cpl_type,
+		     uint32_t dsize,
+		     uint8_t * write_data);
 
+/* Call this to write a dma port utag sent back on the DMA bus. */
+
+int
+psl_dma0_sent_utag(struct AFU_EVENT *event,
+		 uint32_t utag,
+		 uint32_t sent_sts);
 
 #endif
 

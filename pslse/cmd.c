@@ -87,11 +87,11 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 	cmd->dma0_wr_credits = 4;
 
 	// Initialize caia2 handler
-	cmd->dma_op = (struct dma_event *)calloc(1, sizeof(struct dma_event));
-	if (!cmd->dma_op) {
-		perror("dma_op init");
-		exit(-1);
-	}
+//	cmd->dma_op = (struct dma_event *)calloc(1, sizeof(struct dma_event));
+//	if (!cmd->dma_op) {
+//		perror("dma_op init");
+//		exit(-1);
+//	}
         
 
 cmd->afu_event->dma0_dvalid = 0;
@@ -261,38 +261,24 @@ static void _add_other(struct cmd *cmd, uint32_t handle, uint32_t tag,
 }
 
 #ifdef PSL9
-// Format and add new p9. commands to list
+// Format and add new p9 commands to list
+
 static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
-		       uint32_t command, uint32_t abort, uint64_t addr, uint32_t resp)
+		       uint32_t command, uint32_t abort, uint64_t addr)
 {
+	uint32_t resp = PSL_RESPONSE_DONE;
+	enum cmd_type type = CMD_CAIA2;
+	enum mem_state state = MEM_DONE;
+
 	switch (command) {
 		case PSL_COMMAND_XLAT_RD_P0:
-			if (!cmd->dma0_rd_credits) {
-			    resp = PSL_RESPONSE_FAILED;
-			    warn_msg("CMD:requesting a dma rd xlate with 4 dma rd ops pending");
-			} else   {
-			cmd->dma0_rd_EAs[cmd->dma0_rd_credits] = addr;
-			printf("address is 0x%016x \n", cmd->dma0_rd_EAs[cmd->dma0_rd_credits]);
-                         cmd->dma0_rd_credits--;
-			cmd->afu_event->response_dma0_itag = 0x139;
-			cmd->afu_event->response_dma0_itag_parity = 0x0;
-			info_msg("dma0_itag for read is 0x%x", cmd->afu_event->response_dma0_itag);
-
-			/* generate a tag and make it reserved */
- 			}
+			type = CMD_XLAT_RD;
+			state = DMA_ITAG_REQ;
+//printf("adding xlat_rd in add_caia2 \n");
 			break;
 		case PSL_COMMAND_XLAT_WR_P0:
-			if (!cmd->dma0_wr_credits) {
-			    resp = PSL_RESPONSE_FAILED;
-			    warn_msg("CMD:requesting a dma wr xlate with 4 dma wr ops pending");
-			} else   {
-			cmd->dma0_wr_EAs[cmd->dma0_wr_credits] = addr;
-                          cmd->dma0_wr_credits--;
-			cmd->afu_event->response_dma0_itag = 0x154;
-			cmd->afu_event->response_dma0_itag_parity = 0x1;
-			info_msg("dma0_itag for wrte is 0x%x", cmd->afu_event->response_dma0_itag);
-			/* generate a tag and make it reserved */
- 			}
+			type = CMD_XLAT_WR;
+			state = DMA_ITAG_REQ;
 			break;
 		case PSL_COMMAND_XLAT_RD_TOUCH:
 			/* eventually do mem rd touch */;
@@ -301,26 +287,16 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 			/* eventually do mem wr touch */;
 			break;
 		case PSL_COMMAND_ITAG_ABRT_RD:
-			/* if tag is in reserved state, go ahead and abort */
-			/* otherwise, send back FAIL and warn msg */
-			cmd->dma0_rd_credits++;
-			cmd->afu_event->response_dma0_itag = 0x0;
-			cmd->afu_event->response_dma0_itag_parity = 0x0;
 			break;
 		case PSL_COMMAND_ITAG_ABRT_WR:
-			/* if tag is in reserved state, go ahead and abort */
-			/* otherwise, send back FAIL and warn msg */
-			cmd->dma0_wr_credits++;
-			cmd->afu_event->response_dma0_itag = 0x0;
-			cmd->afu_event->response_dma0_itag_parity = 0x0;
 			break;
 		default:
 			warn_msg("Unsupported command 0x%04x", cmd);
 			break;
 
 }
-	_add_cmd(cmd, handle, tag, command, abort, CMD_CAIA2, 0, 0, MEM_DONE,
-		 resp, 0);
+	_add_cmd(cmd, handle, tag, command, abort, type, addr, 0, state,
+		 resp, 0 );
 }
 #endif /* ifdef PSL9 */
 
@@ -514,7 +490,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_XLAT_WR_TOUCH:
 	case PSL_COMMAND_ITAG_ABRT_RD:
 	case PSL_COMMAND_ITAG_ABRT_WR:
-		_add_caia2(cmd, handle, tag, command, abort,addr, PSL_RESPONSE_DONE);
+		_add_caia2(cmd, handle, tag, command, abort,addr);
 		break;
 #endif /* ifdef PSL9 */
 	default:
@@ -777,20 +753,69 @@ void handle_buffer_read(struct cmd *cmd)
 }
 
 #ifdef PSL9
-// Handle randomly selected pending dma0 read
+// Handle  pending dma0 write THIS IS OBSOLETE _ REPLACE
+void handle_dma0_write(struct cmd *cmd)
+{
+	struct cmd_event *event;
+//printf("handle_dma0_write entry \n");
+	
+	// Check that cmd struct is valid 
+	if ((cmd == NULL)|| (cmd->dma0_wr_credits == 4)) 
+		return;
+
+//		printf("made it this far in handle_dma0_write \n");
+	// Randomly select a pending buffer read (or none)
+	event = cmd->list;
+	while (event != NULL) {
+		if ((event->type == CMD_DMA_WR) &&
+		    (event->state == DMA_MEM_REQ) &&
+		    ((event->client_state != CLIENT_VALID) ||
+		     !allow_reorder(cmd->parms))) {
+			break;
+		}
+//printf("event is 0x%16x \n", event);
+//printf("event->type is 0x%1x \n", event->type);
+		event = event->_next;
+	}
+printf("handle_dma0_write is dummy routine, always returns \n");
+return;
+
+	// Test for client disconnect or nothing to do....
+	if ((event == NULL) || (_get_client(cmd, event) == NULL))
+		return;
+
+	// Send buffer read request to AFU.  Setting cmd->buffer_read
+	// will block any more buffer read requests until buffer read
+	// data is returned and handled in handle_buffer_data().
+	debug_msg("%s:DMA0 WRITE BUFFER READ itag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
+		  event->itag, event->addr);
+	if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
+			    CACHELINE_BYTES) == PSL_SUCCESS) {
+		cmd->buffer_read = event;
+		debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id, event->tag);
+		event->state = MEM_BUFFER;
+	}
+}
+
+// Handle randomly selected pending DMA0 read, send request to client for real data
+//  or do final write with to AFU w/valid data after it is received from client.
 void handle_dma0_read(struct cmd *cmd)
 {
 	struct cmd_event *event;
+	struct client *client;
+	uint8_t buffer[10];
+	uint64_t *addr;
+	int quadrant, byte;
 
-	// Check that cmd struct is valid buffer read is available
-	if ((cmd == NULL) || (cmd->buffer_read != NULL))
+	// Make sure cmd structure is valid
+	if (cmd == NULL)
 		return;
 
-	// Randomly select a pending write (or none)
+	// Randomly select a pending dma0 read (or none)
 	event = cmd->list;
 	while (event != NULL) {
-		if ((event->type == CMD_WRITE) &&
-		    (event->state == MEM_TOUCHED) &&
+	        if ((event->type == CMD_DMA_RD) &&
+		    (event->state != DMA_CPL_SENT) &&
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
@@ -799,21 +824,71 @@ void handle_dma0_read(struct cmd *cmd)
 	}
 
 	// Test for client disconnect
-	if ((event == NULL) || (_get_client(cmd, event) == NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
 
-	// Send buffer read request to AFU.  Setting cmd->buffer_read
-	// will block any more buffer read requests until buffer read
-	// data is returned and handled in handle_buffer_data().
-	debug_msg("%s:BUFFER READ tag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
-		  event->tag, event->addr);
-	if (psl_buffer_read(cmd->afu_event, event->tag, event->addr,
-			    CACHELINE_BYTES) == PSL_SUCCESS) {
-		cmd->buffer_read = event;
-		debug_cmd_buffer_read(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		event->state = MEM_BUFFER;
+	// After the client returns data with a call to the function
+	// _handle_mem_read() issue dma0 completion bus
+	// write with valid data and
+	// prepare for response.
+	if (event->state == DMA_MEM_RESP) {
+		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dtype,
+				     event->dsize, event->data) == PSL_SUCCESS) {
+			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
+				  event->utag);
+			for (quadrant = 0; quadrant < 4; quadrant++) {
+				DPRINTF("DEBUG: Q%d 0x", quadrant);
+				for (byte = 0; byte < CACHELINE_BYTES / 4;
+				     byte++) {
+					DPRINTF("%02x", event->data[byte]);
+				}
+				DPRINTF("\n");
+			}
+			event->resp = PSL_RESPONSE_DONE;
+			event->state = DMA_CPL_SENT;
+			//debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id,
+	//				       event->tag);
+	//		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+	//				 event->context, event->resp);
+		}
 	}
+
+	if (event->state != DMA_OP_REQ)
+		return;
+
+	if (client->mem_access == NULL) {
+	        // if read:
+		// Send read request to client, set client->mem_access
+		// to point to this event blocking any other memory
+		// accesses to client until data is returned by call
+		// to the _handle_mem_read() function.
+                if (event->type == CMD_DMA_RD) {
+		  buffer[0] = (uint8_t) PSLSE_DMA0_RD;
+		  buffer[1] = (uint8_t) event->dsize;
+		  addr = (uint64_t *) & (buffer[2]);
+		  *addr = htonll(event->addr);
+		  event->abort = &(client->abort);
+		  debug_msg("%s:DMA0 MEMORY READ utag=0x%02x size=%d addr=0x%016"PRIx64,
+			    cmd->afu_name, event->utag, event->dsize, event->addr);
+		  if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
+				cmd->dbg_id, event->context) < 0) {
+		    client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
+		  }
+		// Now need to send UTAG SENT via DMA port back to AFU
+	if (psl_dma0_sent_utag(cmd->afu_event, event->utag, event->sent_sts)
+				      == PSL_SUCCESS) {
+			debug_msg("%s:DMA0 SENT UTAG STS, state now DMA_MEM_REQ FOR DMA_RD utag=0x%02x", cmd->afu_name,
+				  event->utag);
+
+		  event->state = DMA_MEM_REQ;
+		 // debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag,
+		//		   event->context);
+		  client->mem_access = (void *)event;
+                    }
+		}
+ 	}
 }
+
 
 #endif /* ifdef PSL9 */
 // Handle randomly selected memory touch
@@ -1019,21 +1094,39 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 {
 	uint8_t data[MAX_LINE_CHARS];
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
-
-	// Client is returning data from memory read
-	if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
+	
+	if (event->type == CMD_READ) {
+		// Client is returning data from memory read
+		if (get_bytes_silent(fd, event->dsize, data, cmd->parms->timeout,
 			     event->abort) < 0) {
-	        debug_msg("%s:_handle_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
-			  cmd->afu_name, event->tag, event->size, event->addr);
-		event->resp = PSL_RESPONSE_DERROR;
-		event->state = MEM_DONE;
-		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+	        	debug_msg("%s:_handle_mem_read failed utag=0x%02x size=%d addr=0x%016"PRIx64,
+				  cmd->afu_name, event->utag, event->dsize, event->addr);
+			event->resp = PSL_RESPONSE_DERROR;
+			event->state = MEM_DONE;
+			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
-		return;
+			return;
+		}
+		memcpy((void *)&(event->data[offset]), (void *)&data, event->size);
+		generate_cl_parity(event->data, event->parity);
+		event->state = MEM_RECEIVED;
+	} else if (event->type == CMD_DMA_RD) {
+		// Client is returning data from DMA memory read
+//	printf("offset is =0x%016"PRIx64" and data is 0x%08"PRIx8" \n", offset, data);
+		if (get_bytes_silent(fd, event->dsize, data, cmd->parms->timeout,
+			     event->abort) < 0) {
+	        	debug_msg("%s:_handle_dma0_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
+				  cmd->afu_name, event->tag, event->size, event->addr);
+			event->resp = PSL_RESPONSE_DERROR;
+			event->state = MEM_DONE;
+			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
+				 event->context, event->resp);
+			return;
+		}
+		memcpy((void *)&(event->data[offset]), (void *)&data, event->dsize);
+		event->state = DMA_MEM_RESP;
+	
 	}
-	memcpy((void *)&(event->data[offset]), (void *)&data, event->size);
-	generate_cl_parity(event->data, event->parity);
-	event->state = MEM_RECEIVED;
 }
 
 // Calculate page address in cached index for translation
@@ -1139,6 +1232,10 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 
 	if (event->type == CMD_READ)
 		_handle_mem_read(cmd, event, fd);
+#ifdef PSL9
+	else if (event->type == CMD_DMA_RD)
+		_handle_mem_read(cmd, event, fd);
+#endif /* ifdef PSL9 */
 	else if (event->type == CMD_TOUCH)
 		event->state = MEM_DONE;
 	else if (event->state == MEM_TOUCH)	// Touch before write
@@ -1159,25 +1256,154 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
-// handle things like dma requests
+// handle things like dma requests NEED TO FIX THIS LATER, lite doesn't do DMA - HMP
 void handle_caia2_cmds(struct cmd *cmd) 
 {
+	struct cmd_event **head;
+	struct cmd_event *event;
+	struct client *client;
+	uint32_t this_itag;
 
-	if (cmd->afu_event->dma0_dvalid == 1)  {
-	cmd->dma_op->itag = cmd->afu_event->dma0_req_itag;
-	cmd->dma_op->utag = cmd->afu_event->dma0_req_utag;
-	cmd->dma_op->type = cmd->afu_event->dma0_req_type;
-	cmd->dma_op->size = cmd->afu_event->dma0_req_size;
-	if (cmd->dma_op->type == 0x1)
-		cmd->dma_op->addr = cmd->dma0_rd_EAs[cmd->dma_op->itag];
-	if (cmd->dma_op->type == 0x2)
-		cmd->dma_op->addr = cmd->dma0_wr_EAs[cmd->dma_op->itag];
+	// Make sure cmd structure is valid
+	if (cmd == NULL)
+		return;
 
-debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
-		  cmd->dma_op->itag, cmd->dma_op->utag, cmd->dma_op->addr, cmd->dma_op->type, cmd->dma_op->size);
+	// Look for any XLAT cmds to process immediately
+	head = &cmd->list;
+	while (*head != NULL) {
+		printf ("head->type is %2x, head->state is 0x%3x \n", (*head)->type, (*head)->state);
+		if ((((*head)->type == CMD_XLAT_RD) &&
+		    ((*head)->state == DMA_ITAG_REQ)) |
+		 (((*head)->type == CMD_XLAT_WR) &&
+		    ((*head)->state == DMA_ITAG_REQ)))
+			break;
+		if ((*head)->state == DMA_PENDING)
+			goto dmaop_chk;
+		head = &((*head)->_next);
+	}
+	event = *head;
+
+//No commands? Go look for dma op requests from AFU
+	if (event == NULL)
+		goto dmaop_chk;
+	
+// Test for client disconnect
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
+		return;
+//printf("HANDLE_CAIA2_CMDS start to process...\n");
+	//Process XLAT cmds and get them ready for handle_response to deal with
+	switch (event->command) {
+		case PSL_COMMAND_XLAT_RD_P0:
+			if (!cmd->dma0_rd_credits) {
+			    event->resp = PSL_RESPONSE_FAILED;
+			    warn_msg("CMD:requesting a dma rd xlate with 4 dma rd ops pending");
+			} else   {
+			cmd->dma0_rd_EAs[cmd->dma0_rd_credits] = event->addr;
+			event->itag = cmd->dma0_rd_credits;
+			event->port = 0;
+			printf("in handle_caia2 for xlat_rd, address is 0x%016"PRIX64 "\n", event->addr);
+                         cmd->dma0_rd_credits--;
+			cmd->afu_event->response_dma0_itag = event->itag;
+			cmd->afu_event->response_dma0_itag_parity = 0x0;
+			info_msg("dma0_itag for read is 0x%x", event->itag);
+			event->state = DMA_ITAG_RET;
+			/* generate a tag and make it reserved */
+ 			}
+			break;
+		case PSL_COMMAND_XLAT_WR_P0:
+			if (!cmd->dma0_wr_credits) {
+			    event->resp = PSL_RESPONSE_FAILED;
+			    warn_msg("CMD:requesting a dma wr xlate with 4 dma wr ops pending");
+			} else   {
+			cmd->dma0_wr_EAs[cmd->dma0_wr_credits] = event->addr;
+			event->itag = (cmd->dma0_wr_credits + 0x20);
+			event->port = 0;
+                          cmd->dma0_wr_credits--;
+			printf("in handle_caia2 for xlat_wr, address is 0x%016"PRIX64 "\n", event->addr);
+			cmd->afu_event->response_dma0_itag = event->itag;
+			cmd->afu_event->response_dma0_itag_parity = 0x1;
+			info_msg("dma0_itag for wrte is 0x%x", event->itag);
+			event->state = DMA_ITAG_RET;
+			/* generate a tag and make it reserved */
+ 			}
+			break;
+		case PSL_COMMAND_XLAT_RD_TOUCH:
+			/* eventually do mem rd touch */;
+			break;
+		case PSL_COMMAND_XLAT_WR_TOUCH:
+			/* eventually do mem wr touch */;
+			break;
+		case PSL_COMMAND_ITAG_ABRT_RD:
+			/* if tag is in reserved state, go ahead and abort */
+			/* otherwise, send back FAIL and warn msg more work HMP */
+			cmd->dma0_rd_credits++;
+			cmd->afu_event->response_dma0_itag = 0x0;
+			cmd->afu_event->response_dma0_itag_parity = 0x0;
+			event->state = DMA_ITAG_RET;
+			break;
+		case PSL_COMMAND_ITAG_ABRT_WR:
+			/* if tag is in reserved state, go ahead and abort */
+			/* otherwise, send back FAIL and warn msg more work HMP */
+			cmd->dma0_wr_credits++;
+			cmd->afu_event->response_dma0_itag = 0x0;
+			cmd->afu_event->response_dma0_itag_parity = 0x0;
+			event->state = DMA_ITAG_RET;
+			break;
+		default:
+			warn_msg("Unsupported command 0x%04x", cmd);
+			break;
+
+	}
+//printf("break out of case \n");
+
+//here we search list of events to find one that has matching ITAG, then 
+//advance the DMA state accordingly so add code HMP
+dmaop_chk:	if (cmd->afu_event->dma0_dvalid == 1)  {
+	if (event == NULL)
+		printf ("why is event null??? \n");
+	this_itag = cmd->afu_event->dma0_req_itag;
+	// Look for a matching itag to process immediately
+	head = &cmd->list;
+	while (*head != NULL) {
+		printf ("head->type is %2x, head->itag is 0x%3x \n", (*head)->type, (*head)->itag);
+		if ((((*head)->type == CMD_XLAT_RD) &&
+		    ((*head)->itag == this_itag)) |
+		 (((*head)->type == CMD_XLAT_WR) &&
+		    ((*head)->itag == this_itag)))
+			break;
+		head = &((*head)->_next);
+	}
+	if (*head != NULL) {
+		event = *head;
+		//Fill in event and set up for next steps
+		event->itag = cmd->afu_event->dma0_req_itag;
+		event->utag = cmd->afu_event->dma0_req_utag;
+		event->dtype = cmd->afu_event->dma0_req_type;
+		event->dsize = cmd->afu_event->dma0_req_size;
+		// If DMA read, set up for subsequent handle_dma_mem_read
+		if (event->dtype == 0x1) { 
+			//cmd->dma_op->addr = cmd->dma0_rd_EAs[cmd->dma_op->itag];
+			event->state = DMA_OP_REQ;
+			event->type = CMD_DMA_RD;
+			printf("next stop is to request data from client \n");
+			}
+		// If DMA write, have to pull data in and set up for subsequent handle dma_mem_write
+		if (event->dtype == 0x2)  {
+			//cmd->dma_op->addr = cmd->dma0_wr_EAs[cmd->dma_op->itag];
+			printf("trying to copy from event to event buffer for write dma data \n");
+			event->state = DMA_OP_REQ;
+			event->type = CMD_DMA_WR;
+			memcpy(event->data, cmd->afu_event->dma0_req_data,
+		       		sizeof(event->dsize));
+
+			}
+		debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
+		  event->itag, event->utag, event->addr, event->dtype, event->dsize);
+		} else {
+		error_msg("%s: DMA REQUEST RECEIVED WITH UNKNOWN/INVALID ITAG = 0x%3x", cmd->afu_name, this_itag); }
 	cmd->afu_event->dma0_dvalid = 0;
 	}
-
+//printf("cmd->afu_event->dma0_dvalid is 0x%2x \n", cmd->afu_event->dma0_dvalid);
    	return;
 }
 #endif /* ifdef PSL9 */
@@ -1203,6 +1429,43 @@ void handle_response(struct cmd *cmd)
 			event = *head;
 			goto drive_resp;
 		}
+
+#ifdef PSL9
+		// if dma write and we've sent utag sent status, we can remove this event
+		if (((*head)->type == CMD_DMA_WR) && ((*head)->type == DMA_SENT_ACK)) {
+		printf("in handle_response and finally freeing original xlat/dma write event \n");
+			event = *head;
+			*head = event->_next;
+			free(event->data);
+			free(event->parity);
+			free(event);
+			return;
+		} else if (((*head)->type == CMD_DMA_RD) && ((*head)->type == DMA_CPL_SENT)) {
+	 	// if dma read and we've send completion data, we can remove this event		
+		printf("in handle_response and finally freeing original xlat/dma read event \n");
+			event = *head;
+			*head = event->_next;
+			free(event->data);
+			free(event->parity);
+			free(event);
+			return;
+		}
+
+
+		if (((*head)->type == CMD_XLAT_RD) ||
+	   		((*head)->type == CMD_XLAT_WR )) {
+				if ((*head)->state == DMA_ITAG_RET) {
+					event = *head;
+					printf("returning response from handle_resp on DMA WR or RD \n");
+					goto drive_resp;
+				} else {
+					printf("state is 0x%3x tyoe is 0x%3x \n", (*head)->state, (*head)->type);
+					return;
+					}
+		}
+
+#endif /* ifdef PSL9 */
+
 		if (((*head)->state == MEM_DONE) && !allow_reorder(cmd->parms)) {
 			break;
 		}
@@ -1226,7 +1489,6 @@ void handle_response(struct cmd *cmd)
 		client->flushing = FLUSH_FLUSHING;
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
-
  drive_resp:
 	// Check for pending buffer activity
 	while (event == cmd->buffer_read) {
@@ -1249,11 +1511,24 @@ void handle_response(struct cmd *cmd)
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if ((client != NULL) && (event->command == PSL_COMMAND_RESTART))
 			client->flushing = FLUSH_NONE;
+//		*head = event->_next;
+// if this was an xlat cmd, don't want to free the event so add code to check - HMP
+#ifdef PSL9
+	if ((event->type == CMD_XLAT_RD) ||
+	   (event->type == CMD_XLAT_WR )) {
+		event->state = DMA_PENDING;
+		printf("DMA_PENDING set for event \n");
+		cmd->credits++; 
+	 } else {
+#endif /* ifdef PSL9 */
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);
 		free(event);
 		cmd->credits++;
+#ifdef PSL9
+		}
+#endif /* ifdef PSL9 */
 	}
 }
 
