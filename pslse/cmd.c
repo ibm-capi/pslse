@@ -777,8 +777,8 @@ void handle_dma0_write(struct cmd *cmd)
 //printf("event->type is 0x%1x \n", event->type);
 		event = event->_next;
 	}
-printf("handle_dma0_write is dummy routine, always returns \n");
-return;
+//printf("handle_dma0_write is dummy routine, always returns \n");
+//return;
 
 	// Test for client disconnect or nothing to do....
 	if ((event == NULL) || (_get_client(cmd, event) == NULL))
@@ -832,7 +832,8 @@ void handle_dma0_read(struct cmd *cmd)
 	// write with valid data and
 	// prepare for response.
 	if (event->state == DMA_MEM_RESP) {
-		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dtype,
+		event->cpl_type = 0; //always 0 for read up to 128bytes
+		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 				     event->dsize, event->data) == PSL_SUCCESS) {
 			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
 				  event->utag);
