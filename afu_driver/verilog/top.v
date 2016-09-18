@@ -34,7 +34,7 @@ module top (
 	     input           ah_jcack_top, 
              input  [0:63]   ah_jerror_top, 
              input  [0:3]    ah_brlat_top,  
-             input           ah_jyield,
+//             input           ah_jyield,
 	     input           ah_tbreq_top, 
              input           ah_paren_top, 
              inout           ha_mmval_top,
@@ -195,7 +195,7 @@ module top (
   reg             ah_jdone_top;
   reg             ah_jcack_top;
   reg    [0:63]   ah_jerror_top;
-  reg             ah_jyield_top;
+//  reg             ah_jyield_top;
   reg             ah_tbreq_top;
   reg             ah_paren_top;
   reg             d0h_dvalid_top;
@@ -284,7 +284,7 @@ module top (
   reg    [0:5]    bw_wr_ptr;
   reg    [0:5]    bw_rd_ptr;
   reg    [0:5]    bw_rd_ptr_l;
-//   reg             bwhalf;
+  reg             bwhalf;
   reg    [0:1023] bwdata;
   reg    [0:15]   bwpar;
   reg    [0:1]    bw_active    [0:255];
@@ -292,14 +292,14 @@ module top (
   reg    [0:5]    br_rd_ptr;
   reg    [0:16]   brvalid_delay;
   reg    [0:7]    bwtag_array  [0:63];
-  reg    [0:63]   bwtagpar_array;
+  reg             bwtagpar_array[0:63];
   reg    [0:1023] bwdata_array [0:63];
   reg    [0:15]   bwpar_array  [0:63];
   reg    [0:7]    brtag_array  [0:63];
-  reg    [0:63]   brtagpar_array;
+  reg             brtagpar_array[0:63];
   reg    [0:7]    brtag_delay  [0:16];
-//  reg             brhalf;
-//  reg    [0:511]  brdata_delay;
+  reg             brhalf;
+//  reg    [0:1023]  brdata_delay;
   reg    [0:7]    brpar_delay;
   reg             hd0_cpl_valid;
   reg    [0:9]    hd0_cpl_utag;
@@ -360,7 +360,7 @@ module top (
   wire            ah_jdone;
   wire            ah_jcack;
   wire   [0:63]   ah_jerror;
-  wire            ah_jyield;
+//  wire            ah_jyield;
   wire            ah_tbreq;
   wire            ah_paren;
   wire            rvalid_ul;
@@ -416,7 +416,7 @@ module top (
     ha_response_top <= 0;
     ha_response_ext_top <= 0;
     ha_rpagesize_top <= 0;
-    ha_rcredits_top <= 0;
+    ha_rcredits_top <= 9'h01;
     ha_reoa <= 0;
     ha_mmval_top <= 0;
     ha_mmcfg_top <= 0;
@@ -452,6 +452,14 @@ module top (
     hd1_cpl_laddr_top <= 0;
     hd1_cpl_byte_count_top <= 0;
     hd1_cpl_data_top <= 0;
+    for(i=0; i<64; i++) begin
+      bwtag_array[i] <= 0;
+      bwtagpar_array[i] <= 0;
+      bwdata_array[i] <= 0;
+      bwpar_array[i] <= 0;
+      brtag_array[i] <= 0;
+      brtagpar_array[i] <= 0;
+    end
 //  hd0_cpl_dpar	<= 0;
     // $afu_init;
      psl_bfm_init();
@@ -536,7 +544,7 @@ module top (
 	     ah_jcack_top, 
              ah_jerror_top, 
              ah_brlat_top,  
-             ah_jyield,
+//             ah_jyield,
 	     ah_tbreq_top, 
              ah_paren_top, 
              ha_mmval_top,
@@ -651,7 +659,7 @@ module top (
     ah_jerror_top <= ah_jerror;
     ah_jdone_top <= ah_jdone;
     ah_brlat_top <= ah_brlat;
-    ah_jyield_top <= ah_jyield;
+//    ah_jyield_top <= ah_jyield;
     ah_tbreq_top <= ah_tbreq;
     ah_paren_top <= ah_paren;
     ah_cvalid_top <= ah_cvalid;
@@ -683,8 +691,8 @@ module top (
     for (i = 0; i < 256; i = i + 1) begin
       if (ha_bwvalid_top & (i==ha_bwtag_top))
         bw_active[i] <= bw_active[i] + 1;
-//       else if (bwhalf & (i==ha_bwtag_l))
-//         bw_active[i] <= bw_active[i] - 1;
+       else if (bwhalf & (i==ha_bwtag_l))
+         bw_active[i] <= bw_active[i] - 1;
       else if (bw_wr_ptr == bw_rd_ptr)
         bw_active[i] <= 1'b0;
       else
@@ -700,9 +708,9 @@ module top (
   end
 
   always @ (posedge ha_pclock) begin
-//     if (ha_bwvalid_l & !bwhalf)
-//       bw_rd_ptr <= bw_rd_ptr+6'h01;
-//     else
+     if (ha_bwvalid_l & !bwhalf)
+       bw_rd_ptr <= bw_rd_ptr+6'h01;
+     else
       bw_rd_ptr <= bw_rd_ptr;
   end
 
@@ -766,7 +774,7 @@ module top (
 
   always @ (posedge ha_pclock)
     ha_bwvalid <= ha_bwvalid_l;
-/*
+
   always @ (posedge ha_pclock) begin
     if (ha_bwvalid_l & !bwhalf)
       bwhalf <= 1;
@@ -776,19 +784,19 @@ module top (
 
   always @ (posedge ha_pclock)
     ha_bwad <= {5'b0, bwhalf};
-*/
+
   always @ (posedge ha_pclock) begin
-/*    if (!bwhalf)
-      ha_bwdata <= bwdata[0:511];
+    if (!bwhalf)
+      ha_bwdata <= bwdata[0:1023];
     else
-*/      ha_bwdata <= bwdata;
+      ha_bwdata <= bwdata[0:1023];
   end
 
   always @ (posedge ha_pclock) begin
-/*    if (bwhalf)
-      ha_bwpar <= bwpar[0:7];
+    if (bwhalf)
+      ha_bwpar <= bwpar[0:15];
     else
-*/     ha_bwpar <= bwpar;
+     ha_bwpar <= bwpar[0:15];
   end
 
   // Buffer read
@@ -801,20 +809,20 @@ module top (
   end
 
   always @ (posedge ha_pclock) begin
-//    if (ha_brvalid & !brhalf)
-//      br_rd_ptr <= br_rd_ptr+6'h01;
-//    else
+    if (ha_brvalid & !brhalf)
+      br_rd_ptr <= br_rd_ptr+6'h01;
+    else
       br_rd_ptr <= br_rd_ptr;
   end
 
   always @ (posedge ha_pclock) begin
     for (i = 0; i <= 16; i = i + 1) begin
       if (i == ah_brlat+1) begin
-        brvalid_delay[i] <= ha_brvalid /* & !brhalf*/;
+        brvalid_delay[i] <= ha_brvalid  & !brhalf;
         brtag_delay[i] <= ha_brtag;
-//      end else if (i == 16) begin
-//        brvalid_delay[16] <= 1'b0;
-//        brtag_delay[16] <= 8'h00;
+      end else if (i == 16) begin
+        brvalid_delay[16] <= 1'b0;
+        brtag_delay[16] <= 8'h00;
       end else begin
         brvalid_delay[i] <= brvalid_delay[i+1];
         brtag_delay[i] <= brtag_delay[i+1];
@@ -850,29 +858,27 @@ module top (
     else
       ha_brvalid <= 1'b1;
   end
-/*
+
   always @ (posedge ha_pclock) begin
     if (ha_brvalid & !brhalf)
       brhalf <= 1'b1;
     else
       brhalf <= 1'b0;
   end
-*/
-//  assign ha_brad = {5'b0, brhalf};
-  assign ha_brad = {6'b0};
-/*
+
+  assign ha_brad = {5'b0, brhalf};
+ 
   always @ (posedge ha_pclock) begin
-    brdata_delay <= ah_brdata;
+//    brdata_delay <= ah_brdata;
   end
 
   always @ (posedge ha_pclock) begin
     brpar_delay <= ah_brpar;
   end
-*/
+
 //  assign ah_brdata_top = {brdata_delay, ah_brdata};
-  assign ah_brdata_top =  ah_brdata;
-//  assign ah_brpar_top = {brpar_delay, ah_brpar};
-  assign ah_brpar_top =  ah_brpar;
+  assign ah_brdata_top = ah_brdata;
+  assign ah_brpar_top = {brpar_delay, ah_brpar};
   assign ah_brvalid_top = brvalid_delay[0];
   assign ah_brtag_top = brtag_delay[0];
 
@@ -957,9 +963,12 @@ module top (
     ha_response <= response_ll;
     ha_response_ext <= response_ext_ll;
     ha_rpagesize <= rpagesize_ll;
-    ha_rcachestate <= rcachestate_ll;
-    ha_rcachepos <= rcachepos_ll;
-    ha_rcredits <= rcredits_ll;
+//    ha_rcachestate <= rcachestate_ll;
+    ha_rcachestate <= 0;			// Since this is a reserved signal, driving it to '0' as of now	:TODO: UMA will update, if there is a definition
+//    ha_rcachepos <= rcachepos_ll;
+    ha_rcachepos <= 0;			// Since this is a reserved signal, driving it to '0' as of now	:TODO: UMA will update, if there is a definition
+//    ha_rcredits <= rcredits_ll;
+    ha_rcredits <= 9'h1;		// Defined as reserved, but requires a static value of 9'b000000001 to indicate 1 credit is always
   end
 
   // AFU instance
