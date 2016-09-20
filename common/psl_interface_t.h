@@ -52,6 +52,8 @@
 #ifdef PSL9
 #define PSL_DMA_A_SUPPORT 1
 #define PSL_DMA_B_SUPPORT 0
+#define MAX_DMA0_RD_CREDITS 8
+#define MAX_DMA0_WR_CREDITS 8
 #endif /* ifdef PSL9 config for DMA ports */
 
 /* Return codes for interface functions */

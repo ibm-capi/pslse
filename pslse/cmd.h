@@ -46,6 +46,10 @@ enum cmd_type {
 	CMD_XLAT_WR,
 	CMD_DMA_RD,
 	CMD_DMA_WR,
+	CMD_ITAG_ABRT_RD,
+	CMD_ITAG_ABRT_WR,
+	CMD_XLAT_RD_TOUCH,
+	CMD_XLAT_WR_TOUCH,
 #endif /* ifdef PSL9 define new cmd type */
 	CMD_OTHER
 };
@@ -155,8 +159,6 @@ struct cmd {
 //	struct dma_event *dma_op;
 	uint16_t dma0_rd_credits;
 	uint16_t dma0_wr_credits;
-	uint64_t dma0_rd_EAs[4];
-	uint64_t dma0_wr_EAs[4];
 #endif
 	volatile enum pslse_state *psl_state;
 	char *afu_name;

@@ -432,7 +432,13 @@ static void _handle_afu(struct psl *psl)
 	if (psl->cmd != NULL) {
 		if (reset_done)
 			psl->cmd->credits = psl->cmd->parms->credits;
-//printf("before handle response \n");
+#if defined PSL9lite || defined PSL9
+//try moving this first???
+		handle_caia2_cmds(psl->cmd);
+		handle_dma0_write(psl->cmd);
+		handle_dma0_read(psl->cmd);
+#endif /* ifdef PSL9 */
+
 		handle_response(psl->cmd);
 		handle_buffer_write(psl->cmd);
 		handle_buffer_read(psl->cmd);
@@ -442,11 +448,11 @@ static void _handle_afu(struct psl *psl)
 		handle_cmd(psl->cmd, psl->parity_enabled, psl->latency);
 		handle_interrupt(psl->cmd);
 //#ifdef PSL9
-#if defined PSL9lite || defined PSL9
-		handle_caia2_cmds(psl->cmd);
-		handle_dma0_write(psl->cmd);
-		handle_dma0_read(psl->cmd);
-#endif /* ifdef PSL9 */
+//#if defined PSL9lite || defined PSL9
+//		handle_caia2_cmds(psl->cmd);
+//		handle_dma0_write(psl->cmd);
+//		handle_dma0_read(psl->cmd);
+//#endif /* ifdef PSL9 */
 
 	}
 }

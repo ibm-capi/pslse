@@ -764,6 +764,7 @@ static void *_psl_loop(void *ptr)
 			}
 			break;
 		default:
+			DPRINTF("UNKNOWN CMD IS 0x2x \n", buffer[0]);
 			break;
 		}
 	}

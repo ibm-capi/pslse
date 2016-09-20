@@ -619,6 +619,7 @@ psl_get_command(struct AFU_EVENT *event,
 	} else {
 		event->command_valid = 0;
 		*command = event->command_code;
+printf("code is 0x%3x \n", event->command_code);
 		*command_parity = event->command_code_parity;
 		*address = event->command_address;
 		*address_parity = event->command_address_parity;
@@ -645,7 +646,6 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	event->tbuf[0] = 0x40;
 #ifdef PSL9
 		if (event->dma0_completion_valid != 0) {
-printf("i should not be here if there is no dma completion!!! \n");
 		event->tbuf[0] = event->tbuf[0] | 0x80;
 		printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
 		// need to have size as second/third byte for RX side to easily access for rbc
@@ -834,6 +834,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		if (event->dma0_req_type == 2)  {
 			for (i = 0; i < event->dma0_req_size; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
+				printf("data is 0x%2x, i is %d bp is %d \n", event->dma0_req_data[i], i, bp);
 			}
 		}
 printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
@@ -863,6 +864,7 @@ printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%0
 			event->tbuf[bp++] =
 			    ((event->mmio_rdata) >> ((7 - i) * 8)) & 0xFF;
 		}
+printf("PSL_SIGNAL_PSL_MODEL: event->mmio_ack =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
 		event->tbuf[bp++] = event->mmio_rdata_parity;
 		event->mmio_ack = 0;
 	}
@@ -897,6 +899,7 @@ printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%0
 			event->tbuf[bp++] =
 			    ((event->command_handle) >> ((1 - i) * 8)) & 0xFF;
 		}
+printf("PSL_SIGNAL_PSL_MODEL: event->command_valid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
 		event->command_valid = 0;
 	}
 
@@ -983,12 +986,12 @@ printf("PSL_GET_AFU_EVENT-2 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[
 				}
 printf("psl_get_afu_event and we have a dma op \n");
 				event->rbp += bc;
-				if ((event->rbuf[rbc] & 0x07) == 0x02)
+				if ((event->rbuf[1] & 0x07) == 0x02)
 					rbc += 128;
 				//rbc += rbc;  //have to increment the rbc bc we just read byte 1
+printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			}
 #endif
-//printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 	}
 	if ((bc =
 	     recv(event->sockfd, event->rbuf + event->rbp, rbc - event->rbp,
@@ -1033,6 +1036,7 @@ printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		if (event->dma0_req_type == 2)  { //right now, only write op supported is 128b
 		for (bc = 0; bc < event->dma0_req_size; bc++) {
 			event->dma0_req_data[bc] = event->rbuf[rbc++];
+			printf("data is 0x%2x, bc is %d, rbc is %d \n", event->rbuf[rbc-1], bc, rbc);
 			}
 		}
 	} else {
@@ -1069,6 +1073,7 @@ printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 			    ((event->mmio_rdata) << 8) | event->rbuf[rbc++];
 		}
 		event->mmio_rdata_parity = event->rbuf[rbc++];
+printf(" rbc is %d \n",rbc);
 	} else {
 		event->mmio_ack = 0;
 	}
@@ -1109,6 +1114,7 @@ printf("i see a cmd, rbuf[0] is 0x%2x \n", event->rbuf[0]);
 			event->command_handle =
 			    ((event->command_handle) << 8) | event->rbuf[rbc++];
 		}
+printf(" rbc is %2d \n",rbc);
 	} else {
 		event->command_valid = 0;
 	}
