@@ -460,6 +460,18 @@ module top (
       brtag_array[i] <= 0;
       brtagpar_array[i] <= 0;
     end
+    for(i=0; i<64; i++) begin
+      rtag_array[i] <= 0;
+      rtagpar_array[i] <= 0;
+      rditag_array[i] <= 0;
+      rditagpar_array[i] <= 0;
+      response_array[i] <= 0;
+      response_ext_array[i] <= 0;
+      rpagesize_array[i] <= 0;
+      rcachestate_array[i] <= 0;
+      rcachepos_array[i] <= 0;
+      rcredits_array[i] <= 0;
+    end
 //  hd0_cpl_dpar	<= 0;
     // $afu_init;
      psl_bfm_init();
@@ -878,7 +890,8 @@ module top (
 
 //  assign ah_brdata_top = {brdata_delay, ah_brdata};
   assign ah_brdata_top = ah_brdata;
-  assign ah_brpar_top = {brpar_delay, ah_brpar};
+//  assign ah_brpar_top = {brpar_delay, ah_brpar};
+  assign ah_brpar_top =  ah_brpar;
   assign ah_brvalid_top = brvalid_delay[0];
   assign ah_brtag_top = brtag_delay[0];
 
