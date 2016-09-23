@@ -27,9 +27,9 @@
 #include <unistd.h>
 
 // Choose ONE to define what PSL support level will be
-//#define PSL8 1
+#define PSL8 1
 //#define PSL9lite 1
-#define PSL9 1
+//#define PSL9 1
 
 #define PSL_BUFFER_SIZE 200
 #ifdef PSL8
@@ -179,12 +179,11 @@
 #endif /* ifdef PSL9 add new commands for CAIA2 */
 
 
-#ifdef PSL9  /* new DMA transaction type, sent status & completion status codes */
-#define DMA_DTYPE_RD_REQ	0x1
-#define DMA_DTYPE_WR_REQ_128	0x2
-#define DMA_DTYPE_WR_REQ_MORE	0x3
-#define DMA_DTYPE_ATOMIC	0x4
-#define DMA_DTYPE_BARRIER	0x5
+#ifdef PSL9  /* new DMA transaction type, sent status & completion status codes UPDATED to 9/14/16 spec  */
+#define DMA_DTYPE_RD_REQ	0x0
+#define DMA_DTYPE_WR_REQ_128	0x1
+#define DMA_DTYPE_WR_REQ_MORE	0x2
+#define DMA_DTYPE_ATOMIC	0x3
 
 #define DMA_SENT_UTAG_STS_RD	0x0
 #define DMA_SENT_UTAG_STS_WR	0x1
@@ -192,9 +191,10 @@
 #define DMA_SENT_UTAG_STS_FLUSH	0x3
 
 #define DMA_CPL_TYPE_RD_128	0x0
-#define DMA_CPL_TYPE_TBD	0x1
+#define DMA_CPL_TYPE_RD_PLUS	0x1
 #define DMA_CPL_TYPE_ERR	0x2
-#define DMA_CPL_TYPE_RD_MORE	0x3
+#define DMA_CPL_TYPE_POISON_B	0x3
+#define DMA_CPL_TYPE_ATOMIC_RSP	0x4
 #endif /* new DMA type & status defs */
 
 
@@ -279,13 +279,14 @@ struct AFU_EVENT {
 #if defined  PSL9 || defined PSL9lite  /* new cmd int signals for CAIA2 */
   uint32_t command_cpagesize;	      /*  Page size hint used by PSL for predicting page size during ERAT lookup & paged xlation ordering..codes documented in PSL workbook tbl 1-1 */
 #endif /* new cmd int signals  */
-#ifdef PSL9 /* new dma0 interface signals for CAIA2 */
+#ifdef PSL9 /* new dma0 interface signals for CAIA2 UPDATED for 9/14/16 spec */
   uint32_t dma0_dvalid;     	      /* DMA request from AFU is valid */
   uint32_t dma0_req_utag;	      /* DMA transaction request user transaction tag */
   uint32_t dma0_req_itag;     	      /* DMA transaction request user translation identifier */
   uint32_t dma0_req_type;	      /* DMA transaction request transaction type.  */
   uint32_t dma0_req_size;	      /* DMA transaction request transaction size in bytes */
-  unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
+  uint32_t atomic_op;		      /* Transaction request attribute - Atomic opcode */
+  //unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
   uint32_t dma0_sent_utag_valid;      /* DMA request sent by PSL */
   uint32_t dma0_sent_utag;    	      /* DMA sent request indicates the UTAG of the request sent by PSL */
   uint32_t dma0_sent_utag_status;     /* DMA sent request indicates the status of the command that was sent by PSL. */
@@ -293,6 +294,10 @@ struct AFU_EVENT {
   uint32_t dma0_completion_utag;      /* DMA completion indicates the UTAG associated with the received completion data */
   uint32_t dma0_completion_type;      /* DMA completion indicates the type of response received with the current completion */
   uint32_t dma0_completion_size;      /* DMA completion indicates size of completion received */
+  uint32_t dma0_completion_laddr;     /* DMA completion Atomic attribute - lower addr bits of rx cmpl */
+  uint32_t dma0_completion_byte_count; /* DMA completion remaining amount of bytes required to complete originating read request
+						including bytes being transferred in the current transaction   */
+  unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
   unsigned char dma0_completion_data[128];  /* DMA completion data alignment is First Byte first */
 #endif /* ifdef PSL9 */
 

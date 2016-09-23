@@ -233,7 +233,18 @@ int psl_afu_dma0_req(struct AFU_EVENT *event,
 		uint32_t itag,
 		uint32_t type,
 		uint32_t size,
-		unsigned char dma0_req_data[128] );
+		unsigned char dma_wr_data[128] );
+
+int
+afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
+		 uint32_t utag,
+		 uint32_t cpl_type,
+		 uint32_t dsize, uint8_t * read_data);
+
+int
+afu_get_dma0_sent_utag(struct AFU_EVENT *event,
+		 uint32_t utag,
+		 uint32_t sent_sts);
 
 
 #endif /* ifdef PSL9 */

@@ -1139,17 +1139,10 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 	
 	if (event->type == CMD_READ) {
 		// Client is returning data from memory read
-#ifdef PSL9
-		if (get_bytes_silent(fd, event->dsize, data, cmd->parms->timeout,
-			     event->abort) < 0) {
-	        	debug_msg("%s:_handle_mem_read failed utag=0x%02x size=%d addr=0x%016"PRIx64,
-				  cmd->afu_name, event->utag, event->dsize, event->addr);
-#else
 		if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
 			     event->abort) < 0) {
 	        	debug_msg("%s:_handle_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
 				  cmd->afu_name, event->tag, event->size, event->addr);
-#endif /* ifdef PSL9 */
 			event->resp = PSL_RESPONSE_DERROR;
 			event->state = MEM_DONE;
 			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
@@ -1315,6 +1308,10 @@ void handle_caia2_cmds(struct cmd *cmd)
 	struct cmd_event *event;
 	struct client *client;
 	uint32_t this_itag;
+	uint8_t data[MAX_LINE_CHARS];
+	//uint64_t offset = event->addr & ~CACHELINE_MASK;
+	uint64_t offset;	
+
 
 	// Make sure cmd structure is valid
 	if (cmd == NULL)
@@ -1365,8 +1362,7 @@ printf("HANDLE_CAIA2_CMDS start to process...\n");
 			printf("in handle_caia2 for xlat_rd, address is 0x%016"PRIX64 "\n", event->addr);
                          cmd->dma0_rd_credits--;
 			cmd->afu_event->response_dma0_itag = event->itag;
-			// TODO implement parity on itag response
-			cmd->afu_event->response_dma0_itag_parity = 0x0;
+			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
 			info_msg("dma0_itag for read is 0x%x", event->itag);
 			event->state = DMA_ITAG_RET;
  			}
@@ -1381,8 +1377,7 @@ printf("HANDLE_CAIA2_CMDS start to process...\n");
                         cmd->dma0_wr_credits--;
 			printf("in handle_caia2 for xlat_wr, address is 0x%016"PRIX64 "\n", event->addr);
 			cmd->afu_event->response_dma0_itag = event->itag;
-			// TODO implement parity on itag response
-			cmd->afu_event->response_dma0_itag_parity = 0x1;
+			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
 			info_msg("dma0_itag for write is 0x%x", event->itag);
 			event->state = DMA_ITAG_RET;
  			}
@@ -1414,7 +1409,7 @@ printf("HANDLE_CAIA2_CMDS start to process...\n");
 				cmd->dma0_rd_credits++;
 				//not sure we need to send back a null itag?
 				//cmd->afu_event->response_dma0_itag = 0x0;
-				//cmd->afu_event->response_dma0_itag_parity = 0x0;
+				//cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
 				(*head)->state = MEM_DONE;
 				event->resp = PSL_RESPONSE_DONE;  
 				event->state = MEM_DONE;
@@ -1447,7 +1442,7 @@ printf("HANDLE_CAIA2_CMDS start to process...\n");
 				cmd->dma0_wr_credits++;
 				//not sure we need to send back a null itag?
 				//cmd->afu_event->response_dma0_itag = 0x0;
-				//cmd->afu_event->response_dma0_itag_parity = 0x0;
+				//cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
 				(*head)->state = MEM_DONE;
 		   		event->resp = PSL_RESPONSE_DONE;
 				event->state = MEM_DONE;
@@ -1499,20 +1494,20 @@ printf("HANDLE_CAIA2_CMDS start to process...\n");
 		event->dtype = cmd->afu_event->dma0_req_type;
 		event->dsize = cmd->afu_event->dma0_req_size;
 		// If DMA read, set up for subsequent handle_dma_mem_read
-		if (event->dtype == 0x1) { 
+		if (event->dtype == DMA_DTYPE_RD_REQ) { 
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_RD;
 			printf("next stop is to request data from client \n");
 			}
 		// If DMA write, have to pull data in and set up for subsequent handle dma_mem_write
-		if (event->dtype == 0x2)  {
+		if (event->dtype == DMA_DTYPE_WR_REQ_128)  {
 			printf("trying to copy from event to event buffer for write dma data \n");
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_WR;
-			memcpy(event->data, cmd->afu_event->dma0_req_data,
-		       		sizeof(event->dsize));
-
-			}
+		  	memcpy((void *)&(data), (void *) &(cmd->afu_event->dma0_req_data), event->dsize);
+	 		offset = event->addr & ~CACHELINE_MASK;
+		  	memcpy((void *)&(event->data[offset]), (void *)&data, event->dsize);
+		}
 		debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
 		  event->itag, event->utag, event->addr, event->dtype, event->dsize);
 		} else {
