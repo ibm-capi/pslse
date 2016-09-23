@@ -822,8 +822,8 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  {
 			for (i = 0; i < event->dma0_req_size; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
-				printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
-				printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
+				//printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
+				//printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
 			}
 		}
 printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
@@ -1228,7 +1228,7 @@ printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		printf("event->rbuf[rbc] is 0x%3x and rbc is 0x%2x \n", event->rbuf[rbc], rbc);
 		printf("dma0_sent_utag is 0x%3x \n", event->dma0_sent_utag);
 	}else {
-		event->dma0_completion_valid = 0;
+		event->dma0_sent_utag_status = 0;
 	}
 #endif 
 
@@ -1466,7 +1466,7 @@ afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 // if AFU has already checked/reset event->dma0_completion_valid, this has to change
 	if (!event->dma0_completion_valid) {
 		return PSL_BUFFER_READ_DATA_NOT_VALID;
-	} else {
+	} else { 
 		event->dma0_completion_valid = 0;
 		utag = event->dma0_completion_utag;
 		cpl_type = event->dma0_completion_type;
