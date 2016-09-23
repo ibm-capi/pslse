@@ -424,7 +424,12 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  printf("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
 	  cl_br = CLOCK_EDGE_DELAY;
 	  event.buffer_read = 0;
-        }	
+        }
+        else if(!cl_br)
+	{	// TODO: check whether this is really causing any issues
+	  setDpiSignal32(ha_brtag_top, 0, 8);
+	  *ha_brtagpar_top = 0;
+        }
 	// Buffer write
 	if (event.buffer_write)
 	{
@@ -445,6 +450,11 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  cl_bw = CLOCK_EDGE_DELAY;
 	  event.buffer_write = 0;
 	}
+        else if(!cl_bw)
+	{	// TODO: check whether this is really causing any issues
+	  setMyCacheLine(ha_bwdata_top, c_ah_brdata);
+	  setDpiSignal32(ha_bwpar_top, 0, 16);
+        }
 	if (bw_delay > 0)
 		--bw_delay;
 	// ------Driving some blank value as of now
@@ -469,6 +479,15 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  resp_list = resp_list->__next;
 	  free(tmp);
 	  cl_rval = CLOCK_EDGE_DELAY;
+        }
+	if (resp_list && !(bw_delay % 2))
+        {
+	  setDpiSignal32(ha_rditag_top, 0x000, 9);
+	  *ha_rditagpar_top = 0;
+	  setDpiSignal32(ha_rtag_top, 0, 8);
+	  *ha_rtagpar_top = 0;
+	  setDpiSignal32(ha_response_top, 0, 8);
+	  setDpiSignal32(ha_rpagesize_top, 0, 4);
         }
 	// Response
 	if (event.response_valid)
