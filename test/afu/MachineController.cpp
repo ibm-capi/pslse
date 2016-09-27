@@ -44,10 +44,14 @@ bool MachineController::send_command (AFU_EVENT * afu_event, uint32_t cycle)
                         (uint16_t) (cycle & 0x7FFF)))
         {
             debug_msg
-            ("MachineController::send_command: machine id %d sent new command",
-             i);
+            ("MachineController::send_command: machine id %d sent new command", i);
             try_send = false;
             tag_to_machine[tag] = machines[i];
+	    debug_msg("=xxxx=>MachineController::send_command tag = %d machine = 0x%x", tag, machines[i]);
+#ifdef	PSL9
+	    afu_event->dma0_req_utag = tag;
+	    debug_msg ("MachineController::send_command: dma0_req_utag = %d", tag);
+#endif
         }
 
         // regardless if a command is sent, notify machine to advanced one cycle in delaying phase
@@ -77,6 +81,12 @@ MachineController::process_response (AFU_EVENT * afu_event, uint32_t cycle)
 
     debug_msg ("MachineController: response_code %d",
                afu_event->response_code);
+
+    #ifdef	PSL9
+    afu_event->dma0_req_itag = afu_event->response_dma0_itag;
+    debug_msg ("MachineController::process response: dma0_req_itag = 0x%x", afu_event->dma0_req_itag);
+    #endif
+
     if (afu_event->response_code == PSL_RESPONSE_AERROR
             || afu_event->response_code == PSL_RESPONSE_DERROR
             || afu_event->response_code == PSL_RESPONSE_PAGED) {
@@ -95,14 +105,17 @@ MachineController::process_response (AFU_EVENT * afu_event, uint32_t cycle)
         error_msg
         ("MachineController: received FLUSHED response when AFU is not in flushed state");
     }
-
+    debug_msg("MachineController::process_response call machine->process_response");
     tag_to_machine[afu_event->response_tag]->process_response (afu_event,
             flushed_state,
             (uint16_t)
             (cycle &
              0x7FFF));
+#ifdef	PSL8
     TagManager::release_tag (afu_event->response_tag, afu_event->credits);
     tag_to_machine.erase (afu_event->response_tag);
+#endif
+//    debug_msg("MachineController::process_response: tag_to_machine erase tag = %d", afu_event->response_tag);
 }
 
 void
@@ -224,6 +237,10 @@ MachineController::disable_all_machines ()
 
 bool MachineController::has_tag (uint32_t tag) const
 {
+    for (std::map<uint32_t, Machine *>::const_iterator it=tag_to_machine.begin(); it !=tag_to_machine.end(); ++it) {
+	debug_msg ("=xxx=>MachineController::has_tag: tag = %d Machine = 0x%x", it->first, it->second);
+    }
+    debug_msg("=xxx=>MachineController::has_tag: tag_to_machine size = %d", tag_to_machine.size());
     if (tag_to_machine.find (tag) != tag_to_machine.end ())
         return true;
 
@@ -238,3 +255,27 @@ MachineController ()
             delete machines[i];
 
 }
+
+#ifdef	PSL9
+void
+MachineController::process_dma_read (AFU_EVENT * afu_event)
+{
+    debug_msg ("MachineController::process_dma_read: call machine->process_dma_read");
+    if (tag_to_machine.find (afu_event->dma0_req_utag) == tag_to_machine.end())
+	error_msg("MachineController::process_dma_read: dma0_req_utag not found");
+
+    tag_to_machine[afu_event->dma0_req_utag]->process_dma_read(afu_event);
+}
+
+
+void
+MachineController::process_dma_write (AFU_EVENT * afu_event)
+{
+    debug_msg ("MachineController::process_dma_write: call machine->process_dma_write");
+    if(tag_to_machine.find(afu_event->dma0_req_utag) == tag_to_machine.end())
+	error_msg("MachineController::process_dma_write: dma0_req_utag not found");
+
+    tag_to_machine[afu_event->dma0_req_utag]->process_dma_write(afu_event);
+}
+#endif
+

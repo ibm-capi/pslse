@@ -65,22 +65,38 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_READ_CL_NA:
     case PSL_COMMAND_READ_PNA:
     case PSL_COMMAND_READ_PE:
-        command =
-            new LoadCommand (command_code, command_address_parity,
-                             command_code_parity, command_tag_parity,
-                             buffer_read_parity);
+	command = 
+	    new LoadCommand (command_code, command_address_parity,
+			     command_code_parity, command_tag_parity,
+			     buffer_read_parity);
+	break;
+    #ifdef	PSL9
+    case PSL_COMMAND_XLAT_RD_P0:
+    case PSL_COMMAND_XLAT_RD_P1:
+    	command = new DmaLoadCommand (command_code, command_address_parity,
+                                  command_code_parity, command_tag_parity,
+                                  buffer_read_parity);
         break;
+    #endif
     case PSL_COMMAND_WRITE_MI:
     case PSL_COMMAND_WRITE_MS:
     case PSL_COMMAND_WRITE_UNLOCK:
     case PSL_COMMAND_WRITE_C:
     case PSL_COMMAND_WRITE_INJ:
     case PSL_COMMAND_WRITE_NA:
-        command =
+	command =
             new StoreCommand (command_code, command_address_parity,
                               command_code_parity, command_tag_parity,
                               buffer_read_parity);
+	break;
+    #ifdef	PSL9
+    case PSL_COMMAND_XLAT_WR_P0:
+    case PSL_COMMAND_XLAT_WR_P1:
+    	command = new DmaStoreCommand (command_code, command_address_parity, 
+                                   command_code_parity, command_tag_parity,
+                                   buffer_read_parity);	
         break;
+    #endif
     case PSL_COMMAND_INTREQ:
     case PSL_COMMAND_RESTART:
     case PSL_COMMAND_FLUSH:
@@ -253,7 +269,8 @@ MachineController::Machine::process_response (AFU_EVENT * afu_event,
 {
     if (command->get_tag () != afu_event->response_tag)
         error_msg ("Machine: response_tag mismatches tag in machine");
-
+    
+    debug_msg("Machine::process_response: call command->process_command");
     command->process_command (afu_event, cache_line);
     record_response (error_state, cycle, (uint8_t) afu_event->response_code);
 
@@ -331,3 +348,27 @@ MachineController::Machine::~Machine ()
     if (command)
         delete command;
 }
+
+#ifdef	PSL9
+void
+MachineController::Machine::process_dma_read (AFU_EVENT * afu_event)
+{
+    debug_msg ("Machine::process_dma_read");
+    if (command->get_tag() != afu_event->dma0_req_utag)
+	error_msg("Machine: dma0_req_utag mismatch in machine");
+
+    command->process_command(afu_event, cache_line);
+}
+
+void
+MachineController::Machine::process_dma_write (AFU_EVENT * afu_event)
+{
+    debug_msg("Machine::process_dma_write");
+    if(command->get_tag() != afu_event->dma0_req_utag)
+	error_msg("Machine: dma0_req_utag mismatch in machine");
+
+    command->process_command(afu_event, cache_line);
+}
+
+#endif
+

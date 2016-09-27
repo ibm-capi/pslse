@@ -51,6 +51,11 @@ public:
      * AFU_EVENT to the corresponding machine and react accordingly*/
     void process_buffer_read (AFU_EVENT *);
 
+#ifdef	PSL9
+    void process_dma_read (AFU_EVENT *);
+    void process_dma_write (AFU_EVENT *);
+#endif
+
     /* call this function when AFU receives a normal MMIO write to modify
      * machines */
     void change_machine_config (uint32_t word_address, uint64_t data,

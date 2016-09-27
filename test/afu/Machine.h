@@ -125,6 +125,11 @@ public:
     /* resets the machine, clears the config space and cache line */
     void reset ();
 
+#ifdef	PSL9
+    void process_dma_read(AFU_EVENT *);
+    void process_dma_write(AFU_EVENT *);
+#endif
+
     ~Machine ();
 };
 

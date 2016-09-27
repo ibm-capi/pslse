@@ -110,4 +110,44 @@ public:
     bool is_restart () const;
 };
 
+#ifdef	PSL9
+
+class DmaLoadCommand:public Command
+{
+private:
+
+    void process_dma_write (AFU_EVENT * afu_event, uint8_t * cache_line);
+
+public:
+    DmaLoadCommand (uint16_t code, bool comm_addr_par, bool comm_code_par,
+                 bool comm_tag_par, bool buff_read_par);
+
+    void send_command (AFU_EVENT * afu_event, uint32_t new_tag,
+                       uint64_t address, uint16_t command_size, uint8_t abort,
+                       uint16_t context);
+
+    void process_command (AFU_EVENT * afu_event, uint8_t * cache_line);
+
+    bool is_restart () const;
+};
+
+class DmaStoreCommand:public Command
+{
+private:
+    void process_dma_read (AFU_EVENT * afu_event, uint8_t * cache_line);
+
+public:
+    DmaStoreCommand (uint16_t code, bool comm_addr_par, bool comm_code_par,
+                  bool comm_tag_par, bool buff_read_par);
+
+    void send_command (AFU_EVENT * afu_event, uint32_t new_tag,
+                       uint64_t address, uint16_t command_size, uint8_t abort,
+                       uint16_t context);
+
+    void process_command (AFU_EVENT * afu_event, uint8_t * cache_line);
+
+    bool is_restart () const;
+};
+#endif	// PSL9
+
 #endif
