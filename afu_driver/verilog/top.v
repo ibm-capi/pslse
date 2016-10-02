@@ -89,6 +89,7 @@ module top (
              input  [0:2]    d0h_dtype_top,
              input  [0:9]    d0h_dsize_top,
              input  [0:1023] d0h_ddata_top,
+             input  [0:5]    d0h_datomic_op_top,
 	     inout           hd0_sent_utag_valid_top, 
 	     inout  [0:9]    hd0_sent_utag_top, 
 	     inout  [0:2]    hd0_sent_utag_sts_top, 
@@ -105,6 +106,7 @@ module top (
              input  [0:2]    d1h_dtype_top,
              input  [0:9]    d1h_dsize_top,
              input  [0:1023] d1h_ddata_top,
+             input  [0:5]    d1h_datomic_op_top,
 	     inout           hd1_sent_utag_valid_top, 
 	     inout  [0:9]    hd1_sent_utag_top, 
 	     inout  [0:2]    hd1_sent_utag_sts_top, 
@@ -204,12 +206,14 @@ module top (
   reg    [0:2]    d0h_dtype_top;
   reg    [0:9]    d0h_dsize_top;
   reg    [0:1023] d0h_ddata_top;
+  reg    [0:5]    d0h_datomic_op_top;
   reg             d1h_dvalid_top;
   reg    [0:9]    d1h_req_utag_top;
   reg    [0:8]    d1h_req_itag_top;
   reg    [0:2]    d1h_dtype_top;
   reg    [0:9]    d1h_dsize_top;
   reg    [0:1023] d1h_ddata_top;
+  reg    [0:5]    d1h_datomic_op_top;
 
   // Registers
   reg             ah_jrunning_l;
@@ -371,12 +375,14 @@ module top (
   wire   [0:2]    d0h_dtype;
   wire   [0:9]    d0h_dsize;
   wire   [0:1023] d0h_ddata;
+  wire   [0:5]    d0h_datomic_op;
   wire            d1h_dvalid;
   wire   [0:9]    d1h_req_utag;
   wire   [0:8]    d1h_req_itag;
   wire   [0:2]    d1h_dtype;
   wire   [0:9]    d1h_dsize;
   wire   [0:1023] d1h_ddata;
+  wire   [0:5]    d1h_datomic_op;
 //  wire   [0:15]   d0h_dpar;
   wire            hd0_sent_utag_valid;
   wire   [0:9]    hd0_sent_utag;
@@ -611,6 +617,7 @@ module top (
              d0h_dtype_top, 
              d0h_dsize_top, 
              d0h_ddata_top, 
+             d0h_datomic_op_top, 
 	     hd0_sent_utag_valid_top, 
 	     hd0_sent_utag_top, 
 	     hd0_sent_utag_sts_top, 
@@ -627,6 +634,7 @@ module top (
              d1h_dtype_top, 
              d1h_dsize_top, 
              d1h_ddata_top, 
+             d1h_datomic_op_top, 
 	     hd1_sent_utag_valid_top, 
 	     hd1_sent_utag_top, 
 	     hd1_sent_utag_sts_top, 
@@ -683,12 +691,14 @@ module top (
     d0h_dtype_top <= d0h_dtype;
     d0h_dsize_top <= d0h_dsize;
     d0h_ddata_top <= d0h_ddata;
+    d0h_datomic_op_top <= d0h_datomic_op;
     d1h_dvalid_top <= d1h_dvalid;
     d1h_req_utag_top <= d1h_req_utag;
     d1h_req_itag_top <= d1h_req_itag;
     d1h_dtype_top <= d1h_dtype;
     d1h_dsize_top <= d1h_dsize;
     d1h_ddata_top <= d1h_ddata;
+    d1h_datomic_op_top <= d1h_datomic_op;
   end
 
   // Breakpoint output, need at least 1 output or Quartus will optimize away
@@ -1023,9 +1033,9 @@ module top (
     .ha_response(ha_response),
     .ha_response_ext(ha_response_ext),
     .ha_rpagesize(ha_rpagesize),
+    .ha_rcredits(ha_rcredits),
     .ha_rcachestate(ha_rcachestate),
     .ha_rcachepos(ha_rcachepos),
-    .ha_rcredits(ha_rcredits),
 //    .ha_reoa(ha_reoa),	- mcp004 does not seem to have this port
     // MMIO interface
     .ha_mmval(ha_mmval),
@@ -1060,6 +1070,7 @@ module top (
     .d0h_dtype(d0h_dtype),
     .d0h_dsize(d0h_dsize),
     .d0h_ddata(d0h_ddata),
+//    .d0h_datomic_op(d0h_datomic_op),				// TODO: This is an interface essential for CAPI2. Yet to be part of the MCP2
 //    .d0h_dpar(d0h_dpar),
     // DMA 0 Sent interface
     .hd0_sent_utag_valid(hd0_sent_utag_valid),
@@ -1081,6 +1092,7 @@ module top (
     .d1h_dtype(d1h_dtype),
     .d1h_dsize(d1h_dsize),
     .d1h_ddata(d1h_ddata),
+//    .d1h_datomic_op(d1h_datomic_op),				// TODO: This is an interface essential for CAPI2. Yet to be part of the MCP2
     // DMA 1 Sent interface
     .hd1_sent_utag_valid(hd1_sent_utag_valid),
     .hd1_sent_utag(hd1_sent_utag),

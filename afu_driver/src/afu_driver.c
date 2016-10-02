@@ -88,6 +88,7 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
 	uint32_t c_d0h_dtype;
 	uint32_t c_d0h_dsize;
 	uint8_t  c_d0h_ddata[CACHELINE_BYTES];
+	uint32_t c_d0h_datomic_op;
 
 // Function declaration
 
@@ -258,6 +259,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     const svLogicVecVal *d0h_dtype_top,		// 3 bits
 	     const svLogicVecVal *d0h_dsize_top,		// 10 bits
 	     const svLogicVecVal *d0h_ddata_top,		// 1024 bits
+	     const svLogicVecVal *d0h_datomic_op_top,		// 6 bits
 	           svLogic       *hd0_sent_utag_valid_top,  
 	           svLogicVecVal *hd0_sent_utag_top,  
 	           svLogicVecVal *hd0_sent_utag_sts_top,  
@@ -274,6 +276,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     const svLogicVecVal *d1h_dtype_top,		// 3 bits
 	     const svLogicVecVal *d1h_dsize_top,		// 10 bits
 	     const svLogicVecVal *d1h_ddata_top,		// 1024 bits
+	     const svLogicVecVal *d1h_datomic_op_top,		// 6 bits
 	           svLogic       *hd1_sent_utag_valid_top,  
 	           svLogicVecVal *hd1_sent_utag_top,  
 	           svLogicVecVal *hd1_sent_utag_sts_top,  
@@ -374,6 +377,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     c_d0h_dtype	= (d0h_dtype_top->aval) 	& 0x7;		// 3 bits;
 	     c_d0h_dsize	= (d0h_dsize_top->aval) 	& 0x3FF;	// 10 bits;
              getMyCacheLine(d0h_ddata_top, c_d0h_ddata);
+	     c_d0h_datomic_op	= (d0h_datomic_op_top->aval) 	& 0x3FF;	// 10 bits;
+		// TODO: the value of c_d0h_datomic_op need be passed on
 	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_ddata);
 	   }
 	} else {
@@ -535,9 +540,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    setDpiSignal32(hd0_cpl_type_top, event.dma0_completion_type,  3);
 	    setDpiSignal32(hd0_cpl_size_top, event.dma0_completion_size, 12);
 	    setMyCacheLine(hd0_cpl_data_top, event.dma0_completion_data);
-		// There are 2 more inputs on this bus - not defined on the PSL9 afu_interface.; as on 8/Sep/2016 these seem to be unused inputs at the mcp interface
-	    setDpiSignal32(hd0_cpl_laddr_top, 	   0, 10);
-	    setDpiSignal32(hd0_cpl_byte_count_top, 0, 10);
+	    setDpiSignal32(hd0_cpl_laddr_top, 	  event.dma0_completion_laddr, 	10);
+	    setDpiSignal32(hd0_cpl_byte_count_top, 	  event.dma0_completion_byte_count, 	10);
 	    *hd0_cpl_valid_top = 1;
 	  }
 	  if(event.dma0_sent_utag_valid)			// must be corresponding to the assertion of HDx_SENT_UTAG_VALID by PSL
