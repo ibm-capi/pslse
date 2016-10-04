@@ -342,6 +342,81 @@ static void _handle_ack(struct cxl_afu_h *afu)
 	afu->mmio.state = LIBCXL_REQ_IDLE;
 }
 
+#ifdef PSL9
+
+static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t addr, uint8_t size,
+			  uint8_t * data)
+{
+
+printf("Inside handle DMO_OPs, what now? Just write payload to addr... \n");
+	uint8_t buffer, atomic_op;
+
+	if (!afu)
+		fatal_msg("NULL afu passed to libcxl.c:_handle_DMO_OPs");
+	if (!_testmemaddr((uint8_t *) addr)) {
+		if (_handle_dsi(afu, addr) < 0) {
+			perror("DSI Failure");
+			return;
+		}
+		DPRINTF("WRITE to invalid addr @ 0x%016" PRIx64 "\n", addr);
+		buffer = PSLSE_MEM_FAILURE;
+		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+			afu->opened = 0;
+			afu->attached = 0;
+		}
+		return;
+	}
+	atomic_op = data[0];
+	switch (atomic_op) {
+			case AMO_ARMWF_ADD:
+			case AMO_ARMWF_XOR:
+			case AMO_ARMWF_OR:
+			case AMO_ARMWF_AND:
+			case AMO_ARMWF_CAS_MAX_U:
+			case AMO_ARMWF_CAS_MAX_S:
+			case AMO_ARMWF_CAS_MIN_U:
+			case AMO_ARMWF_CAS_MIN_S:
+			case AMO_ARMWF_CAS_U:
+			case AMO_ARMWF_CAS_E:
+			case AMO_ARMWF_CAS_NE:
+			case AMO_ARMWF_INC_B:
+			case AMO_ARMWF_INC_E:
+			case AMO_ARMWF_DEC_B:
+				// we don't do anything yet but read location EA and return it via cmpl_data
+				break;
+			case AMO_ARMW_ADD:
+			case AMO_ARMW_XOR:
+			case AMO_ARMW_OR:
+			case AMO_ARMW_AND:
+			case AMO_ARMW_CAS_MAX_U:
+			case AMO_ARMW_CAS_MAX_S:
+			case AMO_ARMW_CAS_MIN_U:
+			case AMO_ARMW_CAS_MIN_S:
+			case AMO_ARMW_CAS_T:
+				// we don't do anything yet but write location EA 
+				break;
+			default:
+				// we need to generate WARNING about unsupported AMO op
+				break;
+			}
+
+	printf("processing atomic_op = 0x%2x \n", atomic_op);
+
+	memcpy((void *)addr, data, size);
+	buffer = PSLSE_MEM_SUCCESS;
+	if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+		afu->opened = 0;
+		afu->attached = 0;
+	}
+	DPRINTF("WRITE to addr @ 0x%016" PRIx64 "\n", addr);
+
+
+
+}
+
+
+#endif /* ifdef PSL9 */
+
 static void _req_max_int(struct cxl_afu_h *afu)
 {
 	uint8_t *buffer;
@@ -511,7 +586,7 @@ static void *_psl_loop(void *ptr)
 {
 	struct cxl_afu_h *afu = (struct cxl_afu_h *)ptr;
 	uint8_t buffer[MAX_LINE_CHARS];
-	uint8_t size;
+	uint8_t size, op_size;
 	uint64_t addr;
 	uint16_t value;
 	uint32_t lvalue;
@@ -724,6 +799,30 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			_handle_write(afu, addr, size, buffer);
+			break;
+
+		case PSLSE_DMA0_WR_AMO:
+			DPRINTF("AFU DMA0 MEMORY WRITE AMO \n");
+			if (get_bytes_silent(afu->fd, 1, buffer, 1000, 0) < 0) {
+				warn_msg
+				    ("Socket failure getting memory write size");
+				_all_idle(afu);
+				break;
+			}
+			op_size = (uint8_t) buffer[0];
+			if (get_bytes_silent(afu->fd, sizeof(uint64_t), buffer,
+					     -1, 0) < 0) {
+				_all_idle(afu);
+				break;
+			}
+			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
+			addr = ntohll(addr);
+			if (get_bytes_silent(afu->fd, (17 * sizeof(uint8_t)), buffer,
+					     -1, 0) < 0) {
+				_all_idle(afu);
+				break;
+			}
+			_handle_DMO_OPs(afu, op_size, addr, 17, buffer);	
 			break;
 
 

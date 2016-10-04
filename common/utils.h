@@ -71,6 +71,7 @@
 #ifdef PSL9
 #define PSLSE_DMA0_RD		0x21
 #define PSLSE_DMA0_WR		0x22
+#define PSLSE_DMA0_WR_AMO	0x23
 #endif /*ifdef PSL9 */
 
 // PSLSE states

@@ -46,6 +46,7 @@ enum cmd_type {
 	CMD_XLAT_WR,
 	CMD_DMA_RD,
 	CMD_DMA_WR,
+	CMD_DMA_WR_AMO,
 	CMD_ITAG_ABRT_RD,
 	CMD_ITAG_ABRT_WR,
 	CMD_XLAT_RD_TOUCH,
@@ -66,7 +67,7 @@ enum mem_state {
 	DMA_ITAG_RET,
 	DMA_PENDING,
 	DMA_OP_REQ,
-	DMA_SENT_ACK,
+	DMA_SEND_STS,
 	DMA_MEM_REQ,
 	DMA_MEM_RESP,
 	DMA_CPL_SENT,
@@ -107,8 +108,12 @@ struct cmd_event {
 	uint32_t utag;
 	uint32_t dsize;
 	uint32_t dtype;
+	uint32_t atomic_op;
 	uint32_t sent_sts;
 	uint32_t cpl_type;
+	uint32_t cpl_size;
+	uint32_t cpl_laddr;
+	uint32_t cpl_byte_count;
 #endif /*ifdef PSL9 */
 	uint8_t unlock;
 	uint8_t buffer_activity;
@@ -121,32 +126,6 @@ struct cmd_event {
 	struct cmd_event *_next;
 };
 
-/* #ifdef PSL9
-struct dma_event {
-	uint64_t addr;
-	int32_t context;
-	uint32_t command;
-	uint32_t port;
-	uint32_t itag;
-	uint32_t utag;
-	uint32_t abt;
-	uint32_t size;
-	uint32_t dtype;
-	uint32_t sent_sts;
-	uint32_t cpl_type;
-	uint8_t unlock;
-	uint8_t buffer_activity;
-	uint8_t *data;
-	uint8_t *parity;
-	int *abort;
-	enum cmd_type type; // may nt be needed anymore
-	enum mem_state state;
-//	enum dma_state dstate;
-	enum client_state client_state;
-	struct dma_event *_next;
-};
-#endif
-*/
 struct cmd {
 	struct AFU_EVENT *afu_event;
 	struct cmd_event *list;
@@ -156,9 +135,8 @@ struct cmd {
 	struct client **client;
 	struct pages page_entries;
 #ifdef PSL9
-//	struct dma_event *dma_op;
-	uint16_t dma0_rd_credits;
-	uint16_t dma0_wr_credits;
+	//uint16_t dma0_rd_credits;
+	//uint16_t dma0_wr_credits;
 #endif
 	volatile enum pslse_state *psl_state;
 	char *afu_name;
@@ -201,6 +179,7 @@ void handle_response(struct cmd *cmd);
 void handle_caia2_cmds(struct cmd *cmd);
 void handle_dma0_read(struct cmd *cmd);
 void handle_dma0_write(struct cmd *cmd);
+void handle_dma0_sent_sts(struct cmd *cmd);
 #endif /* ifdef PSL9 */
 
 

@@ -111,6 +111,8 @@ int psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		     uint32_t utag,
 		     uint32_t cpl_type,
 		     uint32_t dsize,
+	 	     uint32_t cpl_laddr,
+		     uint32_t cpl_byte_count,
 		     uint8_t * write_data);
 
 /* Call this to write a dma port utag sent back on the DMA bus. */
@@ -233,13 +235,16 @@ int psl_afu_dma0_req(struct AFU_EVENT *event,
 		uint32_t itag,
 		uint32_t type,
 		uint32_t size,
+		uint32_t atomic_op,
 		unsigned char dma_wr_data[128] );
 
 int
 afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 		 uint32_t utag,
 		 uint32_t cpl_type,
-		 uint32_t dsize, uint8_t * read_data);
+		 uint32_t dsize, 
+		 uint32_t laddr,
+		 uint32_t byte_count, uint8_t * dma_rd_data);
 
 int
 afu_get_dma0_sent_utag(struct AFU_EVENT *event,

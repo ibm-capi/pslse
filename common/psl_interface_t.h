@@ -65,6 +65,7 @@
 				   been acknowledged */
 #ifdef PSL9
 #define PSL_DOUBLE_DMA0_REQ 2
+#define PSL_NO_DMA_PORT_CREDITS 3
 #endif
 
 #define PSL_MMIO_ACK_NOT_VALID 4	/* Read data from previos MMIO
@@ -157,25 +158,45 @@
 #define PSL_COMMAND_CAS_NE_8B	 0x0184
 #define PSL_COMMAND_CAS_U_8B	 0x0185
 #define PSL_COMMAND_ASBNOT	 0x0103
-#define PSL_COMMAND_ARMW_CAS_T	 0x1000
-#define PSL_COMMAND_ARMW_ADD	 0x1001
-#define PSL_COMMAND_ARMW_AND	 0x1002
-#define PSL_COMMAND_ARMW_XOR	 0x1003
-#define PSL_COMMAND_ARMW_OR	 0x1004
-#define PSL_COMMAND_ARMW_CAS_MAX_U	 0x1005
-#define PSL_COMMAND_ARMW_CAS_MAX_S	 0x1006
-#define PSL_COMMAND_ARMW_CAS_MIN_U	 0x1007
-#define PSL_COMMAND_ARMW_CAS_MIN_S	 0x1008
 #endif /* ifdef PSL9 add new commands for CAIA2 */
 #ifdef PSL9 /* new DMA related commands */
 #define PSL_COMMAND_XLAT_RD_P0	 0x1F00
+#define PSL_COMMAND_XLAT_RD_P0_00	 0x1F20
+#define PSL_COMMAND_XLAT_RD_P0_01	 0x1F21
 #define PSL_COMMAND_XLAT_WR_P0	 0x1F01
+#define PSL_COMMAND_XLAT_WR_P0_00	 0x1F40
+#define PSL_COMMAND_XLAT_WR_P0_01	 0x1F41
 #define PSL_COMMAND_XLAT_RD_P1	 0x1F08
 #define PSL_COMMAND_XLAT_WR_P1	 0x1F09
 #define PSL_COMMAND_ITAG_ABRT_RD 0x1F02
 #define PSL_COMMAND_ITAG_ABRT_WR 0x1F03
 #define PSL_COMMAND_XLAT_RD_TOUCH 0x1F10
 #define PSL_COMMAND_XLAT_WR_TOUCH 0x1F11
+/* New Atomic Memory Operations   */
+#define AMO_ARMWF_ADD	 0x00
+#define AMO_ARMWF_XOR	 0x01
+#define AMO_ARMWF_OR	 0x02
+#define AMO_ARMWF_AND	 0x03
+#define AMO_ARMWF_CAS_MAX_U	 0x04
+#define AMO_ARMWF_CAS_MAX_S	 0x05
+#define AMO_ARMWF_CAS_MIN_U	 0x06
+#define AMO_ARMWF_CAS_MIN_S	 0x07
+#define AMO_ARMWF_CAS_U	 0x08
+#define AMO_ARMWF_CAS_E	 0x11
+#define AMO_ARMWF_CAS_NE	 0x10
+#define AMO_ARMWF_INC_B	 0x18
+#define AMO_ARMWF_INC_E	 0x19
+#define AMO_ARMWF_DEC_B	 0x1c
+#define AMO_ARMW_ADD	 0x20
+#define AMO_ARMW_XOR	 0x21
+#define AMO_ARMW_OR	 0x22
+#define AMO_ARMW_AND	 0x23
+#define AMO_ARMW_CAS_MAX_U	 0x24
+#define AMO_ARMW_CAS_MAX_S	 0x25
+#define AMO_ARMW_CAS_MIN_U	 0x26
+#define AMO_ARMW_CAS_MIN_S	 0x27
+#define AMO_ARMW_CAS_T	 0x38
+
 #endif /* ifdef PSL9 add new commands for CAIA2 */
 
 
@@ -285,7 +306,7 @@ struct AFU_EVENT {
   uint32_t dma0_req_itag;     	      /* DMA transaction request user translation identifier */
   uint32_t dma0_req_type;	      /* DMA transaction request transaction type.  */
   uint32_t dma0_req_size;	      /* DMA transaction request transaction size in bytes */
-  uint32_t atomic_op;		      /* Transaction request attribute - Atomic opcode */
+  uint32_t dma0_atomic_op;		      /* Transaction request attribute - Atomic opcode */
   //unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
   uint32_t dma0_sent_utag_valid;      /* DMA request sent by PSL */
   uint32_t dma0_sent_utag;    	      /* DMA sent request indicates the UTAG of the request sent by PSL */
@@ -297,8 +318,11 @@ struct AFU_EVENT {
   uint32_t dma0_completion_laddr;     /* DMA completion Atomic attribute - lower addr bits of rx cmpl */
   uint32_t dma0_completion_byte_count; /* DMA completion remaining amount of bytes required to complete originating read request
 						including bytes being transferred in the current transaction   */
+/* TODO must increase size of dma0_req_data & dma0_completion_data to 512 to be able to handle max DMA transfer in one socket transaction */
   unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
   unsigned char dma0_completion_data[128];  /* DMA completion data alignment is First Byte first */
+  unsigned char dma0_wr_credits;	/* Used to limit # of outstanding DMA wr ops to MAX_DMA0_WR_CREDITS  */
+  unsigned char dma0_rd_credits;	/* Used to limit # of outstanding DMA rd ops to MAX_DMA0_RD_CREDITS  */
 #endif /* ifdef PSL9 */
 
 };

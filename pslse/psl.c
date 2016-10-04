@@ -436,6 +436,7 @@ static void _handle_afu(struct psl *psl)
 //try moving this first???
 		handle_caia2_cmds(psl->cmd);
 		handle_dma0_write(psl->cmd);
+		handle_dma0_sent_sts(psl->cmd);
 		handle_dma0_read(psl->cmd);
 #endif /* ifdef PSL9 */
 
