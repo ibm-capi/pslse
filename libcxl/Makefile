@@ -5,7 +5,7 @@ include Makefile.rules
 
 OBJS = libcxl.o debug.o utils.o
 
-all: $(COMMON_DIR)/misc/cxl.h libcxl.so libcxl.a
+all: libcxl.so libcxl.a
 
 CHECK_HEADER := $(shell echo \\\#include\ $(1) | $(CC) $(CFLAGS) -E - > /dev/null 2>&1 && echo y || echo n)
 
@@ -13,6 +13,8 @@ $(COMMON_DIR)/misc/cxl.h:
 ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),n)
 	$(call Q,CURL $(COMMON_DIR)/misc/cxl.h, mkdir $(COMMON_DIR)/misc 2>/dev/null; curl -o $(COMMON_DIR)/misc/cxl.h -s http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/include/uapi/misc/cxl.h)
 endif
+
+libcxl.o: $(COMMON_DIR)/misc/cxl.h
 
 libcxl.so: $(OBJS)
 	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o $@, $@) -Wl,--version-script symver.map
