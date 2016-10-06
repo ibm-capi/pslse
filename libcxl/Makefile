@@ -7,7 +7,7 @@ OBJS = libcxl.o debug.o utils.o
 
 all: $(COMMON_DIR)/misc/cxl.h libcxl.so libcxl.a
 
-CHECK_HEADER = $(shell echo \\\#include\ $(1) | $(CC) $(CFLAGS) -E - > /dev/null 2>&1 && echo y || echo n)
+CHECK_HEADER := $(shell echo \\\#include\ $(1) | $(CC) $(CFLAGS) -E - > /dev/null 2>&1 && echo y || echo n)
 
 $(COMMON_DIR)/misc/cxl.h:
 ifeq ($(call CHECK_HEADER,"<misc/cxl.h>"),n)
