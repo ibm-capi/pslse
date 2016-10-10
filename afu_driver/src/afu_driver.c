@@ -378,8 +378,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     c_d0h_dsize	= (d0h_dsize_top->aval) 	& 0x3FF;	// 10 bits;
              getMyCacheLine(d0h_ddata_top, c_d0h_ddata);
 	     c_d0h_datomic_op	= (d0h_datomic_op_top->aval) 	& 0x3FF;	// 10 bits;
-		// TODO: the value of c_d0h_datomic_op need be passed on
-	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_ddata);
+	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_datomic_op, c_d0h_ddata);
 	   }
 	} else {
 	  //psl();	// the psl() function from PLI is going to be split into several subsidiary functions
@@ -444,7 +443,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  parity = (uint32_t) event.buffer_wparity[0];
 	  parity <<= 8;
 	  parity += (uint32_t) event.buffer_wparity[1];
-          parity = htons((uint16_t) parity);
+//          parity = htons((uint16_t) parity);
 	  setDpiSignal32(ha_bwtag_top, event.buffer_write_tag, 8);
 	  *ha_bwtagpar_top = event.buffer_write_tag_parity;
 	  setMyCacheLine(ha_bwdata_top, event.buffer_wdata);
