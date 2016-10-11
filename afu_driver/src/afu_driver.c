@@ -700,7 +700,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  parity = (uint32_t) event.buffer_wparity[0];
 	  parity <<= 8;
 	  parity += (uint32_t) event.buffer_wparity[1];
-          parity = htons((uint16_t) parity);
+          // parity = htons((uint16_t) parity);  // we don't need to do this as we processed parity byte-wise rather than as an int
 	  setDpiSignal32(ha_bwtag_top, event.buffer_write_tag, 8);
 	  *ha_bwtagpar_top = event.buffer_write_tag_parity;
 	  setMyCacheLine(ha_bwdata_top, event.buffer_wdata);
