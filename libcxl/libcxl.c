@@ -348,8 +348,13 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			  uint8_t * data)
 {
 
-printf("Inside handle DMO_OPs, what now? Just write payload to addr... \n");
-	uint8_t buffer, atomic_op;
+	uint8_t atomic_op;
+	uint8_t buffer;
+	uint8_t wbuffer[9];
+	uint32_t lvalue, op_A;
+	uint64_t llvalue, op_Al;
+	int op_ptr, op1_ptr, op2_ptr;
+	char wb;
 
 	if (!afu)
 		fatal_msg("NULL afu passed to libcxl.c:_handle_DMO_OPs");
@@ -358,58 +363,241 @@ printf("Inside handle DMO_OPs, what now? Just write payload to addr... \n");
 			perror("DSI Failure");
 			return;
 		}
-		DPRINTF("WRITE to invalid addr @ 0x%016" PRIx64 "\n", addr);
-		buffer = PSLSE_MEM_FAILURE;
-		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
-			afu->opened = 0;
-			afu->attached = 0;
-		}
+		DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
 		return;
 	}
+	// figure out where OP1 / 2 are in data
+	op_ptr = (int) (addr & 0x000000000000000c);
+	switch (op_ptr) {
+		case 0x0:
+			op1_ptr = 0;
+			op2_ptr = 8;
+			break;
+		case 0x4:
+			op1_ptr = 4;
+			op2_ptr = 12;
+			break;
+		case 0x8:
+			op1_ptr = 8;
+			op2_ptr = 0;
+			break;
+		case 0xc:
+			op1_ptr = 12;
+			op2_ptr = 4;
+			break;
+		default:
+			warn_msg("received invalid value op_ptr value of 0x%x ", op_ptr);
+			op1_ptr = 0;
+			op2_ptr = 0;
+			break;
+	}
+
+	DPRINTF("READ from addr @ 0x%016" PRIx64 "\n", addr);
+	if (op_size == 0x4) {
+		memcpy((char *) &lvalue, (void *)addr, op_size);
+		op_A = (uint32_t)(lvalue);
+		memcpy ((&lvalue + op1_ptr), &data[11], 4);
+	printf("op_A is %08"PRIx32 " and lvalue is %08"PRIx32 "\n", op_A, lvalue);
+	} else if (op_size == 0x8) {
+
+		memcpy((char *) &llvalue, (void *)addr, op_size);
+		op_Al = (uint64_t)(llvalue);
+		memcpy ((&llvalue + op1_ptr), &data[11], 8);
+	printf("op_Al is %016"PRIx64 " and llvalue is %016"PRIx64 "\n", op_Al, llvalue);
+	} else // need else error bc only valid sizes are 4 or 8
+		warn_msg("unsupported op_size of 0x%2x \n", op_size);
 	atomic_op = data[0];
+	debug_msg("processing atomic_op = 0x%2x ", atomic_op);
 	switch (atomic_op) {
+			/* addr specifies the location of an address aligned
+ * 4 or 8 byte first operand (op_A), which is modified using the second
+ * operand provided during the write data tenure (lvalue), and the function specified
+ * in the secondary encode. The result of the function is returned to memory.
+ * The original value from the memory location is returned to the AFU as completion data */
 			case AMO_ARMWF_ADD:
+				if  (op_size == 4) {
+				printf("ADD %08"PRIx32" to %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
+					lvalue += op_A;
+					wb = 1;
+				} else {
+				printf("ADD %016"PRIx64" to %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
+					llvalue += op_Al;
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_XOR:
+				if  (op_size == 4) {
+				printf("XOR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
+					lvalue ^= op_A;
+					wb = 1;
+				} else {
+				printf("XOR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
+					llvalue ^= op_Al;
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_OR:
+				if  (op_size == 4) {
+				printf("OR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
+					lvalue |= op_A;
+					wb = 1;
+				} else {
+				printf("OR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
+					llvalue |= op_Al;
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_AND:
+				if  (op_size == 4) {
+				printf("AND %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
+					lvalue &= op_A;
+					wb = 1;
+				} else {
+				printf("AND %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
+					llvalue &= op_Al;
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_CAS_MAX_U:
 			case AMO_ARMWF_CAS_MAX_S:
 			case AMO_ARMWF_CAS_MIN_U:
 			case AMO_ARMWF_CAS_MIN_S:
+			/* The address specifies the location of an 
+ * address aligned 4 or 8 byte first operand (A), which is compared using 
+ * the second operand provided during the data tenure (V), which is from 
+ * the master to the LPC, and the function specified in the secondary encode. 
+ * If the result of the compare is true, then the third operand (W) provided 
+ * during the operation’s write data tenure is placed at the memory location 
+ * specified for the first operand (A). The original value from the memory location 
+ * specified by the command is returned to the master during a read data tenure, */
 			case AMO_ARMWF_CAS_U:
 			case AMO_ARMWF_CAS_E:
 			case AMO_ARMWF_CAS_NE:
+			/* The address specifies the location of two address 
+ * aligned 4 or 8 byte operands. The first operand A is found at the address specified. 
+ * The second operand A2 is found at the address specified with an offset specified by 
+ * the width of the operands and the operation. The specification of the address is 
+ * constrained to be naturally aligned and
+ *  • cannot target locations at 32n-2bin2dec(‘1L’), where n = 1,2,3... (armwf_inc_b, armwf_inc_e)
+ *  • cannot target locations at 32n, when n = 0, 1, 2, 3... (armwf_dec_b)
+ * The original value from the memory location specified by the command, or the 
+ * 4 or 8 byte minimum signed integer value17 is returned to the master during the read data tenure */
 			case AMO_ARMWF_INC_B:
 			case AMO_ARMWF_INC_E:
 			case AMO_ARMWF_DEC_B:
 				// we don't do anything yet but read location EA and return it via cmpl_data
+				printf("AMO instruction not implemented yet \n");
+				wb = 0;
 				break;
+			/* The address specifies the location of an address 
+ * aligned 4 or 8 byte first operand (A), which is modified using the second 
+ * operand provided during the data tenure (V), which is from the master to 
+ * the LPC, and the function specified in the secondary encode. The result of the 
+ * function is returned to memory */
 			case AMO_ARMW_ADD:
+				if  (op_size == 4) {
+				printf("ADD %08"PRIx32" to %08"PRIx32 " and store it  \n", op_A, lvalue);
+					lvalue += op_A;
+				} else {
+				printf("ADD %016"PRIx64" to %016"PRIx64 " and store it  \n", op_Al, llvalue);
+					llvalue += op_Al;
+				}
+				wb = 0;
+				break;
+
 			case AMO_ARMW_XOR:
+				if  (op_size == 4) {
+				printf("XOR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, lvalue);
+					lvalue ^= op_A;
+				} else {
+				printf("XOR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, llvalue);
+					llvalue ^= op_Al;
+				}
+				wb = 0;
+				break;
 			case AMO_ARMW_OR:
+				if  (op_size == 4) {
+				printf("OR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, lvalue);
+					lvalue |= op_A;
+				} else {
+				printf("OR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, llvalue);
+					llvalue |= op_Al;
+				}
+				wb = 0;
+				break;
 			case AMO_ARMW_AND:
+				if  (op_size == 4) {
+				printf("AND %08"PRIx32" with %08"PRIx32 " and store it \n", op_A, lvalue);
+					lvalue &= op_A;
+				} else {
+				printf("AND %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, llvalue);
+					llvalue &= op_Al;
+				}
+				wb = 0;
+				break;
 			case AMO_ARMW_CAS_MAX_U:
 			case AMO_ARMW_CAS_MAX_S:
 			case AMO_ARMW_CAS_MIN_U:
 			case AMO_ARMW_CAS_MIN_S:
+			/* The address specifies the location of two address 
+ * aligned 4 or 8 byte operands. The first operand A is found at the address specified. 
+ * The second operand A2 is found at the address specified plus an offset specified by 
+ * the width of the operands. The specification of the address is constrained to be
+ * naturally aligned and cannot target locations at 32n-2bin2dec(‘1L’), where n = 1,2,3... 
+ * A third operand V is provided during the write data tenure which is from the master to the LPC. */
 			case AMO_ARMW_CAS_T:
 				// we don't do anything yet but write location EA 
+				printf("AMO instruction not implemented yet \n");
+				wb = 0;
 				break;
 			default:
-				// we need to generate WARNING about unsupported AMO op
+				wb = 0;
+				warn_msg("Unsupported AMO command 0x%04x", atomic_op);
 				break;
 			}
-
-	printf("processing atomic_op = 0x%2x \n", atomic_op);
-
-	memcpy((void *)addr, data, size);
-	buffer = PSLSE_MEM_SUCCESS;
-	if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
-		afu->opened = 0;
-		afu->attached = 0;
-	}
+// every op has a write to store something to the original EA
+	if (op_size == 4)
+		memcpy ((void *)addr, &lvalue, op_size);
+	else // only other supported size is 8
+		memcpy ((void *)addr, &llvalue, op_size);
 	DPRINTF("WRITE to addr @ 0x%016" PRIx64 "\n", addr);
 
+
+// only AMO_ARMWF_* commands need to return back original data from EA, otherwise just MEM ACK
+	switch (wb)  {
+			case 0:
+				buffer = PSLSE_MEM_SUCCESS;
+				if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+				afu->opened = 0;
+				afu->attached = 0;
+				}
+				//DPRINTF("WRITE to addr @ 0x%016" PRIx64 "\n", addr);
+				break;
+			case 1:
+				wbuffer[0] = PSLSE_MEM_SUCCESS;
+				memcpy(&(wbuffer[1]), (void *)&op_A, op_size);
+				if (put_bytes_silent(afu->fd, op_size + 1, wbuffer) != op_size + 1) {
+				afu->opened = 0;
+				afu->attached = 0;
+				}		
+				DPRINTF("READ from addr @ 0x%016" PRIx64 "\n", addr);
+				break;
+			case 2:
+				wbuffer[0] = PSLSE_MEM_SUCCESS;
+				memcpy(&(wbuffer[1]), (void *)&op_Al, op_size);
+	printf("op_Al is %016"PRIx64 " and llvalue is %016"PRIx64 "\n", op_Al, llvalue);
+				if (put_bytes_silent(afu->fd, op_size + 1, wbuffer) != op_size + 1) {
+				afu->opened = 0;
+				afu->attached = 0;
+				}		
+				DPRINTF("READ from addr @ 0x%016" PRIx64 "\n", addr);
+				break;
+
+			default:
+				warn_msg("invalid wb! ");
+				wb = 0;
+				break;
+			}
 
 
 }

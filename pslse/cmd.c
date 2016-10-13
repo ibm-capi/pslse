@@ -780,6 +780,9 @@ void handle_dma0_write(struct cmd *cmd)
 		if ((((*head)->type == CMD_DMA_WR) || ((*head)->type == CMD_DMA_WR_AMO)) &&
 		    ((*head)->state == DMA_OP_REQ))
 			break;
+	if (((*head)->type == CMD_DMA_WR_AMO) && ((*head)->state == DMA_MEM_RESP))
+ 			goto amo_wb;
+
 		head = &((*head)->_next);
 	}
 	event = *head;
@@ -815,7 +818,7 @@ void handle_dma0_write(struct cmd *cmd)
 		      cmd->dbg_id, client->context) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
-	} else { //defaulting to event->type == CMD_DMA_WR_AMO
+	} else { // event->type == CMD_DMA_WR_AMO
 		buffer = (uint8_t *) malloc(27);
 		offset = event->addr & ~CACHELINE_MASK;
 		buffer[0] = (uint8_t) PSLSE_DMA0_WR_AMO;
@@ -838,6 +841,37 @@ void handle_dma0_write(struct cmd *cmd)
 	event->state = DMA_SEND_STS;
 	client->mem_access = (void *)event;
 printf("data sent \n");
+	return;
+
+	amo_wb: event = *head;
+		if (event->atomic_op < 0x20) {
+	//randomly decide not to return data yet
+		if (!allow_resp(cmd->parms)) {
+			printf("not going to send compl data yet \n");
+			return;
+		}
+		event->cpl_type = 4; //always 4 for atomic completion response
+		event->cpl_byte_count = event->dsize;
+		event->cpl_laddr = (uint32_t) (event->cpl_laddr & 0x00000000000003FF);
+		debug_msg("%s:DMA0 AMO FETCH DATA WB  utag=0x%02x size=%d addr=0x%016"PRIx64 ,
+		  	cmd->afu_name, event->utag, event->dsize, event->addr);
+				printf ("will we have success writing cpl data? \n");
+
+		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+			event->dsize, event->cpl_laddr, event->cpl_byte_count,
+			event->data) == PSL_SUCCESS) {
+			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
+				  event->utag);
+			//} hmmm, may need to move these
+			event->resp = PSL_RESPONSE_DONE;
+			//event->state = DMA_CPL_SENT;
+			//see if this fixes the core dumps
+			event->state = MEM_DONE;
+			} else 
+				printf ("looks like we didn't have success writing cpl data? \n");
+		}
+		return;
+
 }
 
 
@@ -922,6 +956,9 @@ void handle_dma0_read(struct cmd *cmd)
 			return;
 		}
 		event->cpl_type = 0; //always 0 for read up to 128bytes
+		// eventually need to put real values in cpl_byte_count...TODO
+		event->cpl_byte_count = event->dsize;
+		event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 			event->dsize, event->cpl_laddr, event->cpl_byte_count,
 			event->data) == PSL_SUCCESS) {
@@ -1203,7 +1240,9 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 		event->state = MEM_RECEIVED;
 	} 
 #ifdef PSL9
-	  else if (event->type == CMD_DMA_RD) {
+// have to expect data back from some AMO ops
+	else if ((event->type == CMD_DMA_RD) || (event->type == CMD_DMA_WR_AMO)) {
+	  //else if (event->type == CMD_DMA_RD) {
 		// Client is returning data from DMA memory read
 //	printf("offset is =0x%016"PRIx64" and data is 0x%08"PRIx8" \n", offset, data);
 		if (get_bytes_silent(fd, event->dsize, data, cmd->parms->timeout,
@@ -1216,6 +1255,8 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 				 event->context, event->resp);
 			return;
 		}
+printf("got as far as memcpy in handle_mem_read \n");
+// TODO need to remove the OFFSET from DMA ops, it's first data byte first for DMA bus
 		memcpy((void *)&(event->data[offset]), (void *)&data, event->dsize);
 		event->state = DMA_MEM_RESP;
 	
@@ -1327,8 +1368,19 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 	if (event->type == CMD_READ)
 		_handle_mem_read(cmd, event, fd);
 #ifdef PSL9
-	else if (event->type == CMD_DMA_RD)
+ 	// have to account for AMO fetch cmds with returned data
+ 	// else if (event->type == CMD_DMA_RD)
+ 	else if (event->type == CMD_DMA_RD) 	
 		_handle_mem_read(cmd, event, fd);
+ 	else if (event->type == CMD_DMA_WR_AMO) {
+                 if (event->atomic_op < 0x20)  {
+		printf("yes, less than 0x020 \n");
+		_handle_mem_read(cmd, event, fd);
+		} else{
+			printf("no?? event->atomic_op = 0x%x \n", event->atomic_op);
+			event->state = MEM_DONE;
+			}
+		}
 #endif /* ifdef PSL9 */
 	else if (event->type == CMD_TOUCH)
 		event->state = MEM_DONE;
@@ -1350,7 +1402,7 @@ void handle_aerror(struct cmd *cmd, struct cmd_event *event)
 
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
-// handle things like dma requests NEED TO FIX THIS LATER, lite doesn't do DMA - HMP
+//TODO  handle things like dma requests NEED TO FIX THIS LATER, lite doesn't do DMA - HMP
 void handle_caia2_cmds(struct cmd *cmd) 
 {
 	struct cmd_event **head;
@@ -1610,7 +1662,7 @@ printf("IN HANDLE_RESPONSE LOOKING FOR RANDOMPENDING RESPONSE? \n");
 		// OR (dma write and it was AMO and we've sent cpl resp)
 		// OR (itag was aborted),  we can remove this event 
 		if ((((*head)->type == CMD_DMA_WR) && ((*head)->state == MEM_DONE)) ||
-		   (((*head)->type == CMD_DMA_WR_AMO) && ((*head)->state == DMA_CPL_SENT)) ||
+		   (((*head)->type == CMD_DMA_WR_AMO) && ((*head)->state == MEM_DONE)) ||
 		   (((*head)->type == CMD_XLAT_WR) && ((*head)->state == MEM_DONE))) {
 			//  update dma0_wr_credits IF CMD_DMA_WR or CMD_DMA_WR_AM0
 			//if ((*head)->type != CMD_XLAT_WR)

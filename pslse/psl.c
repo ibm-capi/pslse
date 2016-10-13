@@ -373,8 +373,13 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 		dbg_aux2 |= read_latency & DBG_AUX2_LAT_MASK;
 		if (job_done && job_running)
 			error_msg("_handle_aux2: ah_jdone & ah_jrunning asserted together");
+#if defined PSL9lite || defined PSL9
+		if ((read_latency != 0) && (read_latency != 1) && (read_latency != 2))
+			warn_msg("_handle_aux2: ah_brlat must be either 0, 1 or 2");
+#else
 		if ((read_latency != 1) && (read_latency != 3))
 			warn_msg("_handle_aux2: ah_brlat must be either 1 or 3");
+#endif 
 		*parity = par_enable;
 		*latency = read_latency;
 
