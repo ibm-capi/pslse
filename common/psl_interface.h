@@ -69,11 +69,12 @@ int psl_mmio_write(struct AFU_EVENT *event,
 int psl_response(struct AFU_EVENT *event,
 		 uint32_t tag,
 		 uint32_t response_code,
-#ifdef PSL9
+#if defined PSL9 || defined PSL9lite
 //		 uint32_t response_extra, uint32_t response_r_pgsize,
-		// uint32_t response_dma0_itag, uint32_t response_dma0_itag_parity,
-#endif
+		 int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize);
+#else
 		 int credits, uint32_t cache_state, uint32_t cache_position);
+#endif
 
 /* Call this to read a buffer.  Length must be either 64 or 128 which is the
  * transfer size in bytes. For 64B transfers, only the first half of the array
@@ -149,7 +150,11 @@ int psl_get_command(struct AFU_EVENT *event,
 		    uint32_t * tag_parity,
 		    uint64_t * address,
 		    uint64_t * address_parity,
+#if defined PSL9 || defined PSL9lite
+		    uint32_t * size, uint32_t * abort, uint32_t * handle, uint32_t * cpagesize);
+#else
 		    uint32_t * size, uint32_t * abort, uint32_t * handle);
+#endif
 
 /* Call this periodically to send events and clocking synchronization to AFU */
 
@@ -188,7 +193,11 @@ int psl_afu_command(struct AFU_EVENT *event,
 		    uint32_t code_parity,
 		    uint64_t address,
 		    uint64_t address_parity,
+#if defined PSL9 || defined PSL9lite
+		    uint32_t size, uint32_t abort, uint32_t pad, uint32_t cpagesize);
+#else
 		    uint32_t size, uint32_t abort, uint32_t pad);
+#endif
 
 /* Call this on the AFU side to build an MMIO acknowledge. Read data is used
  * only for MMIO reads, ignored otherwise */
@@ -236,6 +245,7 @@ int psl_afu_dma0_req(struct AFU_EVENT *event,
 		uint32_t type,
 		uint32_t size,
 		uint32_t atomic_op,
+		uint32_t atomic_le,
 		unsigned char dma_wr_data[128] );
 
 int

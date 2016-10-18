@@ -349,6 +349,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 {
 
 	uint8_t atomic_op;
+	uint8_t atomic_le;
 	uint8_t buffer;
 	uint8_t wbuffer[9];
 	uint32_t lvalue, op_A;
@@ -407,6 +408,12 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 	} else // need else error bc only valid sizes are 4 or 8
 		warn_msg("unsupported op_size of 0x%2x \n", op_size);
 	atomic_op = data[0];
+	// Remove and read atomic_le from bit7 of data[0]
+	if ((atomic_op & 0x80) == 0x80) {
+		atomic_le = 1;
+		atomic_op &= 0x3F;
+	} else
+		atomic_le = 0;
 	debug_msg("processing atomic_op = 0x%2x ", atomic_op);
 	switch (atomic_op) {
 			/* addr specifies the location of an address aligned

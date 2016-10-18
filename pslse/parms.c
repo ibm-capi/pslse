@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,9 @@
 #include "../common/debug.h"
 
 #define DEFAULT_CREDITS 64
+#ifdef PSL9
+#define DEFAULT_PAGESIZE 0
+#endif
 
 // Randomly decide based on percent chance
 static inline int percent_chance(int chance)
@@ -92,6 +95,9 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 	// Set default parameter values
 	parms->timeout = 10;
 	parms->credits = DEFAULT_CREDITS;
+#ifdef PSL9
+	parms->pagesize = DEFAULT_PAGESIZE;
+#endif
 	parms->seed = (unsigned int)time(NULL);
 	parms->resp_percent = 20;
 	parms->paged_percent = 5;
@@ -152,6 +158,15 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 			else
 				parms->credits = data;
 			debug_parm(dbg_fp, DBG_PARM_CREDITS, parms->credits);
+#ifdef PSL9
+		} else if (!(strcmp(parm, "PAGESIZE"))) {
+			data = atoi(value);
+			if ((data < DEFAULT_PAGESIZE) || (data == 1) || (data == 6) || (data >= 8))
+				warn_msg("PAGESIZE must be either 0, 2, 3, 4, 5, or 7 ");
+			else
+				parms->pagesize = data;
+			//debug_parm(dbg_fp, DBG_PARM_PAGESIZE, parms->pagesize);
+#endif
 		} else if (!(strcmp(parm, "RESPONSE_PERCENT"))) {
 			percent_parm(value, &data);
 			if ((data > 100) || (data <= 0))

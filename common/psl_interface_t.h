@@ -300,13 +300,14 @@ struct AFU_EVENT {
 #if defined  PSL9 || defined PSL9lite  /* new cmd int signals for CAIA2 */
   uint32_t command_cpagesize;	      /*  Page size hint used by PSL for predicting page size during ERAT lookup & paged xlation ordering..codes documented in PSL workbook tbl 1-1 */
 #endif /* new cmd int signals  */
-#ifdef PSL9 /* new dma0 interface signals for CAIA2 UPDATED for 9/14/16 spec */
+#ifdef PSL9 /* new dma0 interface signals for CAIA2 UPDATED for 9/26/16 PSL9 0,97 draft spec */
   uint32_t dma0_dvalid;     	      /* DMA request from AFU is valid */
   uint32_t dma0_req_utag;	      /* DMA transaction request user transaction tag */
   uint32_t dma0_req_itag;     	      /* DMA transaction request user translation identifier */
   uint32_t dma0_req_type;	      /* DMA transaction request transaction type.  */
   uint32_t dma0_req_size;	      /* DMA transaction request transaction size in bytes */
-  uint32_t dma0_atomic_op;		      /* Transaction request attribute - Atomic opcode */
+  uint32_t dma0_atomic_op;	      /* Transaction request attribute - Atomic opcode */
+  uint32_t dma0_atomic_le;	      /* Transaction request attribute - Little Endian used */
   //unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
   uint32_t dma0_sent_utag_valid;      /* DMA request sent by PSL */
   uint32_t dma0_sent_utag;    	      /* DMA sent request indicates the UTAG of the request sent by PSL */

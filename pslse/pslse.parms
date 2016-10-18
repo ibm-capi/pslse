@@ -20,6 +20,13 @@
 # NOTE: Must be a single value, not a min,max range
 #CREDITS:64
 
+# NOTE - Pagesize parm is valid ONLY for PSL9 models
+# Pagesize: By default, the pslse will always send back encoding for a 4K page
+# size on ha_pagesize on the response interface. Valid values are 0 (4K), 2 (64K), 
+# 3 (2M) 4 (16M), 5 (1G), and 7 (16G).
+# NOTE: Must be a single value, not a min, max range
+#PAGESIZE:4
+
 # Randomization seed.  Set this to force reproducible sequence of event
 # NOTE: Must be a single value, not a min,max range
 #SEED:13

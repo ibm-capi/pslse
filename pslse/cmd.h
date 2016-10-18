@@ -109,6 +109,7 @@ struct cmd_event {
 	uint32_t dsize;
 	uint32_t dtype;
 	uint32_t atomic_op;
+	uint32_t cpagesize;
 	uint32_t sent_sts;
 	uint32_t cpl_type;
 	uint32_t cpl_size;
@@ -134,10 +135,6 @@ struct cmd {
 	struct parms *parms;
 	struct client **client;
 	struct pages page_entries;
-#ifdef PSL9
-	//uint16_t dma0_rd_credits;
-	//uint16_t dma0_wr_credits;
-#endif
 	volatile enum pslse_state *psl_state;
 	char *afu_name;
 	FILE *dbg_fp;
@@ -146,6 +143,9 @@ struct cmd {
 	uint64_t res_addr;
 	uint32_t credits;
 	int max_clients;
+#ifdef PSL9
+	uint32_t pagesize;
+#endif
 	uint16_t irq;
 	int locked;
 };

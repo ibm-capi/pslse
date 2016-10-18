@@ -67,6 +67,9 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 	cmd->parms = parms;
 	cmd->psl_state = state;
 	cmd->credits = parms->credits;
+#if defined PSL9 || defined PSL9lite
+	cmd->pagesize = parms->pagesize;
+#endif
 	cmd->page_entries.page_filter = ~((uint64_t) PAGE_MASK);
 	cmd->page_entries.entry_filter = 0;
 	for (i = 0; i < LOG2_ENTRIES; i++) {
@@ -519,7 +522,11 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 {
 	struct cmd_event *event;
 	uint64_t address, address_parity;
+#if defined PSL9 || defined PSL9lite
+	uint32_t command, command_parity, tag, tag_parity, size, abort, handle, cpagesize;
+#else
 	uint32_t command, command_parity, tag, tag_parity, size, abort, handle;
+#endif
 	uint8_t parity, fail;
 	int rc;
 
@@ -529,7 +536,11 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	// Check for command from AFU
 	rc = psl_get_command(cmd->afu_event, &command, &command_parity, &tag,
 			     &tag_parity, &address, &address_parity, &size,
+#if defined PSL9 || defined PSL9lite
+			     &abort, &handle, &cpagesize);
+#else
 			     &abort, &handle);
+#endif
 
 	// No command ready
 	if (rc != PSL_SUCCESS)
@@ -538,9 +549,11 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	debug_msg
 	    ("%s:COMMAND tag=0x%02x code=0x%04x size=0x%02x abt=%d cch=0x%04x",
 	     cmd->afu_name, tag, command, size, abort, handle);
-	debug_msg("%s:COMMAND tag=0x%02x addr=0x%016"PRIx64, cmd->afu_name,
-		  tag, address);
-
+#ifdef PSL9
+	debug_msg("%s:COMMAND tag=0x%02x addr=0x%016"PRIx64 " cpagesize= 0x%x ", cmd->afu_name,
+ 
+		  tag, address, cpagesize);
+#endif
 	// Is AFU running?
 	if (*(cmd->psl_state) != PSLSE_RUNNING) {
 		warn_msg("Command without jrunning, tag=0x%02x", tag);
@@ -837,19 +850,17 @@ void handle_dma0_write(struct cmd *cmd)
 	}
 
 	// create a separate function to do the sent utag status
-	//event->state = MEM_DONE;
 	event->state = DMA_SEND_STS;
 	client->mem_access = (void *)event;
 printf("data sent \n");
 	return;
 
-	amo_wb: event = *head;
-		if (event->atomic_op < 0x20) {
+amo_wb: event = *head;
+	if (event->atomic_op < 0x20) {
 	//randomly decide not to return data yet
-		if (!allow_resp(cmd->parms)) {
-			printf("not going to send compl data yet \n");
+		if (!allow_resp(cmd->parms)) 
 			return;
-		}
+		
 		event->cpl_type = 4; //always 4 for atomic completion response
 		event->cpl_byte_count = event->dsize;
 		event->cpl_laddr = (uint32_t) (event->cpl_laddr & 0x00000000000003FF);
@@ -862,7 +873,6 @@ printf("data sent \n");
 			event->data) == PSL_SUCCESS) {
 			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
 				  event->utag);
-			//} hmmm, may need to move these
 			event->resp = PSL_RESPONSE_DONE;
 			//event->state = DMA_CPL_SENT;
 			//see if this fixes the core dumps
@@ -1742,8 +1752,12 @@ printf("IN HANDLE_RESPONSE LOOKING FOR RANDOMPENDING RESPONSE? \n");
 			psl_get_afu_events(cmd->afu_event);
 		}
 	}
-
+#if defined  PSL9 || defined PSL9lite
+	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0, cmd->pagesize);
+	debug_msg("returning pagesize value of 0x%x " , cmd->pagesize);
+#else
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
+#endif
 	if (rc == PSL_SUCCESS) {
 		debug_msg("%s:RESPONSE tag=0x%02x code=0x%x", cmd->afu_name,
 			  event->tag, event->resp);

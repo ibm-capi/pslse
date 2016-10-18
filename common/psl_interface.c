@@ -419,7 +419,11 @@ int
 psl_response(struct AFU_EVENT *event,
 	     uint32_t tag,
 	     uint32_t response_code,
+#if defined PSL9 || defined PSL9lite
+	     int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize)
+#else
 	     int credits, uint32_t cache_state, uint32_t cache_position)
+#endif
 {
 	(void)tag;
 	if (event->response_valid) {
@@ -432,6 +436,9 @@ psl_response(struct AFU_EVENT *event,
 		event->credits = credits;
 		event->cache_state = cache_state;
 		event->cache_position = cache_position;
+#if defined PSL9 || defined PSL9lite
+		event->response_r_pgsize = pagesize;
+#endif
 		return PSL_SUCCESS;
 	}
 }
@@ -610,7 +617,11 @@ psl_get_command(struct AFU_EVENT *event,
 		uint32_t * tag_parity,
 		uint64_t * address,
 		uint64_t * address_parity,
+#if defined PSL9 || defined PSL9lite
+		uint32_t * size, uint32_t * abort, uint32_t * handle, uint32_t * cpagesize)
+#else
 		uint32_t * size, uint32_t * abort, uint32_t * handle)
+#endif
 {
 	if (!event->command_valid) {
 		return PSL_COMMAND_NOT_VALID;
@@ -625,6 +636,9 @@ psl_get_command(struct AFU_EVENT *event,
 		*size = event->command_size;
 		*abort = event->command_abort;
 		*handle = event->command_handle;
+#if defined PSL9 || defined PSL9lite
+		*cpagesize  = event-> command_cpagesize;
+#endif
 		return PSL_SUCCESS;
 	}
 }
@@ -751,6 +765,9 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 #ifdef PSL9
 		event->tbuf[bp++] = (((event->response_dma0_itag & 0x100) >> 8) | (event->response_dma0_itag_parity  << 4));
 		event->tbuf[bp++] = event->response_dma0_itag & 0xFF;
+	// eventually may need to add another char for response_ext too
+	// for now, we always return the default value for pagesize, set by pslse.parms
+		event->tbuf[bp++] = (event->response_r_pgsize & 0x0F);
 #endif
 		event->response_valid = 0;
 	}
@@ -848,7 +865,10 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)  {
 		// for Atomic memory ops, data xfer is always 16B; dsize refers to size of operand (4B or 8B)
 		// Atomic memory ops also have one more char to send on socket
-			event->tbuf[bp++] = (event->dma0_atomic_op ) & 0xFF;
+		// atomic_le will be ORed into bit 7 (msb) of dma0_atomic_op if set, LE order for atomic ops
+			event->tbuf[bp++] = (event->dma0_atomic_op ) & 0x3F;
+			if (event->dma0_atomic_le == 1)
+				event->tbuf[bp-1] |= 0x80;
 			printf("event->tbuf[8] is 0x%2x \n", event->tbuf[bp-1]);
 			for (i = 0; i < 16; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
@@ -918,6 +938,9 @@ printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%0
 			event->tbuf[bp++] =
 			    ((event->command_handle) >> ((1 - i) * 8)) & 0xFF;
 		}
+#if defined PSL9 || PSL9lite
+		event->tbuf[bp++] = event->command_cpagesize;
+#endif
 printf("PSL_SIGNAL_PSL_MODEL: event->command_valid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
 		event->command_valid = 0;
 	}
@@ -980,7 +1003,7 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 				return 1;
 			}
 		}
-//printf("PSL_GET_AFU_EVENT-1 - rbuf[0] is 0x%02x and e->rbp = %2d  \n", event->rbuf[0], event->rbp);
+printf("PSL_GET_AFU_EVENT-1 - rbuf[0] is 0x%02x and e->rbp = %2d  \n", event->rbuf[0], event->rbp);
 			if ((event->rbuf[0] & 0x08) != 0)
 				rbc += 10;
 			if ((event->rbuf[0] & 0x04) != 0)
@@ -988,11 +1011,17 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		 	if ((event->rbuf[0] & 0x02) != 0)
 				rbc += 130;
 			if ((event->rbuf[0] & 0x01) != 0)
+#if defined PSL9 || PSL9lite
+			// add one byte for cpagesize
+				rbc += 16;
+#else
 				rbc += 15;
+#endif 
+
 #ifdef PSL9
+//printf("PSL_GET_AFU_EVENT-2 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			if ((event->rbuf[0] & 0x80) != 0)  {
 				rbc += 7;
-//printf("PSL_GET_AFU_EVENT-2 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 		// this only gets us a dma rd op w/o data, have to add more to rbc for now just support 128B writes (more/less is a TODO)
 				//if ((bc = recv(event->sockfd, event->rbuf+1, 1, 0)) == -1) {
 				if ((bc = recv(event->sockfd, event->rbuf + event->rbp, 1, 0)) == -1) {
@@ -1011,7 +1040,7 @@ printf("psl_get_afu_event and we have a dma op \n");
 		// If this is an Atomic Memory Op, will have one extra char for atomic_op and 16 for data payload
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_ATOMIC)
 					rbc += 17;
-printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
+//printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			}
 #endif
 	}
@@ -1034,7 +1063,7 @@ printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[
 #ifdef PSL9
 	if ((event->rbuf[0] & 0x80) != 0) {
 		event->dma0_dvalid = 1;
-printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
+//printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		event->dma0_req_type = (event->rbuf[rbc] & 0x7);
 		printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
 		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
@@ -1067,7 +1096,13 @@ printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)  {
 		// for Atomic memory ops, data xfer is always 16B; dsize refers to size of operand (4B or 8B)
 		// Atomic memory ops also have one more char to send on socket
+		// if bit 7 (msb) of atomic_op ==1 then atomic_le gets set to 1, but we leave bit in atomic_op as it
+		// next gets transferred to libcxl for AMO emulation
 			event->dma0_atomic_op = event->rbuf[rbc++];
+			if ((event->dma0_atomic_op & 0x80) == 1) 
+				event->dma0_atomic_le = 1;
+			else
+				event->dma0_atomic_le = 0;
 		printf("event->dma0_atomic_op is 0x%3x \n", event->dma0_atomic_op);
 			for (bc = 0; bc < 16; bc++) {
 				 event->dma0_req_data[bc] = event->tbuf[rbc++]  ;
@@ -1144,7 +1179,10 @@ printf("received a cmd, rbuf[0] is 0x%2x \n", event->rbuf[0]);
 			event->command_handle =
 			    ((event->command_handle) << 8) | event->rbuf[rbc++];
 		}
-//printf(" rbc is %2d \n",rbc);
+#if defined PSL9 || defined PSL9lite
+		event->command_cpagesize = event->rbuf[rbc];
+#endif
+printf(" rbc is %2d \n",rbc);
 	} else {
 		event->command_valid = 0;
 	}
@@ -1190,8 +1228,8 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		if ((event->rbuf[0] & 0x08) != 0)
 			rbc += 12;
 		if ((event->rbuf[0] & 0x04) != 0)
-#ifdef PSL9  /* need two extra bytes in response for xlat response returns */
-			rbc += 8;
+#ifdef PSL9  /* need three extra bytes in response for xlat response returns and pagesize */
+			rbc += 9;
 #else
 			rbc += 6;
 #endif /* #ifdef PSL9 */
@@ -1357,6 +1395,7 @@ printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		event->response_dma0_itag = event->rbuf[rbc-1];
 		event->response_dma0_itag =
 		    (((event->response_dma0_itag) & 0x1) << 8) | event->rbuf[rbc++];
+		event->response_r_pgsize = event->rbuf[rbc];
 		//printf("PSL_GET_PSL_EVENTS:dma0_itag-full is 0x%x \n", event->response_dma0_itag);
 		//printf("PSL_GET_PSL_EVENTS:dma0_itag-parity is 0x%x \n", event->response_dma0_itag_parity);
 #endif
@@ -1411,7 +1450,11 @@ psl_afu_command(struct AFU_EVENT *event,
 		uint32_t code_parity,
 		uint64_t address,
 		uint64_t address_parity,
+#if defined PSL9 || defined PSL9lite
+		uint32_t size, uint32_t abort, uint32_t handle, uint32_t cpagesize)
+#else
 		uint32_t size, uint32_t abort, uint32_t handle)
+#endif
 {
 	if (event->command_valid) {
 		return PSL_DOUBLE_COMMAND;
@@ -1426,6 +1469,9 @@ psl_afu_command(struct AFU_EVENT *event,
 		event->command_size = size;
 		event->command_abort = abort;
 		event->command_handle = handle;
+#if defined PSL9 || defined PSL9lite
+		event->command_cpagesize = cpagesize;
+#endif
 		return PSL_SUCCESS;
 	}
 }
@@ -1505,6 +1551,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		uint32_t type,
 		uint32_t size,
 		uint32_t atomic_op,
+		uint32_t atomic_le,
 		uint8_t * dma_wr_data )
 
 {
@@ -1521,6 +1568,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		event->dma0_req_type = type;			
 		event->dma0_req_size = size;			
 		event->dma0_atomic_op = atomic_op;
+		event->dma0_atomic_le = atomic_le;
 	// For DMA write or atomic op need to send data - TODO add support for >128 up to 512B writes
 	// if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_128) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE))  
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128) { 
@@ -1529,7 +1577,10 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		}
 		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)  {  
 			memcpy(event->dma0_req_data, dma_wr_data, 16);
-			event->dma0_wr_credits--;
+			if (event->dma0_atomic_op < 0x20)
+				event->dma0_rd_credits --;
+			else	
+				event->dma0_wr_credits--;
 		}
 		if (event->dma0_req_type == DMA_DTYPE_RD_REQ)
 			event->dma0_rd_credits--;
@@ -1579,6 +1630,7 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 	} else {
 		utag = event->dma0_sent_utag;
 		sent_sts = event->dma0_sent_utag_status;
+		printf("sent_utag_sts is 0%x \n", event->dma0_sent_utag_status);
 		event->dma0_sent_utag_valid = 0;
 		//increment credit count here NOTE! This WON'T work for FAILED transactions! TODO
 		if (event->dma0_sent_utag_status == DMA_SENT_UTAG_STS_RD)
@@ -1588,7 +1640,7 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 		else
 			printf("Transaction FAILED, can't tell which credit counter to increment!! \n");
 
-printf("afu_get_dma0_sent_utag: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
+printf("afu_get_dma0_sent_utag: sent_sts is %d  rd_credit count is %d  wr_credit count is %d \n", sent_sts, event->dma0_rd_credits, event->dma0_wr_credits);
 		return PSL_SUCCESS;
 	}
 }
