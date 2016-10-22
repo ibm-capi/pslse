@@ -89,6 +89,7 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
 	uint32_t c_d0h_dsize;
 	uint8_t  c_d0h_ddata[CACHELINE_BYTES];
 	uint32_t c_d0h_datomic_op;
+	uint32_t c_d0h_datomic_le;
 
 // Function declaration
 
@@ -253,13 +254,14 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
              svLogicVecVal       *ha_rcachestate_top, 		// 2 bits	: PSL9 interface has defined it as unused
              svLogicVecVal       *ha_rcachepos_top, 		// 13 bits	: PSL9 interface has defined it as unused
              svLogicVecVal       *ha_rcredits_top,		// 9 bits	; to be driven to a constant value of 9'h1
-	     const svLogic	 d0h_dvalid_top,		// TODO: all the following ports are to be processed
+	     const svLogic	 d0h_dvalid_top,		// PSL9 DMA interface
 	     const svLogicVecVal *d0h_req_utag_top,		// 10 bits
 	     const svLogicVecVal *d0h_req_itag_top,		// 9 bits
 	     const svLogicVecVal *d0h_dtype_top,		// 3 bits
 	     const svLogicVecVal *d0h_dsize_top,		// 10 bits
 	     const svLogicVecVal *d0h_ddata_top,		// 1024 bits
 	     const svLogicVecVal *d0h_datomic_op_top,		// 6 bits
+	     const svLogic	 d0h_datomic_le_top,
 	           svLogic       *hd0_sent_utag_valid_top,  
 	           svLogicVecVal *hd0_sent_utag_top,  
 	           svLogicVecVal *hd0_sent_utag_sts_top,  
@@ -378,7 +380,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     c_d0h_dsize	= (d0h_dsize_top->aval) 	& 0x3FF;	// 10 bits;
              getMyCacheLine(d0h_ddata_top, c_d0h_ddata);
 	     c_d0h_datomic_op	= (d0h_datomic_op_top->aval) 	& 0x3FF;	// 10 bits;
-	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_datomic_op, c_d0h_ddata);
+	     c_d0h_datomic_le	= (d0h_datomic_le_top & 0x2) ? 0 : (d0h_datomic_le_top & 0x1);
+	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_datomic_op, c_d0h_datomic_le, c_d0h_ddata);
 	   }
 	} else {
 	  //psl();	// the psl() function from PLI is going to be split into several subsidiary functions
@@ -529,7 +532,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    printf("Command Valid: ccom=0x%x\n", c_ah_ccom);
   	    event.room   = c_ha_croom;
   	    psl_afu_command(&event, c_ah_ctag, c_ah_ctagpar, c_ah_ccom, c_ah_ccompar, c_ah_cea, c_ah_ceapar, c_ah_csize,
-	 		   c_ah_cabt, c_ah_cch);
+	 		   c_ah_cabt, c_ah_cch, c_ah_cpagesize);
 	  }
 	  // Replication of acceleartor command interface ends
 	  // NEW PSL9 function ------------------ DMA0 port CMPL handling -------------
