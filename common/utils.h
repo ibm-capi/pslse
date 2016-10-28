@@ -141,4 +141,10 @@ void generate_cl_parity(uint8_t * data, uint8_t * parity);
 // Gracefully shutdown and close socket connection
 int close_socket(int *sockfd);
 
+//sign extend a 32b integer
+int32_t sign_extend(uint32_t in_op);
+
+//sign extend a 64b integer
+int64_t sign_extend64(uint64_t in_op);
+
 #endif				/* _UTILS_H_ */

@@ -330,3 +330,27 @@ int close_socket(int *sockfd)
 
 	return 0;
 }
+
+// sign extend a 32bit integer
+int32_t sign_extend (uint32_t in_op)
+{
+	int32_t lvalue;
+	lvalue = (uint32_t) (1 << 31);
+	if ((in_op & lvalue) != 0)
+		in_op |= ~(lvalue-1);
+	else
+		in_op &= (lvalue-1);
+	return in_op;
+}
+// sign extend a 64bit integer
+int64_t sign_extend64 (uint64_t in_op)
+{
+	int64_t lvalue;
+	//lvalue = (uint64_t) (1ULL << 63);
+	lvalue = 1ULL << 63;
+	if ((in_op & lvalue) != 0)
+		in_op |= ~(lvalue-1);
+	else
+		in_op &= (lvalue-1);
+	return in_op;
+}

@@ -872,8 +872,8 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 			printf("event->tbuf[8] is 0x%2x \n", event->tbuf[bp-1]);
 			for (i = 0; i < 16; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
-				//printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
-				//printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
+			//	printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
+				printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
 			}
 		}
 printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
@@ -1019,7 +1019,7 @@ printf("PSL_GET_AFU_EVENT-1 - rbuf[0] is 0x%02x and e->rbp = %2d  \n", event->rb
 #endif 
 
 #ifdef PSL9
-//printf("PSL_GET_AFU_EVENT-2 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
+printf("PSL_GET_AFU_EVENT-2 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			if ((event->rbuf[0] & 0x80) != 0)  {
 				rbc += 7;
 		// this only gets us a dma rd op w/o data, have to add more to rbc for now just support 128B writes (more/less is a TODO)
@@ -1063,7 +1063,7 @@ printf("psl_get_afu_event and we have a dma op \n");
 #ifdef PSL9
 	if ((event->rbuf[0] & 0x80) != 0) {
 		event->dma0_dvalid = 1;
-//printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
+printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		event->dma0_req_type = (event->rbuf[rbc] & 0x7);
 		printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
 		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
@@ -1105,8 +1105,9 @@ printf("psl_get_afu_event and we have a dma op \n");
 				event->dma0_atomic_le = 0;
 		printf("event->dma0_atomic_op is 0x%3x \n", event->dma0_atomic_op);
 			for (bc = 0; bc < 16; bc++) {
-				 event->dma0_req_data[bc] = event->tbuf[rbc++]  ;
-				//printf("data is 0x%2x,  rbc is %d  \n", event->dma0_req_data[rbc], rbc);
+				event->dma0_req_data[bc] = event->rbuf[rbc++];
+			//printf("data is 0x%2x, bc is %d, rbc is %d \n", event->rbuf[rbc-1], bc, rbc-1);
+			//	printf("data is 0x%2x,  rbc is %d  \n", event->dma0_req_data[rbc], rbc);
 			}
 		}
 
@@ -1269,7 +1270,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 			// this will be bc for  dma read cpl data, have to also add 7  
 					rbc = rbc + 7 + event->rbuf[2];
 	
-//printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
+printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
 			}
 
 		}	
@@ -1396,8 +1397,8 @@ printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		event->response_dma0_itag =
 		    (((event->response_dma0_itag) & 0x1) << 8) | event->rbuf[rbc++];
 		event->response_r_pgsize = event->rbuf[rbc];
-		//printf("PSL_GET_PSL_EVENTS:dma0_itag-full is 0x%x \n", event->response_dma0_itag);
-		//printf("PSL_GET_PSL_EVENTS:dma0_itag-parity is 0x%x \n", event->response_dma0_itag_parity);
+		printf("PSL_GET_PSL_EVENTS:tag is 0x%x \n", event->response_tag);
+		printf("PSL_GET_PSL_EVENTS:response_code is 0x%x \n", event->response_code);
 #endif
 
 
