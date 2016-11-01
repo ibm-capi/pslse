@@ -726,6 +726,7 @@ void handle_buffer_write(struct cmd *cmd)
 		  // client->wed uint64
 		  // event->data[116:123] is wed portion
 		  memcpy((void *)&(event->data[116]),(void *)&(client->wed), 8);
+		  generate_cl_parity(event->data, event->parity);
 		  event->state = MEM_RECEIVED;
 		  debug_msg("%s:PROCESS ELEMENT READ tag=0x%02x handle=%d",
 			    cmd->afu_name, event->tag, event->context);

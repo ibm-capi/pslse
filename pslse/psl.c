@@ -89,7 +89,9 @@ static void _attach(struct psl *psl, struct client *client)
 	// interestingly, I can always save it
 	// add to client type.
 	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
-	client->wed = ntohll(wed);
+	// wed came over in be format
+	// since we are modeling the psl register here, we should leave it be
+	client->wed = wed; // ntohll(wed);
 
 	// Send start to AFU
 	// only add PSL_JOB_START for dedicated and master clients.
