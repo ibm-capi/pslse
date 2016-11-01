@@ -28,6 +28,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "libcxl.h"
 #include "libcxl_internal.h"
@@ -344,17 +345,19 @@ static void _handle_ack(struct cxl_afu_h *afu)
 
 #ifdef PSL9
 
-static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t addr, uint8_t size,
-			  uint8_t * data)
+static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t addr,
+			  uint8_t function_code, uint64_t op1, uint64_t op2)
 {
 
 	uint8_t atomic_op;
 	uint8_t atomic_le;
 	uint8_t buffer;
 	uint8_t wbuffer[9];
-	uint32_t lvalue, op_A;
-	uint64_t llvalue, op_Al;
-	int op_ptr, op1_ptr, op2_ptr;
+	int32_t slvalue;
+	uint32_t lvalue, op_A, op_1, op_2;
+	uint64_t llvalue, op_Al, op_1l, op_2l;
+	int64_t sllvalue;
+	int op_ptr;
 	char wb;
 
 	if (!afu)
@@ -367,29 +370,59 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 		DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
 		return;
 	}
-	// figure out where OP1 / 2 are in data
+	// select op_1 & op_2 based on op_size & addr [60:61]
 	op_ptr = (int) (addr & 0x000000000000000c);
 	switch (op_ptr) {
 		case 0x0:
-			op1_ptr = 0;
-			op2_ptr = 8;
+			if (op_size == 4) {
+				op_1 = (uint32_t) (op1 >>32);
+				op_2 = (uint32_t) (op2 >> 32);
+			} else if (op_size == 8) {
+				op_1l = op1;
+				op_2l = op2;
+	printf(" case 0: op_1l is %016"PRIx64 "\n", op_1l);
+			}
 			break;
 		case 0x4:
-			op1_ptr = 4;
-			op2_ptr = 12;
+			if (op_size == 4) {
+				op_1 = (uint32_t) op1;
+				op_2 = (uint32_t) op2;
+			} else if (op_size == 8) {
+				DPRINTF("INVALID op_size  0x%x for  addr  0x%016" PRIx64 "\n", op_size, addr);
+				buffer = (uint8_t) PSLSE_MEM_FAILURE;
+				if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+					afu->opened = 0;
+					afu->attached = 0;
+				}	
+				return;
+			}
 			break;
 		case 0x8:
-			op1_ptr = 8;
-			op2_ptr = 0;
+			if (op_size == 4) {
+				op_1 = (uint32_t) (op1 >>32);
+				op_2 = (uint32_t) (op2 >> 32);
+			} else if (op_size == 8) {
+				op_1l = op2;
+				op_2l = op1;
+	printf(" case 8: op_1l is %016"PRIx64 "\n", op_1l);
+			}
 			break;
 		case 0xc:
-			op1_ptr = 12;
-			op2_ptr = 4;
+			if (op_size == 4) {
+				op_1 = (uint32_t) op2;
+				op_2 = (uint32_t) op1;
+			} else if (op_size == 8) {
+				DPRINTF("INVALID op_size  0x%x for  addr  0x%016" PRIx64 "\n", op_size, addr);
+				buffer = (uint8_t) PSLSE_MEM_FAILURE;
+				if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+					afu->opened = 0;
+					afu->attached = 0;
+				}	
+				return;
+			}
 			break;
 		default:
 			warn_msg("received invalid value op_ptr value of 0x%x ", op_ptr);
-			op1_ptr = 0;
-			op2_ptr = 0;
 			break;
 	}
 
@@ -397,205 +430,441 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 	if (op_size == 0x4) {
 		memcpy((char *) &lvalue, (void *)addr, op_size);
 		op_A = (uint32_t)(lvalue);
-		memcpy ((&lvalue + op1_ptr), &data[11], 4);
-	printf("op_A is %08"PRIx32 " and lvalue is %08"PRIx32 "\n", op_A, lvalue);
+	printf("op_A is %08"PRIx32 " and op_1 is %08"PRIx32 "\n", op_A, op_1);
 	} else if (op_size == 0x8) {
 
 		memcpy((char *) &llvalue, (void *)addr, op_size);
 		op_Al = (uint64_t)(llvalue);
-		memcpy ((&llvalue + op1_ptr), &data[11], 8);
-	printf("op_Al is %016"PRIx64 " and llvalue is %016"PRIx64 "\n", op_Al, llvalue);
+	printf("op_Al is %016"PRIx64 " and op_1l is %016"PRIx64 "\n", op_Al, op_1l);
+	printf("llvalue read from location -> by addr is %016" PRIx64 " and addr is 0x%016" PRIx64 " \n", llvalue, addr);
+
 	} else // need else error bc only valid sizes are 4 or 8
 		warn_msg("unsupported op_size of 0x%2x \n", op_size);
-	atomic_op = data[0];
+	atomic_op = function_code;
 	// Remove and read atomic_le from bit7 of data[0]
 	if ((atomic_op & 0x80) == 0x80) {
 		atomic_le = 1;
 		atomic_op &= 0x3F;
 	} else
 		atomic_le = 0;
-	debug_msg("processing atomic_op = 0x%2x ", atomic_op);
+	// TODO add code to handle le bit (right now, test afu is le but need to handle be afus)
+	debug_msg("_handle_DMO_OPs:  atomic_op = 0x%2x and atomic_le = 0x%x ", atomic_op, atomic_le);
 	switch (atomic_op) {
-			/* addr specifies the location of an address aligned
- * 4 or 8 byte first operand (op_A), which is modified using the second
- * operand provided during the write data tenure (lvalue), and the function specified
- * in the secondary encode. The result of the function is returned to memory.
- * The original value from the memory location is returned to the AFU as completion data */
+			/* addr = location of an address aligned 4 or 8 byte first operand (op_A),
+ *  which is modified with operand provided by AFU (op_1 or op_1l). AFU also provides the function
+ *  encode (op_code). The result is returned to memory, the original value is returned to the AFU as completion data */
 			case AMO_ARMWF_ADD:
 				if  (op_size == 4) {
-				printf("ADD %08"PRIx32" to %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
-					lvalue += op_A;
+				printf("ADD %08"PRIx32" to %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+					op_1 += op_A;
 					wb = 1;
 				} else {
-				printf("ADD %016"PRIx64" to %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
-					llvalue += op_Al;
+				printf("ADD %016"PRIx64" to %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+					op_1l += op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_XOR:
 				if  (op_size == 4) {
-				printf("XOR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
-					lvalue ^= op_A;
+				printf("XOR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+					op_1 ^= op_A;
 					wb = 1;
 				} else {
-				printf("XOR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
-					llvalue ^= op_Al;
+				printf("XOR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+					op_1l ^= op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_OR:
 				if  (op_size == 4) {
-				printf("OR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
-					lvalue |= op_A;
+				printf("OR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+					op_1 |= op_A;
 					wb = 1;
 				} else {
-				printf("OR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
-					llvalue |= op_Al;
+				printf("OR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+					op_1l |= op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_AND:
 				if  (op_size == 4) {
-				printf("AND %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, lvalue);
-					lvalue &= op_A;
+				printf("AND %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+					op_1 &= op_A;
 					wb = 1;
 				} else {
-				printf("AND %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, llvalue);
-					llvalue &= op_Al;
+				printf("AND %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+					op_1l &= op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_CAS_MAX_U:
+				if  (op_size == 4) {
+				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " , store larger & return op_A \n", op_A, op_1);
+					if (op_A > op_1)
+						op_1 = op_A;   
+					wb = 1;
+				} else {
+				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " , store larger & return op_Al  \n", op_Al, op_1l);
+					if (op_Al > op_1l)
+						op_1l = op_Al;   
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_CAS_MAX_S:
+				// sign extend op_A and op_1 and then cast as int and do comparison
+				if (op_size == 4) {
+					slvalue = (uint32_t) (1 << 31);
+					if ((op_A & slvalue) != 0)
+						op_A |= ~(slvalue-1);
+					else
+						op_A &= (slvalue-1);
+					if ((op_1 & slvalue) != 0)
+						op_1 |= ~(slvalue-1);
+					else
+						op_1 &= (slvalue-1);
+				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store larger & return op_A \n", op_A, op_1);
+					if ((int32_t)op_A > (int32_t)op_1)
+						op_1 = op_A;   
+					wb = 1;
+				} else {
+					sllvalue = (uint64_t) (1ULL << 63);
+				printf("sllvalue is %016"PRIx64" \n", sllvalue);
+					if ((op_Al & sllvalue) != 0)
+						op_Al |= ~(sllvalue-1);
+					else
+						op_Al &= (sllvalue-1);
+					if ((op_1l & sllvalue) != 0)
+						op_1l |= ~(sllvalue-1);
+					else
+						op_1l &= (sllvalue-1);
+				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store larger & return op_Al  \n", op_Al, op_1l);
+					if ((int64_t)op_Al > (int64_t)op_1l)
+						op_1l = op_Al;   
+					wb = 2;
+				};
+				break;
 			case AMO_ARMWF_CAS_MIN_U:
+				if  (op_size == 4) {
+				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store smaller & return op_A \n", op_A, op_1);
+					if (op_A < op_1)
+						op_1 = op_A;  
+					wb = 1;
+				} else {
+				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al \n", op_Al, op_1l);
+					if (op_Al < op_1l)
+						op_1l = op_Al;  
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_CAS_MIN_S:
-			/* The address specifies the location of an 
- * address aligned 4 or 8 byte first operand (A), which is compared using 
- * the second operand provided during the data tenure (V), which is from 
- * the master to the LPC, and the function specified in the secondary encode. 
- * If the result of the compare is true, then the third operand (W) provided 
- * during the operation’s write data tenure is placed at the memory location 
- * specified for the first operand (A). The original value from the memory location 
- * specified by the command is returned to the master during a read data tenure, */
+				if (op_size == 4) {
+					op_A = sign_extend(op_A);
+					op_1 = sign_extend(op_1);
+				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store smaller & return op_A \n", op_A, op_1);
+					if ((int32_t)op_A < (int32_t)op_1)
+						op_1 = op_A;   
+					wb = 1;
+				} else {
+					op_Al = sign_extend(op_Al);
+					op_1l = sign_extend(op_1l);
+				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al \n", op_Al, op_1l);
+					if ((int64_t)op_Al < (int64_t)op_1l)
+						op_1l = op_Al;   
+					wb = 2;
+				}
+				break;
+			/* addr = location of an address aligned 4 or 8 byte first operand (op_A),
+ * which is compared to the operand provided by AFU (op_1 or (op_1l). AFU also provides the function
+ * encode (op_code. If result of compare is true, the third operand provided by AFU (op_2 or op_2l)
+ * is written to memory at location specified for op_A. Original value of op_A is returned to AFU. */
 			case AMO_ARMWF_CAS_U:
+				if  (op_size == 4) {
+				printf("COMPARE & SWAP  %08"PRIx32" with %08"PRIx32 " ,store op_2 & return op_A \n", op_A, op_1);
+					op_1 = op_2;  
+					wb = 1;
+				} else {
+				printf("COMPARE & SWAP  %016"PRIx64" with %016"PRIx64 " ,store op_2l & return op_Al \n", op_Al, op_1l);
+					op_1l = op_2;  
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_CAS_E:
+				if  (op_size == 4) {
+				printf("COMPARE & SWAP == %08"PRIx32" with %08"PRIx32 " ,if true store op_2 & return op_A \n", op_A, op_1);
+					if (op_A == op_1)
+						op_1 = op_2;  
+					wb = 1;
+				} else {
+				printf("COMPARE & SWAP == %016"PRIx64" with %016"PRIx64 " ,if true store op_2l & return op_Al \n", op_Al, op_1l);
+					if (op_Al == op_1l)
+						op_1l = op_2;  
+					wb = 2;
+				}
+				break;
 			case AMO_ARMWF_CAS_NE:
-			/* The address specifies the location of two address 
- * aligned 4 or 8 byte operands. The first operand A is found at the address specified. 
- * The second operand A2 is found at the address specified with an offset specified by 
- * the width of the operands and the operation. The specification of the address is 
- * constrained to be naturally aligned and
+				if  (op_size == 4) {
+				printf("COMPARE & SWAP != %08"PRIx32" with %08"PRIx32 " ,if true, store op_2 & return op_A \n", op_A, op_1);
+					if (op_A != op_1)
+						op_1 = op_2;  
+					wb = 1;
+				} else {
+				printf("COMPARE & SWAP != %016"PRIx64" with %016"PRIx64 " ,if true, store op_2l & return op_Al \n", op_Al, op_1l);
+					if (op_Al != op_1l)
+						op_1l = op_2;  
+					wb = 2;
+				}
+				break;
+			/* addr = location of two address aligned 4 or 8 byte operands.
+ * The first operand A is found at the address specified; second operand A2 is found at
+ * addr + 4 or addr +8, depending on widths of operands. 
  *  • cannot target locations at 32n-2bin2dec(‘1L’), where n = 1,2,3... (armwf_inc_b, armwf_inc_e)
  *  • cannot target locations at 32n, when n = 0, 1, 2, 3... (armwf_dec_b)
- * The original value from the memory location specified by the command, or the 
- * 4 or 8 byte minimum signed integer value17 is returned to the master during the read data tenure */
+ * The original value from memory, or (1 << (s*8 -1)) is returned (s = 4 or 8) */
 			case AMO_ARMWF_INC_B:
-			case AMO_ARMWF_INC_E:
-			case AMO_ARMWF_DEC_B:
-				// we don't do anything yet but read location EA and return it via cmpl_data
-				printf("AMO instruction not implemented yet \n");
-				wb = 0;
+				if  (op_size == 4) {
+					memcpy((char *) &lvalue, (void *)addr+4, op_size);
+					op_1 = (uint32_t)(lvalue);
+				printf("COMPARE & INC Bounded %08"PRIx32" with %08"PRIx32 ", if !=, inc op_A, ret orig op_A, else..\n", op_A, op_1);
+					if (op_A != op_1)
+						op_1 = op_A +1;  
+					else
+						op_A = (1 << 31);
+					wb = 1;
+				} else {
+					memcpy((char *) &llvalue, (void *)addr+8, op_size);
+					op_1l = (uint64_t)(llvalue);
+				printf("COMPARE & INC Equal %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
+					if (op_Al == op_1l)
+						op_1l = op_A +1;
+					else
+						op_Al = (1ULL << 63);  
+					wb = 2;
+				}
 				break;
-			/* The address specifies the location of an address 
- * aligned 4 or 8 byte first operand (A), which is modified using the second 
- * operand provided during the data tenure (V), which is from the master to 
- * the LPC, and the function specified in the secondary encode. The result of the 
- * function is returned to memory */
+			case AMO_ARMWF_INC_E:
+				if  (op_size == 4) {
+					memcpy((char *) &lvalue, (void *)addr+4, op_size);
+					op_1 = (uint32_t)(lvalue);
+				printf("COMPARE & INC Equal %08"PRIx32" with %08"PRIx32 ", if =, inc op_A, ret orig op_A, else..\n", op_A, op_1);
+					if (op_A == op_1)
+						op_1 = op_A +1;  
+					else
+						op_A = (1 << 31);
+					wb = 1;
+				} else {
+					memcpy((char *) &llvalue, (void *)addr+8, op_size);
+					op_1l = (uint64_t)(llvalue);
+				printf("COMPARE & INC Equal %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
+					if (op_Al == op_1l)
+						op_1l = op_A +1;
+					else  
+						op_Al = (int64_t) (1ULL <<63);
+					//	op_Al = (1 << 63);  
+					wb = 2;
+				}
+				break;
+			case AMO_ARMWF_DEC_B:
+				if  (op_size == 4) {
+					memcpy((char *) &lvalue, (void *)addr+4, op_size);
+					op_1 = (uint32_t)(lvalue);
+				printf("COMPARE & DEC Bounded %08"PRIx32" with %08"PRIx32 ", if != dec op_A, ret orig op_A, else..\n", op_A, op_1);
+					if (op_A != op_1)
+						op_1 = op_A -1;  
+					else
+						op_A = (1 << 31);
+					wb = 1;
+				} else {
+					memcpy((char *) &llvalue, (void *)addr+8, op_size);
+					op_1l = (uint64_t)(llvalue);
+				printf("COMPARE & DEC Bounded %016"PRIx64" with %016"PRIx64 ", if !=, dec op_A, ret orig op_a, else..\n", op_Al, op_1l);
+					if (op_Al != op_1l)
+						op_1l = op_A -1;
+					else
+						op_Al = (1ULL << 63);  
+					wb = 2;
+				}
+				break;
+			/* addr = location of an address aligned 4 or 8 byte first operand (op_A),
+ *  which is modified with operand provided by AFU (op_1 or op_1l). AFU also provides the function
+ *  encode (op_code). The result is returned to memory, the original value is returned to the AFU as completion data */
 			case AMO_ARMW_ADD:
 				if  (op_size == 4) {
-				printf("ADD %08"PRIx32" to %08"PRIx32 " and store it  \n", op_A, lvalue);
-					lvalue += op_A;
+				printf("ADD %08"PRIx32" to %08"PRIx32 " and store it  \n", op_A, op_1);
+					op_1 += op_A;
 				} else {
-				printf("ADD %016"PRIx64" to %016"PRIx64 " and store it  \n", op_Al, llvalue);
-					llvalue += op_Al;
+				printf("ADD %016"PRIx64" to %016"PRIx64 " and store it  \n", op_Al, op_1l);
+					op_1l += op_Al;
 				}
 				wb = 0;
 				break;
 
 			case AMO_ARMW_XOR:
 				if  (op_size == 4) {
-				printf("XOR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, lvalue);
-					lvalue ^= op_A;
+				printf("XOR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, op_1);
+					op_1 ^= op_A;
 				} else {
-				printf("XOR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, llvalue);
-					llvalue ^= op_Al;
+				printf("XOR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, op_1l);
+					op_1l ^= op_Al;
 				}
 				wb = 0;
 				break;
 			case AMO_ARMW_OR:
 				if  (op_size == 4) {
-				printf("OR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, lvalue);
-					lvalue |= op_A;
+				printf("OR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, op_1);
+					op_1 |= op_A;
 				} else {
-				printf("OR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, llvalue);
-					llvalue |= op_Al;
+				printf("OR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, op_1l);
+					op_1l |= op_Al;
 				}
 				wb = 0;
 				break;
 			case AMO_ARMW_AND:
 				if  (op_size == 4) {
-				printf("AND %08"PRIx32" with %08"PRIx32 " and store it \n", op_A, lvalue);
-					lvalue &= op_A;
+				printf("AND %08"PRIx32" with %08"PRIx32 " and store it \n", op_A, op_1);
+					op_1 &= op_A;
 				} else {
-				printf("AND %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, llvalue);
-					llvalue &= op_Al;
+				printf("AND %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, op_1l);
+					op_1l &= op_Al;
 				}
 				wb = 0;
 				break;
 			case AMO_ARMW_CAS_MAX_U:
-			case AMO_ARMW_CAS_MAX_S:
-			case AMO_ARMW_CAS_MIN_U:
-			case AMO_ARMW_CAS_MIN_S:
-			/* The address specifies the location of two address 
- * aligned 4 or 8 byte operands. The first operand A is found at the address specified. 
- * The second operand A2 is found at the address specified plus an offset specified by 
- * the width of the operands. The specification of the address is constrained to be
- * naturally aligned and cannot target locations at 32n-2bin2dec(‘1L’), where n = 1,2,3... 
- * A third operand V is provided during the write data tenure which is from the master to the LPC. */
-			case AMO_ARMW_CAS_T:
-				// we don't do anything yet but write location EA 
-				printf("AMO instruction not implemented yet \n");
+				if  (op_size == 4) {
+				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the larger \n", op_A, op_1);
+					if (op_A > op_1)
+						op_1 = op_A;  
+				} else {
+				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  \n", op_Al, op_1l);
+					if (op_Al > op_1l)
+						op_1l = op_Al; 
+				}
 				wb = 0;
 				break;
-			default:
+
+			case AMO_ARMW_CAS_MAX_S:
+				// sign extend op_A and op_1 and then cast as int and do comparison
+				if (op_size == 4) {
+					op_A = sign_extend(op_A);
+					op_1 = sign_extend(op_1);
+				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the larger \n", op_A, op_1);
+					if ((int32_t)op_A > (int32_t)op_1)
+						op_1 = op_A;   
+					wb = 0;
+				} else {
+					op_Al = sign_extend(op_Al);
+					op_1l = sign_extend(op_1l);
+				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  \n", op_Al, op_1l);
+					if ((int64_t)op_Al > (int64_t)op_1l)
+						op_1l = op_Al;   
+					wb = 0;
+				}
+				break;
+			case AMO_ARMW_CAS_MIN_U:
+				if  (op_size == 4) {
+				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the smaller \n", op_A, op_1);
+					if (op_A < op_1)
+						op_1 = op_A;   
+				} else {
+				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  \n", op_Al, op_1l);
+					if (op_Al < op_1l)
+						op_1l = op_Al; 
+				}
 				wb = 0;
+				break;
+			case AMO_ARMW_CAS_MIN_S:
+				if (op_size == 4) {
+					op_A = sign_extend(op_A);
+					op_1 = sign_extend(op_1);
+				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the smaller \n", op_A, op_1);
+					if ((int32_t)op_A < (int32_t)op_1)
+						op_1 = op_A;   
+					wb = 0;
+				} else {
+					op_Al = sign_extend(op_Al);
+					op_1l = sign_extend(op_1l);
+				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  \n", op_Al, op_1l);
+					if ((int64_t)op_Al < (int64_t)op_1l)
+						op_1l = op_Al;   
+					wb = 0;
+				}
+				break;
+			/* addr = location of two address aligned 4 or 8 byte operands.
+ * The first operand A is at addr; second operand A2 is at addr+  or addr+8, depending on widths of operands.
+ * The address must be naturally aligned and cannot target locations at 32n-2bin2dec(‘1L’), where n = 1,2,3... 
+ * The AFU provides a third operand, op_1 or op_1, and will be stored at addr and addr+4 if A1 == A2. */
+			case AMO_ARMW_CAS_T:
+				if  (op_size == 4) {
+					memcpy((char *) &lvalue, (void *)addr+4, op_size);
+					op_2 = (uint32_t)(lvalue);
+				printf("STORE TWIN compare %08"PRIx32" with %08"PRIx32 ", if == store op_1 to both locations\n", op_A, op_2);
+					if (op_A == op_2) 
+						op_2 = op_1;  
+					else 
+						op_1 = op_A;	
+					wb = 0;
+				} else {
+					memcpy((char *) &llvalue, (void *)addr+8, op_size);
+					op_2l = (uint64_t)(llvalue);
+				printf("STORE TWIN compare %016"PRIx64" with %016"PRIx64 ", if == store op_1l to both locations\n", op_Al, op_2l);
+					if (op_Al == op_2l)
+						op_2l = op_1l;
+					else
+						op_1l = op_Al;
+					wb = 0;
+				}
+				break;
+			default:
+				wb = 0xf;
 				warn_msg("Unsupported AMO command 0x%04x", atomic_op);
 				break;
 			}
-// every op has a write to store something to the original EA
-	if (op_size == 4)
-		memcpy ((void *)addr, &lvalue, op_size);
-	else // only other supported size is 8
-		memcpy ((void *)addr, &llvalue, op_size);
-	DPRINTF("WRITE to addr @ 0x%016" PRIx64 "\n", addr);
+	// every VALID op has a write to store something to the original EA, unless STORE TWIN !=
+	if (wb != 0xf) {
+		if (op_size == 4) {
+			memcpy ((void *)addr, &op_1, op_size);
+			DPRINTF("WRITE to addr @ 0x%016" PRIx64 " with results of 0x%08" PRIX32 " \n", addr, op_1);
+			// if this was STORE TWIN, write op_2 to addr+4 
+			if ((atomic_op) == AMO_ARMW_CAS_T) {
+				memcpy ((void *)addr+4, &op_2, op_size);
+				DPRINTF("WRITE to addr+4 @ 0x%016" PRIx64 " with results of 0x%08" PRIX32 " \n", addr+4, op_2);
+			}
+		} else  {// only other supported size is 8
+			memcpy ((void *)addr, &op_1l, op_size);
+			DPRINTF("WRITE to addr @ 0x%016" PRIx64 " with results of 0x%016" PRIX64 "\n", addr, op_1l);
+			// if this was STORE TWIN, write op_2l to addr+8 
+			if ((atomic_op) == AMO_ARMW_CAS_T) {
+				memcpy ((void *)addr+8, &op_2l, op_size);
+				DPRINTF("WRITE to addr+8 @ 0x%016" PRIx64 " with results of 0x%016" PRIX64 " \n", addr+8, op_2l);
+			}
+		}
+	}
 
-
-// only AMO_ARMWF_* commands need to return back original data from EA, otherwise just MEM ACK
+// only AMO_ARMWF_* commands return back original data from EA, otherwise just MEM ACK
 	switch (wb)  {
 			case 0:
 				buffer = PSLSE_MEM_SUCCESS;
 				if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
-				afu->opened = 0;
-				afu->attached = 0;
+					afu->opened = 0;
+					afu->attached = 0;
 				}
-				//DPRINTF("WRITE to addr @ 0x%016" PRIx64 "\n", addr);
 				break;
 			case 1:
 				wbuffer[0] = PSLSE_MEM_SUCCESS;
+				//op_A = htonl (op_A); //Not sure this is needed? gets treated as one big data stream
 				memcpy(&(wbuffer[1]), (void *)&op_A, op_size);
 				if (put_bytes_silent(afu->fd, op_size + 1, wbuffer) != op_size + 1) {
-				afu->opened = 0;
-				afu->attached = 0;
+					afu->opened = 0;
+					afu->attached = 0;
 				}		
 				DPRINTF("READ from addr @ 0x%016" PRIx64 "\n", addr);
 				break;
 			case 2:
 				wbuffer[0] = PSLSE_MEM_SUCCESS;
+				//op_Al = htonll (op_Al); //Not sure this is needed? gets treated as one big data stream
 				memcpy(&(wbuffer[1]), (void *)&op_Al, op_size);
-	printf("op_Al is %016"PRIx64 " and llvalue is %016"PRIx64 "\n", op_Al, llvalue);
 				if (put_bytes_silent(afu->fd, op_size + 1, wbuffer) != op_size + 1) {
-				afu->opened = 0;
-				afu->attached = 0;
+					afu->opened = 0;
+					afu->attached = 0;
 				}		
 				DPRINTF("READ from addr @ 0x%016" PRIx64 "\n", addr);
 				break;
@@ -781,11 +1050,11 @@ static void *_psl_loop(void *ptr)
 {
 	struct cxl_afu_h *afu = (struct cxl_afu_h *)ptr;
 	uint8_t buffer[MAX_LINE_CHARS];
-	uint8_t size, op_size;
+	uint8_t size, op_size, function_code;
 	uint64_t addr;
 	uint16_t value;
 	uint32_t lvalue;
-	uint64_t llvalue;
+	uint64_t llvalue, op1, op2;
 	int rc;
 
 	if (!afu)
@@ -1011,13 +1280,25 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
+	printf(" addr is 0x%016" PRIx64 "\n", addr);
 			addr = ntohll(addr);
+	printf(" addr is 0x%016" PRIx64 "\n", addr);
 			if (get_bytes_silent(afu->fd, (17 * sizeof(uint8_t)), buffer,
 					     -1, 0) < 0) {
 				_all_idle(afu);
 				break;
 			}
-			_handle_DMO_OPs(afu, op_size, addr, 17, buffer);	
+			function_code = (uint8_t) buffer[0];
+			memcpy((char *)&op1, (char *)&buffer[1], sizeof(uint64_t));
+			printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", op1);
+			//op1 = ntohll (op1);
+			printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", op1);
+			memcpy((char *)&op2, (char *)&buffer[9], sizeof(uint64_t));
+			printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", op2);
+			//op2 = ntohll (op2);
+			printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", op2);
+			
+			_handle_DMO_OPs(afu, op_size, addr, function_code, op1, op2);	
 			break;
 
 
