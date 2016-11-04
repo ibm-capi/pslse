@@ -85,20 +85,10 @@ struct cmd *cmd_init(struct AFU_EVENT *afu_event, struct parms *parms,
 	cmd->afu_name = afu_name;
 	cmd->dbg_fp = dbg_fp;
 	cmd->dbg_id = dbg_id;
-#ifdef PSL9
-	//cmd->dma0_rd_credits = MAX_DMA0_RD_CREDITS;
-	//cmd->dma0_wr_credits = MAX_DMA0_WR_CREDITS;
-
-	// Initialize caia2 handler
-//	cmd->dma_op = (struct dma_event *)calloc(1, sizeof(struct dma_event));
-//	if (!cmd->dma_op) {
-//		perror("dma_op init");
-//		exit(-1);
-//	}
         
-
-cmd->afu_event->dma0_dvalid = 0;
-	#endif /* #ifdef PSL9 */
+#if defined PSL9 
+	cmd->afu_event->dma0_dvalid = 0;
+#endif /* #ifdef PSL9 */
 	return cmd;
 }
 
@@ -492,6 +482,12 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		_add_read_pe(cmd, handle, tag, command, abort, addr, size);
 		break;
 #ifdef PSL9
+	case PSL_COMMAND_CAS_E_4B:	
+	case PSL_COMMAND_CAS_NE_4B:	
+	case PSL_COMMAND_CAS_U_4B:	
+	case PSL_COMMAND_CAS_E_8B:	
+	case PSL_COMMAND_CAS_NE_8B:	
+	case PSL_COMMAND_CAS_U_8B:	
 	case PSL_COMMAND_XLAT_RD_P0:
 	case PSL_COMMAND_XLAT_WR_P0:
 	case PSL_COMMAND_XLAT_RD_TOUCH:
@@ -854,7 +850,8 @@ printf("data sent \n");
 	return;
 
 amo_wb: event = *head;
-	if (event->atomic_op < 0x20) {
+printf ("event->atomic_op = 0x%x \n", event->atomic_op);
+	if ((event->atomic_op & 0x3f) < 0x20) {
 	//randomly decide not to return data yet
 		if (!allow_resp(cmd->parms)) 
 			return;
@@ -1382,7 +1379,7 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
  	else if (event->type == CMD_DMA_RD) 	
 		_handle_mem_read(cmd, event, fd);
  	else if (event->type == CMD_DMA_WR_AMO) {
-                 if (event->atomic_op < 0x20)  {
+                 if ((event->atomic_op & 0x3f) < 0x20)  {
 		printf("yes, less than 0x020 \n");
 		_handle_mem_read(cmd, event, fd);
 		} else{
