@@ -428,7 +428,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  *ha_brtagpar_top = event.buffer_read_tag_parity;
 	  *ha_brvalid_top = 1;
 	  printf("%08lld: ", (long long) c_sim_time);
-	  printf("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
+	  printf("Buffer Read tag=0x%02x, tag parity=0x%02x\n", event.buffer_read_tag, event.buffer_read_tag_parity);
 	  cl_br = CLOCK_EDGE_DELAY;
 	  event.buffer_read = 0;
         }
