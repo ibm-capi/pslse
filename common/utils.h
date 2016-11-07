@@ -72,6 +72,13 @@
 #define PSLSE_DMA0_RD		0x21
 #define PSLSE_DMA0_WR		0x22
 #define PSLSE_DMA0_WR_AMO	0x23
+#define MAX_INT32 0x7fffffffU
+#define MIN_INT32 0x80000000U
+#define MAX_UINT32 0xffffffffU
+#define MAX_INT64   0x7FFFFFFFFFFFFFFF
+#define MIN_INT64   0x8000000000000000
+#define MAX_UINT64  0xFFFFFFFFFFFFFFFF
+
 #endif /*ifdef PSL9 */
 
 // PSLSE states

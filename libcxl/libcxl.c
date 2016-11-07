@@ -353,10 +353,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 	uint8_t atomic_le;
 	uint8_t buffer;
 	uint8_t wbuffer[9];
-	int32_t slvalue;
 	uint32_t lvalue, op_A, op_1, op_2;
 	uint64_t llvalue, op_Al, op_1l, op_2l;
-	int64_t sllvalue;
 	int op_ptr;
 	char wb;
 
@@ -426,29 +424,41 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			break;
 	}
 
+	atomic_op = function_code;
+	// Remove and read atomic_le from bit7 of data[0]
+	// if atomic_le == 1, afu is le, so no data issues (pslse is always le). 
+	// if atomic_le == 0, we have to swap op1/op2 data before ops, and also swap 
+	// data returned by fetches
+	if ((atomic_op & 0x80) == 0x80) {
+		atomic_le = 1;
+		atomic_op &= 0x3F;
+	} else 
+		atomic_le = 0;
+		
+	debug_msg("_handle_DMO_OPs:  atomic_op = 0x%2x and atomic_le = 0x%x ", atomic_op, atomic_le);
+
 	DPRINTF("READ from addr @ 0x%016" PRIx64 "\n", addr);
 	if (op_size == 0x4) {
 		memcpy((char *) &lvalue, (void *)addr, op_size);
 		op_A = (uint32_t)(lvalue);
 	printf("op_A is %08"PRIx32 " and op_1 is %08"PRIx32 "\n", op_A, op_1);
+		if (atomic_le == 0) {
+			op_1 = ntohl(op_1);
+			op_2 = ntohl(op_2);
+		}
 	} else if (op_size == 0x8) {
 
 		memcpy((char *) &llvalue, (void *)addr, op_size);
 		op_Al = (uint64_t)(llvalue);
+		if (atomic_le == 0) {
+			op_1l = ntohll(op_1l);
+			op_2l = ntohll(op_2l);
+		}
 	printf("op_Al is %016"PRIx64 " and op_1l is %016"PRIx64 "\n", op_Al, op_1l);
 	printf("llvalue read from location -> by addr is %016" PRIx64 " and addr is 0x%016" PRIx64 " \n", llvalue, addr);
-
 	} else // need else error bc only valid sizes are 4 or 8
 		warn_msg("unsupported op_size of 0x%2x \n", op_size);
-	atomic_op = function_code;
-	// Remove and read atomic_le from bit7 of data[0]
-	if ((atomic_op & 0x80) == 0x80) {
-		atomic_le = 1;
-		atomic_op &= 0x3F;
-	} else
-		atomic_le = 0;
-	// TODO add code to handle le bit (right now, test afu is le but need to handle be afus)
-	debug_msg("_handle_DMO_OPs:  atomic_op = 0x%2x and atomic_le = 0x%x ", atomic_op, atomic_le);
+
 	switch (atomic_op) {
 			/* addr = location of an address aligned 4 or 8 byte first operand (op_A),
  *  which is modified with operand provided by AFU (op_1 or op_1l). AFU also provides the function
@@ -513,30 +523,15 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			case AMO_ARMWF_CAS_MAX_S:
 				// sign extend op_A and op_1 and then cast as int and do comparison
 				if (op_size == 4) {
-					slvalue = (uint32_t) (1 << 31);
-					if ((op_A & slvalue) != 0)
-						op_A |= ~(slvalue-1);
-					else
-						op_A &= (slvalue-1);
-					if ((op_1 & slvalue) != 0)
-						op_1 |= ~(slvalue-1);
-					else
-						op_1 &= (slvalue-1);
+					op_A = sign_extend(op_A);
+					op_1 = sign_extend(op_1);
 				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store larger & return op_A \n", op_A, op_1);
 					if ((int32_t)op_A > (int32_t)op_1)
 						op_1 = op_A;   
 					wb = 1;
 				} else {
-					sllvalue = (uint64_t) (1ULL << 63);
-				printf("sllvalue is %016"PRIx64" \n", sllvalue);
-					if ((op_Al & sllvalue) != 0)
-						op_Al |= ~(sllvalue-1);
-					else
-						op_Al &= (sllvalue-1);
-					if ((op_1l & sllvalue) != 0)
-						op_1l |= ~(sllvalue-1);
-					else
-						op_1l &= (sllvalue-1);
+					op_Al = sign_extend64(op_Al);
+					op_1l = sign_extend64(op_1l);
 				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store larger & return op_Al  \n", op_Al, op_1l);
 					if ((int64_t)op_Al > (int64_t)op_1l)
 						op_1l = op_Al;   
@@ -565,8 +560,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 						op_1 = op_A;   
 					wb = 1;
 				} else {
-					op_Al = sign_extend(op_Al);
-					op_1l = sign_extend(op_1l);
+					op_Al = sign_extend64(op_Al);
+					op_1l = sign_extend64(op_1l);
 				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al \n", op_Al, op_1l);
 					if ((int64_t)op_Al < (int64_t)op_1l)
 						op_1l = op_Al;   
@@ -584,7 +579,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 					wb = 1;
 				} else {
 				printf("COMPARE & SWAP  %016"PRIx64" with %016"PRIx64 " ,store op_2l & return op_Al \n", op_Al, op_1l);
-					op_1l = op_2;  
+					op_1l = op_2l;  
 					wb = 2;
 				}
 				break;
@@ -593,11 +588,15 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				printf("COMPARE & SWAP == %08"PRIx32" with %08"PRIx32 " ,if true store op_2 & return op_A \n", op_A, op_1);
 					if (op_A == op_1)
 						op_1 = op_2;  
+					else 
+						op_1 = op_A;
 					wb = 1;
 				} else {
 				printf("COMPARE & SWAP == %016"PRIx64" with %016"PRIx64 " ,if true store op_2l & return op_Al \n", op_Al, op_1l);
 					if (op_Al == op_1l)
-						op_1l = op_2;  
+						op_1l = op_2l;  
+					else 
+						op_1l = op_Al;
 					wb = 2;
 				}
 				break;
@@ -606,11 +605,15 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				printf("COMPARE & SWAP != %08"PRIx32" with %08"PRIx32 " ,if true, store op_2 & return op_A \n", op_A, op_1);
 					if (op_A != op_1)
 						op_1 = op_2;  
+					else 
+						op_1 = op_A;
 					wb = 1;
 				} else {
 				printf("COMPARE & SWAP != %016"PRIx64" with %016"PRIx64 " ,if true, store op_2l & return op_Al \n", op_Al, op_1l);
 					if (op_Al != op_1l)
-						op_1l = op_2;  
+						op_1l = op_2l;  
+					else 
+						op_1l = op_Al;
 					wb = 2;
 				}
 				break;
@@ -627,17 +630,23 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				printf("COMPARE & INC Bounded %08"PRIx32" with %08"PRIx32 ", if !=, inc op_A, ret orig op_A, else..\n", op_A, op_1);
 					if (op_A != op_1)
 						op_1 = op_A +1;  
-					else
-						op_A = (1 << 31);
+					else {
+						op_1 = op_A;
+						op_A = MIN_INT32;
+						//op_A = (1 << 31);
+					     }	
 					wb = 1;
 				} else {
 					memcpy((char *) &llvalue, (void *)addr+8, op_size);
 					op_1l = (uint64_t)(llvalue);
-				printf("COMPARE & INC Equal %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
-					if (op_Al == op_1l)
+				printf("COMPARE & INC Bounded %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
+					if (op_Al != op_1l)
 						op_1l = op_A +1;
-					else
-						op_Al = (1ULL << 63);  
+					else  {
+						op_1l = op_Al;
+						op_Al = MIN_INT64;
+						//op_Al = (1ULL << 63); 
+					      } 
 					wb = 2;
 				}
 				break;
@@ -648,8 +657,11 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				printf("COMPARE & INC Equal %08"PRIx32" with %08"PRIx32 ", if =, inc op_A, ret orig op_A, else..\n", op_A, op_1);
 					if (op_A == op_1)
 						op_1 = op_A +1;  
-					else
-						op_A = (1 << 31);
+					else   {
+						op_1 = op_A;
+						op_A = MIN_INT32;
+						//op_A = (1 << 31);
+					       }
 					wb = 1;
 				} else {
 					memcpy((char *) &llvalue, (void *)addr+8, op_size);
@@ -657,30 +669,38 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				printf("COMPARE & INC Equal %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
 					if (op_Al == op_1l)
 						op_1l = op_A +1;
-					else  
-						op_Al = (int64_t) (1ULL <<63);
-					//	op_Al = (1 << 63);  
+					else    {
+						op_1l = op_Al; 
+						op_Al = MIN_INT64;
+						//op_Al = (int64_t) (1ULL <<63);
+						}  
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_DEC_B:
 				if  (op_size == 4) {
-					memcpy((char *) &lvalue, (void *)addr+4, op_size);
+					memcpy((char *) &lvalue, (void *)addr-4, op_size);
 					op_1 = (uint32_t)(lvalue);
 				printf("COMPARE & DEC Bounded %08"PRIx32" with %08"PRIx32 ", if != dec op_A, ret orig op_A, else..\n", op_A, op_1);
 					if (op_A != op_1)
 						op_1 = op_A -1;  
-					else
-						op_A = (1 << 31);
+					else  {
+						op_1 = op_A;
+						op_A = MIN_INT32;
+						//op_A = (1 << 31);
+					      }
 					wb = 1;
 				} else {
-					memcpy((char *) &llvalue, (void *)addr+8, op_size);
+					memcpy((char *) &llvalue, (void *)addr-8, op_size);
 					op_1l = (uint64_t)(llvalue);
 				printf("COMPARE & DEC Bounded %016"PRIx64" with %016"PRIx64 ", if !=, dec op_A, ret orig op_a, else..\n", op_Al, op_1l);
 					if (op_Al != op_1l)
-						op_1l = op_A -1;
-					else
-						op_Al = (1ULL << 63);  
+						op_1l = op_Al -1;
+					else   {
+						op_1l = op_Al;
+						op_Al = MIN_INT64;
+						//op_Al = (1ULL << 63); 
+					       } 
 					wb = 2;
 				}
 				break;
@@ -751,8 +771,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 						op_1 = op_A;   
 					wb = 0;
 				} else {
-					op_Al = sign_extend(op_Al);
-					op_1l = sign_extend(op_1l);
+					op_Al = sign_extend64(op_Al);
+					op_1l = sign_extend64(op_1l);
 				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  \n", op_Al, op_1l);
 					if ((int64_t)op_Al > (int64_t)op_1l)
 						op_1l = op_Al;   
@@ -780,8 +800,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 						op_1 = op_A;   
 					wb = 0;
 				} else {
-					op_Al = sign_extend(op_Al);
-					op_1l = sign_extend(op_1l);
+					op_Al = sign_extend64(op_Al);
+					op_1l = sign_extend64(op_1l);
 				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  \n", op_Al, op_1l);
 					if ((int64_t)op_Al < (int64_t)op_1l)
 						op_1l = op_Al;   
@@ -850,7 +870,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				break;
 			case 1:
 				wbuffer[0] = PSLSE_MEM_SUCCESS;
-				//op_A = htonl (op_A); //Not sure this is needed? gets treated as one big data stream
+				if (atomic_le == 0) 
+					op_A = htonl(op_A);
 				memcpy(&(wbuffer[1]), (void *)&op_A, op_size);
 				if (put_bytes_silent(afu->fd, op_size + 1, wbuffer) != op_size + 1) {
 					afu->opened = 0;
@@ -860,7 +881,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				break;
 			case 2:
 				wbuffer[0] = PSLSE_MEM_SUCCESS;
-				//op_Al = htonll (op_Al); //Not sure this is needed? gets treated as one big data stream
+				if (atomic_le == 0) 
+					op_Al = htonll(op_Al);
 				memcpy(&(wbuffer[1]), (void *)&op_Al, op_size);
 				if (put_bytes_silent(afu->fd, op_size + 1, wbuffer) != op_size + 1) {
 					afu->opened = 0;
