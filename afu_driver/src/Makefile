@@ -12,6 +12,13 @@ ifndef VPI_USER_H_DIR
   endif
 endif
 
+# if VPI_USER_H_DIR is still not set, try to use Xilinx install dir path
+ifndef VPI_USER_H_DIR
+  ifdef XILINX_VIVADO
+    VPI_USER_H_DIR=$(XILINX_VIVADO)/data/xsim/include
+  endif
+endif
+
 # if VPI_USER_H_DIR is STILL not set, print an error message
 ifndef VPI_USER_H_DIR
   $(error Must set VPI_USER_H_DIR to point to include path for the simulator)
