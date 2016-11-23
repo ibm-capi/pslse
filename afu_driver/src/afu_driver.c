@@ -32,6 +32,11 @@ struct resp_event {
 	uint32_t tag;
 	uint32_t tagpar;
 	uint32_t code;
+	uint32_t cache_pos;
+	uint32_t cache_state ;
+	uint32_t dma0_itag_par ;
+	uint32_t dma0_itag ;
+	uint32_t dma0_page_size ;
 	int32_t credits;
 	struct resp_event *__next;
 };
@@ -162,6 +167,11 @@ static void add_response()
 	new_resp->tagpar = event.response_tag_parity;
 	new_resp->code = event.response_code;
 	new_resp->credits = event.credits;
+	new_resp->cache_pos = event.cache_position;
+	new_resp->cache_state = event.cache_state;
+	new_resp->dma0_itag_par = event.response_dma0_itag_parity;
+	new_resp->dma0_itag = event.response_dma0_itag;
+	new_resp->dma0_page_size = event.response_r_pgsize;
 	new_resp->__next = NULL;
 
 	event.response_valid = 0;
@@ -465,8 +475,6 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	if (bw_delay > 0)
 		--bw_delay;
 	// ------Driving some blank value as of now
-	  setDpiSignal32(ha_rcachestate_top, 0x000,  2);
-	  setDpiSignal32(ha_rcachepos_top,   0x000, 13);
 	if (resp_list && !(bw_delay % 2))
         {
 	// Replicating	set_response() function
@@ -477,24 +485,20 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 //	  setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
 	  setDpiSignal32(ha_rcredits_top, 0x001, 9);
 	// TODO: add code to handle ha_response_ext_top, ha_rpagesize_top, ha_rcachestate_top, ha_rcachepos_top
+	  setDpiSignal32(ha_rditag_top, resp_list->dma0_itag, 9);
+	  *ha_rditagpar_top = (resp_list->dma0_itag_par) & 0x1;
+	  setDpiSignal32(ha_rpagesize_top, resp_list->dma0_page_size, 4);
+  	  setDpiSignal32(ha_rcachestate_top, resp_list->cache_state,  2);
+	  setDpiSignal32(ha_rcachepos_top,   resp_list->cache_pos, 13);
 	  *ha_rvalid_top = 1;
 	  printf("%08lld: ", (long long) c_sim_time);
-	  printf("Response tag=0x%02x code=0x%02x credits=%d\n",
-		     resp_list->tag, resp_list->code, resp_list->credits);
+	  printf("Response tag=0x%02x code=0x%02x itag=%02x page_size=%d state=%d position=%03x\n",
+		     resp_list->tag, resp_list->code, resp_list->dma0_itag, resp_list->dma0_page_size, resp_list->cache_state, resp_list->cache_pos);
 	  struct resp_event *tmp;
 	  tmp = resp_list;
 	  resp_list = resp_list->__next;
 	  free(tmp);
 	  cl_rval = CLOCK_EDGE_DELAY;
-        }
-	if (resp_list && !(bw_delay % 2))
-        {
-	  setDpiSignal32(ha_rditag_top, 0x000, 9);
-	  *ha_rditagpar_top = 0;
-	  setDpiSignal32(ha_rtag_top, 0, 8);
-	  *ha_rtagpar_top = 0;
-	  setDpiSignal32(ha_response_top, 0, 8);
-	  setDpiSignal32(ha_rpagesize_top, 0, 4);
         }
 	// Response
 	if (event.response_valid)
