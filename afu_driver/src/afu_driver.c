@@ -47,7 +47,7 @@ static unsigned int bw_delay;
 static struct AFU_EVENT event;
 static struct resp_event *resp_list;
 
-static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
+static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval, cl_cplval;
 // Added New
         int c_ha_jval;
         int c_ha_jcom;
@@ -548,7 +548,10 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    setMyCacheLine(hd0_cpl_data_top, event.dma0_completion_data);
 	    setDpiSignal32(hd0_cpl_laddr_top, 	  event.dma0_completion_laddr, 	10);
 	    setDpiSignal32(hd0_cpl_byte_count_top, 	  event.dma0_completion_byte_count, 	10);
+	    printf("%08lld: ", (long long) c_sim_time);
+	    printf("Completion Valid: utag=0x%x\n", event.dma0_completion_utag);
 	    *hd0_cpl_valid_top = 1;
+	    cl_cplval = CLOCK_EDGE_DELAY;
 	  }
 	  if(event.dma0_sent_utag_valid)			// must be corresponding to the assertion of HDx_SENT_UTAG_VALID by PSL
 	  {
@@ -581,6 +584,11 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  	--cl_rval;
 	  	if (!cl_rval)
 	  		*ha_rvalid_top = 0;
+	  }
+	  if (cl_cplval) {
+	  	--cl_cplval;
+	  	if (!cl_cplval)
+	  		*hd0_cpl_valid_top = 0;
 	  }
 	  return;
         }
