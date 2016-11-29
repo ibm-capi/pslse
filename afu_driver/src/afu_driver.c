@@ -95,6 +95,7 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval, cl_cplval;
 	uint8_t  c_d0h_ddata[CACHELINE_BYTES];
 	uint32_t c_d0h_datomic_op;
 	uint32_t c_d0h_datomic_le;
+	uint32_t c_dma0_initiated;
 
 // Function declaration
 
@@ -381,6 +382,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	// Replication of buffer_read method - ends
 	  }
 	// PSL9 handling of DMA port0
+           afu_get_dma0_cpl_bus_data(&event, event.dma0_completion_utag, event.dma0_completion_type, event.dma0_completion_size, event.dma0_completion_laddr, event.dma0_completion_byte_count, event.dma0_completion_data);
+           afu_get_dma0_sent_utag(&event, event.dma0_completion_utag, event.dma0_sent_utag_status);
 	   c_d0h_dvalid = (d0h_dvalid_top & 0x2) ? 0 : (d0h_dvalid_top & 0x1);
 	   if(c_d0h_dvalid == sv_1)
 	   {
@@ -551,6 +554,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    printf("%08lld: ", (long long) c_sim_time);
 	    printf("Completion Valid: utag=0x%x\n", event.dma0_completion_utag);
 	    *hd0_cpl_valid_top = 1;
+//	    c_dma0_initiated = 0;
 	    cl_cplval = CLOCK_EDGE_DELAY;
 	  }
 	  if(event.dma0_sent_utag_valid)			// must be corresponding to the assertion of HDx_SENT_UTAG_VALID by PSL
@@ -706,6 +710,7 @@ static void psl_control(void)
 void psl_bfm_init()
 {
   int port = 32768;
+//  c_dma0_initiated = 0;
   while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
     if (psl_serv_afu_event(&event, port) == PSL_VERSION_ERROR) {
       printf("%08lld: ", (long long) c_sim_time);
@@ -718,6 +723,7 @@ void psl_bfm_init()
     ++port;
   }
   // set_callback_event(afu_close, cbEndOfSimulation);
+//  psl_close_afu_event(&event);
   return;
 }
 
