@@ -331,6 +331,7 @@ int close_socket(int *sockfd)
 	return 0;
 }
 
+#if defined PSL9
 // sign extend a 32bit integer
 int32_t sign_extend (uint32_t in_op)
 {
@@ -354,3 +355,5 @@ int64_t sign_extend64 (uint64_t in_op)
 		in_op &= (lvalue-1);
 	return in_op;
 }
+
+#endif

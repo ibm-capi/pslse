@@ -793,7 +793,8 @@ module top (
 
   always @ (posedge ha_pclock) begin
     if (ha_bwvalid_ul)
-      bwpar <= bwpar_array[bw_rd_ptr_l];
+      // bwpar <= bwpar_array[bw_rd_ptr_l];  // this is the p8 method because parity lags data by one cycle
+      bwpar <= bwpar_array[bw_rd_ptr];  // this the p9 method because parity and data are coincident
   end
 
   always @ (posedge ha_pclock)

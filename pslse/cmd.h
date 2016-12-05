@@ -41,6 +41,7 @@ enum cmd_type {
 	CMD_READ_PE,
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
+	CMD_CAS,
 	CMD_CAIA2,
 	CMD_XLAT_RD,
 	CMD_XLAT_WR,
@@ -75,16 +76,6 @@ enum mem_state {
 	MEM_DONE
 };
 
-/*enum dma_state {
-	DMA_ITAG_REQ,
-	DMA_ITAG_RET,
-	DMA_OP_REQ,
-	DMA_BUFFER_WR,
-	DMA_SENT_ACK,
-	DMA_MEM_REQ,
-	DMA_BUFFER_RD,
-	DMA_CPL_SENT
-}; */
 
 struct pages {
 	uint64_t entry[PAGE_ENTRIES][PAGE_WAYS];
