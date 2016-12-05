@@ -26,7 +26,6 @@ MachineController::Machine::reset ()
 void
 MachineController::Machine::read_machine_config ()
 {
-
     context = (config[0] >> 32) & 0xFFFF;
 
     min_delay = (config[0] >> 16) & 0xFFFF;
@@ -65,18 +64,36 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_READ_CL_NA:
     case PSL_COMMAND_READ_PNA:
     case PSL_COMMAND_READ_PE:
+    //case PSL_COMMAND_CAS_E_8B:
+    //case PSL_COMMAND_CAS_NE_8B:
+    //case PSL_COMMAND_CAS_U_8B:
 	command = 
 	    new LoadCommand (command_code, command_address_parity,
 			     command_code_parity, command_tag_parity,
 			     buffer_read_parity);
 	break;
     #ifdef	PSL9
+    case PSL_COMMAND_XLAT_RD_P0_00:
+    case PSL_COMMAND_XLAT_RD_P0_01:
+    case PSL_COMMAND_XLAT_RD_P0_02:
+    case PSL_COMMAND_XLAT_RD_P0_03:
+    case PSL_COMMAND_XLAT_RD_P0_04:
+    case PSL_COMMAND_XLAT_RD_P0_05:
+    case PSL_COMMAND_XLAT_RD_P0_06:
+    case PSL_COMMAND_XLAT_RD_P0_07:
+    case PSL_COMMAND_XLAT_RD_P0_08:
+    case PSL_COMMAND_XLAT_RD_P0_10:
+    case PSL_COMMAND_XLAT_RD_P0_11:
+    case PSL_COMMAND_XLAT_RD_P0_18:
+    case PSL_COMMAND_XLAT_RD_P0_19:
+    case PSL_COMMAND_XLAT_RD_P0_1C:
     case PSL_COMMAND_XLAT_RD_P0:
-    case PSL_COMMAND_XLAT_RD_P1:
-    	command = new DmaLoadCommand (command_code, command_address_parity,
-                                  command_code_parity, command_tag_parity,
-                                  buffer_read_parity);
-        break;
+//	command_code = 0x1F00;
+	command = new DmaLoadCommand(command_code, command_address_parity,
+				     command_code_parity, command_tag_parity,
+				     buffer_read_parity);
+   	debug_msg("Machine::read_machine_config: command_code = 0x%x ", command_code);
+	break;
     #endif
     case PSL_COMMAND_WRITE_MI:
     case PSL_COMMAND_WRITE_MS:
@@ -84,17 +101,30 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_WRITE_C:
     case PSL_COMMAND_WRITE_INJ:
     case PSL_COMMAND_WRITE_NA:
+    case PSL_COMMAND_CAS_E_8B:
+    case PSL_COMMAND_CAS_NE_8B:
+    case PSL_COMMAND_CAS_U_8B:
 	command =
             new StoreCommand (command_code, command_address_parity,
                               command_code_parity, command_tag_parity,
                               buffer_read_parity);
 	break;
     #ifdef	PSL9
+    case PSL_COMMAND_XLAT_WR_P0_20:
+    case PSL_COMMAND_XLAT_WR_P0_21:
+    case PSL_COMMAND_XLAT_WR_P0_22:
+    case PSL_COMMAND_XLAT_WR_P0_23:
+    case PSL_COMMAND_XLAT_WR_P0_24:
+    case PSL_COMMAND_XLAT_WR_P0_25:
+    case PSL_COMMAND_XLAT_WR_P0_26:
+    case PSL_COMMAND_XLAT_WR_P0_27:
+    case PSL_COMMAND_XLAT_WR_P0_38:
     case PSL_COMMAND_XLAT_WR_P0:
-    case PSL_COMMAND_XLAT_WR_P1:
+//	command_code = 0x1F01;
     	command = new DmaStoreCommand (command_code, command_address_parity, 
                                    command_code_parity, command_tag_parity,
                                    buffer_read_parity);	
+	debug_msg("Machine::read_machine_config: command_code = 0x%x atomic_op = 0x%x", command_code, atomic_op);
         break;
     #endif
     case PSL_COMMAND_INTREQ:
@@ -226,14 +256,15 @@ bool MachineController::Machine::attempt_new_command (AFU_EVENT * afu_event,
         ("MachineController::Machine::attempt_new_command(): attemp to send new command when machine is not enabled");
 
     if ((!command || command->is_completed ()) && delay == 0) {
-        read_machine_config ();
+        debug_msg("Machine::attempt_new_command: read_machine_config");
+	read_machine_config ();
 
         // randomly generates address within the range
         uint64_t
         address_offset =
             (rand () % (memory_size - (command_size - 1))) & ~(command_size -
                     1);
-
+	debug_msg("Machine::attempt_new_command: command->send_command");
         command->send_command (afu_event, tag,
                                memory_base_address + address_offset,
                                command_size, abort, context);
@@ -353,7 +384,7 @@ MachineController::Machine::~Machine ()
 void
 MachineController::Machine::process_dma_read (AFU_EVENT * afu_event)
 {
-    debug_msg ("Machine::process_dma_read");
+    debug_msg ("Machine::process_dma_read call command process_command");
     if (command->get_tag() != afu_event->dma0_req_utag)
 	error_msg("Machine: dma0_req_utag mismatch in machine");
 

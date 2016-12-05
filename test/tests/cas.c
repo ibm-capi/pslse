@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 	char *cacheline0, *cacheline1, *name;
 	uint64_t wed;
 	unsigned seed;
-	int i, quadrant, byte, opt, option_index;
+	int i, opt, option_index;
 	int response;
 	int context, machine_number;
 
@@ -137,68 +137,50 @@ int main(int argc, char *argv[])
 	}
 
 	// Pollute first cacheline with random values
-	printf("CACHELINE0 = 0x");
-	for (i = 0; i < CACHELINE_BYTES; i++)
-	{
-		cacheline0[i] = rand();
-		printf("%02x", cacheline0[i]);
+	for (i = 0; i < 8; i++) { 
+	    cacheline0[i] = i;
+	    //cacheline0[8+i] = i;
 	}
-	printf("\n");
+	for (i = 8; i < CACHELINE_BYTES; i++)
+		cacheline0[i] = rand();
+
 	// Initialize machine configuration
 	printf("initialize machine\n");
 	init_machine(&machine);
-	printf("End init machine\n");
 
-	// Use AFU Machine 0 to read the first cacheline from memory to AFU
+	// Use AFU Machine 1 to read the first cacheline from memory to AFU
 	printf("Configure, enable and run machine\n");
-	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_XLAT_RD_P0, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED_M)) < 0)
+	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_CAS_E_8B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED_M)) < 0)
 	{
-		printf("FAILED:config_enable_and_run_machine for master XLAT_RD response = %d\n", response);
+		printf("FAILED:config_enable_and_run_machine for master\n");
 		goto done;
 	}
-	printf("End configure enable and run machine for XLAT_RD\n");
+	printf("End configure enable and run machine\n");
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
+	//if (response != PSL_RESPONSE_DONE)
+	//{
+	//	printf("FAILED: Unexpected response code 0x%x\n", response);
+	//	goto done;
+	//}
+
+	printf("Completed PSL_COMMAND_CAS_E_8B\n");
+
+	// Use AFU Machine 1 to write the data to the second cacheline
+	for (i = 0; i < 15; i++) 
+	    cacheline0[i] = rand();
+
+	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_CAS_NE_8B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED_M)) < 0)
 	{
-		printf("FAILED: Unexpected response code 0x%x\n", response);
+		printf("FAILED:config_enable_and_run_machine for master");
 		goto done;
 	}
-
-	printf("Completed cacheline read\n");
-
-	// Use AFU Machine 0 to write the data to the second cacheline
-	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_XLAT_WR_P0, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED_M)) < 0)
-	{
-		printf("FAILED:config_enable_and_run_machine for master XLAT_WR response = %d\n", response);
-		goto done;
-	}
-	printf("End configure enable and run machine for XLAT WR\n");
+	printf("End configure enable and run machine psl write\n");
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
-	{
-		printf("FAILED: Unexpected response code 0x%x\n", response);
-		goto done;
-	}
-
-	// Test if copy from cacheline0 to cacheline1 was successful
-	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
-		printf("FAILED:memcmp\n");
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Expected  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
-				printf("%02x", cacheline0[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Actual  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
-				printf("%02x", cacheline1[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		goto done;
-	}
+	//if (response != PSL_RESPONSE_DONE)
+	//{
+	//	printf("FAILED: Unexpected response code 0x%x\n", response);
+	//	goto done;
+	//}
 
 	printf("Master AFU: PASSED\n");
         
@@ -257,54 +239,20 @@ int main(int argc, char *argv[])
 
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
 	printf("Start config enable and run machine for slave\n");
-	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_XLAT_RD_P0, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
+	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_CAS_U_8B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine for slave");
 		goto done;
 	}
 	printf("End config enable and run machine for slave\n");
 	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
-	{
-		printf("FAILED: Unexpected response code 0x%x\n", response);
-		goto done;
-	}
+	//if (response != PSL_RESPONSE_DONE)
+	//{
+	//	printf("FAILED: Unexpected response code 0x%x\n", response);
+	//	goto done;
+	//}
 
 	printf("Completed cacheline read for slave\n");
-
-	// Use AFU Machine 1 to write the data to the second cacheline
-	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_XLAT_WR_P0, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED)) < 0)
-	{
-		printf("FAILED:config_enable_and_run_machine for slave");
-		goto done;
-	}
-
-	// Check for valid response
-	if (response != PSL_RESPONSE_DONE)
-	{
-		printf("FAILED: Unexpected response code 0x%x\n", response);
-		goto done;
-	}
-
-	// Test if copy from cacheline0 to cacheline1 was successful
-	if (memcmp(cacheline0,cacheline1, CACHELINE_BYTES) != 0) {
-		printf("FAILED:memcmp\n");
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Expected  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES /4; byte++) {
-				printf("%02x", cacheline0[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		for (quadrant = 0; quadrant < 4; quadrant++) {
-			printf("DEBUG: Actual  Q%d 0x", quadrant);
-			for (byte = 0; byte < CACHELINE_BYTES / 4; byte++) {
-				printf("%02x", cacheline1[byte+(quadrant*32)]);
-			}
-			printf("\n");
-		}
-		goto done;
-	}
 
 	printf("Slave AFU: PASSED\n");
         

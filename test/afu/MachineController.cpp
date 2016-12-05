@@ -37,6 +37,7 @@ bool MachineController::send_command (AFU_EVENT * afu_event, uint32_t cycle)
     }
 
     // attempt to send a command with the allocated tag
+    //debug_msg("MachineController::send_command: machine->attempt_new_command");
     for (uint32_t i = 0; i < machines.size (); ++i) {
         if (try_send && machines[i]->is_enabled ()
                 && machines[i]->attempt_new_command (afu_event, tag,
@@ -47,7 +48,7 @@ bool MachineController::send_command (AFU_EVENT * afu_event, uint32_t cycle)
             ("MachineController::send_command: machine id %d sent new command", i);
             try_send = false;
             tag_to_machine[tag] = machines[i];
-	    debug_msg("=xxxx=>MachineController::send_command tag = %d machine = 0x%x", tag, machines[i]);
+	    debug_msg("MachineController::send_command tag = %d machine = 0x%x", tag, machines[i]);
 #ifdef	PSL9
 	    afu_event->dma0_req_utag = tag;
 	    debug_msg ("MachineController::send_command: dma0_req_utag = %d", tag);
@@ -237,10 +238,10 @@ MachineController::disable_all_machines ()
 
 bool MachineController::has_tag (uint32_t tag) const
 {
-    for (std::map<uint32_t, Machine *>::const_iterator it=tag_to_machine.begin(); it !=tag_to_machine.end(); ++it) {
-	debug_msg ("=xxx=>MachineController::has_tag: tag = %d Machine = 0x%x", it->first, it->second);
-    }
-    debug_msg("=xxx=>MachineController::has_tag: tag_to_machine size = %d", tag_to_machine.size());
+//    for (std::map<uint32_t, Machine *>::const_iterator it=tag_to_machine.begin(); it !=tag_to_machine.end(); ++it) {
+//	debug_msg ("MachineController::has_tag: tag = %d Machine = 0x%x", it->first, it->second);
+//    }
+//    debug_msg("MachineController::has_tag: tag_to_machine size = %d", tag_to_machine.size());
     if (tag_to_machine.find (tag) != tag_to_machine.end ())
         return true;
 

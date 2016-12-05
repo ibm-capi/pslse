@@ -77,6 +77,9 @@ private:
     uint8_t get_buffer_read_parity ()const;
 
 public:
+#ifdef	PSL9
+    uint32_t atomic_op;
+#endif
     Machine (uint16_t context);
 
     /* configures the machine when AFU receives an MMIO write, only modifies
