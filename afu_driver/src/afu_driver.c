@@ -97,6 +97,17 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval, cl_cplval;
 	uint32_t c_d0h_datomic_le;
 	uint32_t c_dma0_initiated;
 
+// New PSL9 DMA1 port
+	uint32_t c_d1h_dvalid;
+	uint32_t c_d1h_req_utag;
+	uint32_t c_d1h_req_itag;
+	uint32_t c_d1h_dtype;
+	uint32_t c_d1h_dsize;
+	uint8_t  c_d1h_ddata[CACHELINE_BYTES];
+	uint32_t c_d1h_datomic_op;
+	uint32_t c_d1h_datomic_le;
+	uint32_t c_dma1_initiated;
+
 // Function declaration
 
 static int getMy64Bit(const svLogicVecVal *my64bSignal, uint64_t *conv64bit);
@@ -290,6 +301,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     const svLogicVecVal *d1h_dsize_top,		// 10 bits
 	     const svLogicVecVal *d1h_ddata_top,		// 1024 bits
 	     const svLogicVecVal *d1h_datomic_op_top,		// 6 bits
+	     const svLogic	 d1h_datomic_le_top,
 	           svLogic       *hd1_sent_utag_valid_top,  
 	           svLogicVecVal *hd1_sent_utag_top,  
 	           svLogicVecVal *hd1_sent_utag_sts_top,  
@@ -396,6 +408,21 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     c_d0h_datomic_le	= (d0h_datomic_le_top & 0x2) ? 0 : (d0h_datomic_le_top & 0x1);
 	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_datomic_op, c_d0h_datomic_le, c_d0h_ddata);
 	   }
+	// PSL9 handling of DMA port1	// TODO: change the functions to PORT1 functions
+           afu_get_dma0_cpl_bus_data(&event, event.dma0_completion_utag, event.dma0_completion_type, event.dma0_completion_size, event.dma0_completion_laddr, event.dma0_completion_byte_count, event.dma0_completion_data);
+           afu_get_dma0_sent_utag(&event, event.dma0_completion_utag, event.dma0_sent_utag_status);
+	   c_d1h_dvalid = (d1h_dvalid_top & 0x2) ? 0 : (d1h_dvalid_top & 0x1);
+	   if(c_d1h_dvalid == sv_1)
+	   {
+	     c_d1h_req_utag	= (d1h_req_utag_top->aval) 	& 0x3FF;	// 10 bits;
+	     c_d1h_req_itag	= (d1h_req_itag_top->aval) 	& 0x1FF;	// 9 bits;
+	     c_d1h_dtype	= (d1h_dtype_top->aval) 	& 0x7;		// 3 bits;
+	     c_d1h_dsize	= (d1h_dsize_top->aval) 	& 0x3FF;	// 10 bits;
+             getMyCacheLine(d1h_ddata_top, c_d1h_ddata);
+	     c_d1h_datomic_op	= (d1h_datomic_op_top->aval) 	& 0x3FF;	// 10 bits;
+	     c_d1h_datomic_le	= (d1h_datomic_le_top & 0x2) ? 0 : (d1h_datomic_le_top & 0x1);
+	     psl_afu_dma0_req(&event, c_d1h_req_utag, c_d1h_req_itag, c_d1h_dtype, c_d1h_dsize, c_d1h_datomic_op, c_d1h_datomic_le, c_d1h_ddata);
+           }
 	} else {
 	  //psl();	// the psl() function from PLI is going to be split into several subsidiary functions
  	  c_sim_error = 0;
@@ -495,8 +522,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal32(ha_rcachepos_top,   resp_list->cache_pos, 13);
 	  *ha_rvalid_top = 1;
 	  printf("%08lld: ", (long long) c_sim_time);
-	  printf("Response tag=0x%02x code=0x%02x itag=%02x page_size=%d state=%d position=%03x\n",
-		     resp_list->tag, resp_list->code, resp_list->dma0_itag, resp_list->dma0_page_size, resp_list->cache_state, resp_list->cache_pos);
+	  printf("Response tag=0x%02x  tag_parity=%x code=0x%02x itag=%02x page_size=%d state=%d position=%03x\n",
+		     resp_list->tag, resp_list->tagpar, resp_list->code, resp_list->dma0_itag, resp_list->dma0_page_size, resp_list->cache_state, resp_list->cache_pos);
 	  struct resp_event *tmp;
 	  tmp = resp_list;
 	  resp_list = resp_list->__next;

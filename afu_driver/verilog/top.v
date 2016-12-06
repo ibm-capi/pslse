@@ -108,6 +108,7 @@ module top (
              input  [0:9]    d1h_dsize_top,
              input  [0:1023] d1h_ddata_top,
              input  [0:5]    d1h_datomic_op_top,
+             input           d1h_datomic_le_top,
 	     inout           hd1_sent_utag_valid_top, 
 	     inout  [0:9]    hd1_sent_utag_top, 
 	     inout  [0:2]    hd1_sent_utag_sts_top, 
@@ -216,6 +217,7 @@ module top (
   reg    [0:9]    d1h_dsize_top;
   reg    [0:1023] d1h_ddata_top;
   reg    [0:5]    d1h_datomic_op_top;
+  reg             d1h_datomic_le_top;
 
   // Registers
   reg             ah_jrunning_l;
@@ -386,6 +388,7 @@ module top (
   wire   [0:9]    d1h_dsize;
   wire   [0:1023] d1h_ddata;
   wire   [0:5]    d1h_datomic_op;
+  wire            d1h_datomic_le;
 //  wire   [0:15]   d0h_dpar;
   wire            hd0_sent_utag_valid;
   wire   [0:9]    hd0_sent_utag;
@@ -639,6 +642,7 @@ module top (
              d1h_dsize_top, 
              d1h_ddata_top, 
              d1h_datomic_op_top, 
+             d1h_datomic_le_top, 
 	     hd1_sent_utag_valid_top, 
 	     hd1_sent_utag_top, 
 	     hd1_sent_utag_sts_top, 
@@ -704,6 +708,7 @@ module top (
     d1h_dsize_top <= d1h_dsize;
     d1h_ddata_top <= d1h_ddata;
     d1h_datomic_op_top <= d1h_datomic_op;
+    d1h_datomic_le_top <= d1h_datomic_le;
   end
 
   // Breakpoint output, need at least 1 output or Quartus will optimize away
@@ -1076,8 +1081,8 @@ module top (
     .d0h_dtype(d0h_dtype),
     .d0h_dsize(d0h_dsize),
     .d0h_ddata(d0h_ddata),
-//    .d0h_datomic_op(d0h_datomic_op),				// TODO: This is an interface essential for CAPI2. Yet to be part of the MCP2
-//    .d0h_datomic_le(d0h_datomic_le),				// TODO: This is an interface essential for CAPI2. Yet to be part of the MCP2
+    .d0h_datomic_op(d0h_datomic_op),				
+    .d0h_datomic_le(d0h_datomic_le),		
 //    .d0h_dpar(d0h_dpar),
     // DMA 0 Sent interface
     .hd0_sent_utag_valid(hd0_sent_utag_valid),
@@ -1099,7 +1104,8 @@ module top (
     .d1h_dtype(d1h_dtype),
     .d1h_dsize(d1h_dsize),
     .d1h_ddata(d1h_ddata),
-//    .d1h_datomic_op(d1h_datomic_op),				// TODO: This is an interface essential for CAPI2. Yet to be part of the MCP2
+    .d1h_datomic_op(d1h_datomic_op),				
+    .d1h_datomic_le(d1h_datomic_le),			
     // DMA 1 Sent interface
     .hd1_sent_utag_valid(hd1_sent_utag_valid),
     .hd1_sent_utag(hd1_sent_utag),
