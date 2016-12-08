@@ -338,11 +338,13 @@ struct AFU_EVENT {
   uint32_t dma0_completion_laddr;     /* DMA completion Atomic attribute - lower addr bits of rx cmpl */
   uint32_t dma0_completion_byte_count; /* DMA completion remaining amount of bytes required to complete originating read request
 						including bytes being transferred in the current transaction   */
-/* TODO must increase size of dma0_req_data & dma0_completion_data to 512 to be able to handle max DMA transfer in one socket transaction */
+/* TODO must increase size of dma0_req_data & dma0_completion_data to 256 to be able to handle half of max DMA transfer in one socket transaction */
   unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
   unsigned char dma0_completion_data[128];  /* DMA completion data alignment is First Byte first */
-  unsigned char dma0_wr_credits;	/* Used to limit # of outstanding DMA wr ops to MAX_DMA0_WR_CREDITS  */
-  unsigned char dma0_rd_credits;	/* Used to limit # of outstanding DMA rd ops to MAX_DMA0_RD_CREDITS  */
+  signed char dma0_wr_credits;	/* Used to limit # of outstanding DMA wr ops to MAX_DMA0_WR_CREDITS  */
+  signed char dma0_rd_credits;	/* Used to limit # of outstanding DMA rd ops to MAX_DMA0_RD_CREDITS  */
+  unsigned char dma0_rd_partial;;	/* Used to determine bc for DMA xfers > 128B  */
+  unsigned char dma0_wr_partial;;	/* Used to determine bc for DMA xfers > 128B  */
 #endif /* ifdef PSL9 */
 
 };
