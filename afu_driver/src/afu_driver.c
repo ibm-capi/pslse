@@ -47,7 +47,7 @@ static unsigned int bw_delay;
 static struct AFU_EVENT event;
 static struct resp_event *resp_list;
 
-static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval, cl_cplval;
+static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval, cl_cplval, cl_sntval;
 // Added New
         int c_ha_jval;
         int c_ha_jcom;
@@ -562,6 +562,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    setDpiSignal32(hd0_sent_utag_top, 	  event.dma0_sent_utag, 	10);
 	    setDpiSignal32(hd0_sent_utag_sts_top, event.dma0_sent_utag_status,   2);
 	    *hd0_sent_utag_valid_top = 1;
+	    cl_sntval = CLOCK_EDGE_DELAY;
 	  }
 	  // Copying over the rest of the assignments from the clock_edge function
 	  if (cl_jval) {
@@ -593,6 +594,11 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  	--cl_cplval;
 	  	if (!cl_cplval)
 	  		*hd0_cpl_valid_top = 0;
+	  }
+	  if (cl_sntval) {
+	  	--cl_sntval;
+	  	if (!cl_sntval)
+	  		*hd0_sent_utag_valid_top = 0;
 	  }
 	  return;
         }

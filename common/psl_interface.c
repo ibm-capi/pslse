@@ -51,10 +51,9 @@ static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
 	if ((event->proto_primary != primary) ||
 	    (event->proto_secondary != secondary) ||
 	    (event->proto_tertiary != tertiary)) {
-		printf
-		    ("PSL_SOCKET:WARNING: Adjusting PSL interface protocol level!\n");
-		printf("PSL_SOCKET:\tPlease review changes between levels.\n");
-		printf("PSL_SOCKET:\tSupported PSL protocol level: %d.%d.%d\n",
+		printf( "PSL_SOCKET:WARNING: Adjusting PSL interface protocol level!\n");
+		printf( "PSL_SOCKET:\tPlease review changes between levels.\n");
+		printf( "PSL_SOCKET:\tSupported PSL protocol level: %d.%d.%d\n",
 		       event->proto_primary, event->proto_secondary,
 		       event->proto_tertiary);
 	}
@@ -658,32 +657,32 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 #ifdef PSL9
 	if (event->dma0_completion_valid != 0) {
 		event->tbuf[0] = event->tbuf[0] | 0x80;
-		printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
+		// printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
 		// need to have size as second/third byte for RX side to easily access for rbc
 		event->tbuf[bp++] = ((event->dma0_completion_size) >> 8) & 0x0F;
-		printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		// printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		//upper 4 bits in second byte always 0 to indicate this transaction is dma0_completion
 		// NOTE - this will assume read transactions are never anything other than 128bytes
 		// if this works, swap byte send order to send actual byte count (TODO)
-		printf("event->dma0_completion_size is 0x%3x \n", event->dma0_completion_size);
-		printf("event->dma0_completion_type is 0x%3x \n", event->dma0_completion_type);
-		printf("event->dma0_completion_utag is 0x%3x \n", event->dma0_completion_utag);
-		printf("event->dma0_completion_laddr is 0x%3x \n", event->dma0_completion_laddr);
-		printf("event->dma0_completion_byte_count is 0x%3x \n", event->dma0_completion_byte_count);
+		//printf("event->dma0_completion_size is 0x%3x \n", event->dma0_completion_size);
+		//printf("event->dma0_completion_type is 0x%3x \n", event->dma0_completion_type);
+		//printf("event->dma0_completion_utag is 0x%3x \n", event->dma0_completion_utag);
+		//printf("event->dma0_completion_laddr is 0x%3x \n", event->dma0_completion_laddr);
+		//printf("event->dma0_completion_byte_count is 0x%3x \n", event->dma0_completion_byte_count);
 		event->tbuf[bp++] = (event->dma0_completion_size & 0xFF);
-		printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = ((event->dma0_completion_utag >> 8) & 0x03);
 		event->tbuf[bp-1] = (event->tbuf[bp-1] | ((event->dma0_completion_type) << 4) );
-		printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_completion_utag & 0xFF);
-		printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_completion_laddr & 0xFF);
-		printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_completion_byte_count & 0xFF);
-		printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x  \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = ((event->dma0_completion_byte_count >> 8) | 
 					((event->dma0_completion_laddr & 0x0300) >> 4));
-		printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		for (i = 0; i < event->dma0_completion_size; i++) {
 			event->tbuf[bp++] = event->dma0_completion_data[i];
 		}
@@ -691,18 +690,18 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	}
 	if (event->dma0_sent_utag_valid != 0) {
 		event->tbuf[0] = event->tbuf[0] | 0x80;
-		printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
+		//printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
 		event->tbuf[bp++] = (event->dma0_sent_utag_status  & 0x03 );
-		printf("event->dma0_sent_utag_status is 0x%2x  \n", event->dma0_sent_utag_status);
-		printf("event->dma0_sent_utag is 0x%2x  \n", event->dma0_sent_utag);
+		//printf("event->dma0_sent_utag_status is 0x%2x  \n", event->dma0_sent_utag_status);
+		//printf("event->dma0_sent_utag is 0x%2x  \n", event->dma0_sent_utag);
 		// make sure that upper 4 bits are always 1, as this transaction is dma0_sent_utag
 		event->tbuf[bp-1] = event->tbuf[bp-1] | 0xF0;
-		printf("event->tbuf[1] is 0x%2x  \n", event->tbuf[1]);
+		//printf("event->tbuf[1] is 0x%2x  \n", event->tbuf[1]);
 		//printf("event->tbuf[bp] is 0x%2x and bp is 0x%2x \n", event->tbuf[bp], bp);
 		event->tbuf[bp++] = ((event->dma0_sent_utag >> 8) & 0x03);
-		printf("event->tbuf[2] is 0x%2x and bp-1 is 0x%2x \n", event->tbuf[2], bp-1);
+		//printf("event->tbuf[2] is 0x%2x and bp-1 is 0x%2x \n", event->tbuf[2], bp-1);
 		event->tbuf[bp++] = (event->dma0_sent_utag & 0x0FF);
-		printf("event->tbuf[3] is 0x%2x and bp-1 is 0x%2x \n", event->tbuf[3], bp-1);
+		//printf("event->tbuf[3] is 0x%2x and bp-1 is 0x%2x \n", event->tbuf[3], bp-1);
 		event->dma0_sent_utag_valid = 0;
 	}
 #endif 
@@ -753,9 +752,10 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->mmio_valid = 0;
 	}
 	if (event->response_valid != 0) {
-	        // printf( "lgt: psl_signal_afu_model: response: tag: 0x%02x, tag parity: 0x%02x\n", 
-		//	event->response_tag, 
-		//	event->response_tag_parity);
+	        printf( "lgt: psl_signal_afu_model: response: tag=0x%02x, tag parity=0x%02x, code=0x%02x \n", 
+			event->response_tag, 
+			event->response_tag_parity, 
+			event->response_code);
 		event->tbuf[0] = event->tbuf[0] | 0x04;
 		event->tbuf[bp++] = event->response_tag;
 		event->tbuf[bp++] = event->response_tag_parity;
@@ -816,9 +816,11 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	}
 
 	// dump tbuf
-	// printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
-	// for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
-	// printf( "\n" ); 
+	if ( bp > 1 ) {
+	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
+	  for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
+	  printf( "\n" );
+	}
 
 	bl = bp;
 	bp = 0;
@@ -846,32 +848,34 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 	if (event->dma0_dvalid)  {
 // dma0 request read or write  
 		event->tbuf[0] = event->tbuf[0] | 0x80;
-		printf("utag 0x%3x itag 0x%3x type 0x%2x size 0x%3x  bp 0x%2x \n", 
-		event->dma0_req_utag, event->dma0_req_itag, event->dma0_req_type, 
-		event->dma0_req_size, bp);
+		//printf("utag 0x%3x itag 0x%3x type 0x%2x size 0x%3x  bp 0x%2x \n", 
+		//       event->dma0_req_utag, event->dma0_req_itag, event->dma0_req_type, 
+		//       event->dma0_req_size, bp);
 		//printf("event->dma0_req_type is 0x%2x \n", event->dma0_req_type);
 		event->tbuf[bp++] = (event->dma0_req_type ) & 0xFF;
-		printf("event->tbuf[1] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[1] is 0x%2x \n", event->tbuf[bp-1]);
 		// if dtype == 3, then utag is only 8 bits, not 10 - TODO, do we check here?
 		event->tbuf[bp++] = (event->dma0_req_utag >> 8 ) & 0x03;
 		//printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
-		printf("event->tbuf[2] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[2] is 0x%2x \n", event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_utag ) & 0xFF;
-		printf("event->tbuf[3] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[3] is 0x%2x \n", event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_itag >> 8 ) & 0x01;
-		printf("event->tbuf[4] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[4] is 0x%2x \n", event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_itag ) & 0xFF;
-		printf("event->tbuf[5] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[5] is 0x%2x \n", event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_size >> 8 ) & 0x03;
-		printf("event->tbuf[6] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[6] is 0x%2x \n", event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_size ) & 0xFF;
-		printf("event->tbuf[7] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[7] is 0x%2x \n", event->tbuf[bp-1]);
 		// if type is dma read req, no data to xfer here 
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  {
 		//if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_128) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE))  {
 		// for DMA writes that are greater than 128B, AFU MUST send all data in one socket event
 		// MAX transfer for DMA is 512B but tbuf & rbuf are 1024 chars each
-			for (i = 0; i < event->dma0_req_size; i++) {
+		        // lgt - hacked this to always send 128 bytes of dma data to see if mcp006 works
+			// for (i = 0; i < event->dma0_req_size; i++) {
+			for (i = 0; i < 128; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
 				//printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
 				//printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
@@ -884,14 +888,14 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 			event->tbuf[bp++] = (event->dma0_atomic_op ) & 0x3F;
 			if (event->dma0_atomic_le == 1)
 				event->tbuf[bp-1] |= 0x80;
-			printf("event->tbuf[8] is 0x%2x \n", event->tbuf[bp-1]);
+			//printf("event->tbuf[8] is 0x%2x \n", event->tbuf[bp-1]);
 			for (i = 0; i < 16; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
 			//	printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
 			//	printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
 			}
 		}
-printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
+		//printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
 		event->dma0_dvalid = 0;
 	}
 #endif
@@ -956,10 +960,17 @@ printf("PSL_SIGNAL_PSL_MODEL: event->dma0_dvalid =1 send to PSL, tbuf[0] is 0x%0
 #if defined PSL9 || PSL9lite
 		event->tbuf[bp++] = event->command_cpagesize;
 #endif
-printf("PSL_SIGNAL_PSL_MODEL: event->command_valid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
+		//printf("PSL_SIGNAL_PSL_MODEL: event->command_valid =1 send to PSL, tbuf[0] is 0x%02x  bp is %2d \n", event->tbuf[0], bp);
 		event->command_valid = 0;
 	}
 
+
+        // dump tbuf
+	if ( bp > 1 ) {
+	  printf( "lgt: psl_signal_psl_model: tbuf length:0x%02x tbuf: 0x", bp ); 
+	  for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
+	  printf( "\n" );
+	}
 
 	bl = bp;
 	bp = 0;
@@ -991,6 +1002,7 @@ printf("PSL_SIGNAL_PSL_MODEL: event->command_valid =1 send to PSL, tbuf[0] is 0x
 
 int psl_get_afu_events(struct AFU_EVENT *event)
 {
+	int i = 0;
 	int bc = 0;
 	uint32_t rbc = 1;
 	fd_set watchset;	/* fds to read from */
@@ -1046,7 +1058,7 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 						return -1;
 						}
 				}
-printf("psl_get_afu_event and we have a dma op \n");
+				//printf("psl_get_afu_events and we have a dma op \n");
 				event->rbp += bc;
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_128)
 		// event->dma0_req_size has size of TOTAL DMA data xfer, need to move this up to second byte and get it to be able to handle
@@ -1074,30 +1086,35 @@ printf("psl_get_afu_event and we have a dma op \n");
 	if (event->rbp < rbc)
 		return 0;
 
+	// dump rbuf
+	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+	printf( "\n" ); 
+
 	rbc = 1;
 #ifdef PSL9
 	if ((event->rbuf[0] & 0x80) != 0) {
 		event->dma0_dvalid = 1;
 //printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		event->dma0_req_type = (event->rbuf[rbc] & 0x7);
-		printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		rbc +=1;
 		event->dma0_req_utag = event->rbuf[rbc++];
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		event->dma0_req_utag = (event->dma0_req_utag << 8) | event->rbuf[rbc++];
-		printf("event->dma0_req_utag is 0x%3x \n", event->dma0_req_utag);
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->dma0_req_utag is 0x%3x \n", event->dma0_req_utag);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		event->dma0_req_itag = event->rbuf[rbc++];
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		event->dma0_req_itag = (event->dma0_req_itag << 8) | event->rbuf[rbc++];
-		printf("event->dma0_req_itag is 0x%3x \n", event->dma0_req_itag);
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->dma0_req_itag is 0x%3x \n", event->dma0_req_itag);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		event->dma0_req_size = event->rbuf[rbc++];
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		event->dma0_req_size = (event->dma0_req_size << 8) | event->rbuf[rbc++];
-		printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
-		printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
 		// if type is 1 (dma read req), no data to xfer here 
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  { //right now, only write op supported is 128b
 		// but, for DMA writes that are greater than 128B, AFU MUST send all data in one socket event
@@ -1118,7 +1135,7 @@ printf("psl_get_afu_event and we have a dma op \n");
 				event->dma0_atomic_le = 1;
 			else
 				event->dma0_atomic_le = 0;
-		printf("event->dma0_atomic_op is 0x%3x \n", event->dma0_atomic_op);
+			//printf("event->dma0_atomic_op is 0x%3x \n", event->dma0_atomic_op);
 			for (bc = 0; bc < 16; bc++) {
 				event->dma0_req_data[bc] = event->rbuf[rbc++];
 			//printf("data is 0x%2x, bc is %d, rbc is %d \n", event->rbuf[rbc-1], bc, rbc-1);
@@ -1173,7 +1190,7 @@ printf("psl_get_afu_event and we have a dma op \n");
 		event->buffer_rdata_valid = 0;
 	}
 	if ((event->rbuf[0] & 0x01) != 0)  {
-printf("received a cmd, rbuf[0] is 0x%2x \n", event->rbuf[0]);
+	  //printf("received a cmd, rbuf[0] is 0x%2x \n", event->rbuf[0]);
 		event->command_valid = 1;
 		event->command_tag = event->rbuf[rbc++];
 		event->command_abort = (event->rbuf[rbc] >> 5) & 0x7;
@@ -1198,7 +1215,7 @@ printf("received a cmd, rbuf[0] is 0x%2x \n", event->rbuf[0]);
 #if defined PSL9 || defined PSL9lite
 		event->command_cpagesize = event->rbuf[rbc];
 #endif
-printf(" rbc is %2d \n",rbc);
+		//printf(" rbc is %2d \n",rbc);
 	} else {
 		event->command_valid = 0;
 	}
@@ -1285,7 +1302,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				// this will be bc for  dma read cpl data, have to also add 7  
 				rbc = rbc + 7 + event->rbuf[2];
 	
-				printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
+				//printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
 			}
 
 		}	
@@ -1306,10 +1323,10 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	if (event->rbp < rbc)
 		return 0;
 	
-	// dump tbuf
-	// printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-	// for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-	// printf( "\n" ); 
+	// dump rbuf
+	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
@@ -1318,23 +1335,22 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		event->dma0_completion_valid = 1;
 //printf("PSL_GET_PSL_EVENTS setting event->dma0_completion_valid to 1 \n");
 		event->dma0_completion_size = event->rbuf[rbc++];
-		event->dma0_completion_size =
-		((event->dma0_completion_size & 0xF) << 8 ) | event->rbuf[rbc++];
-		printf("event->dma0_completion_size = 0x%3x \n", event->dma0_completion_size);
+		event->dma0_completion_size = ( ( event->dma0_completion_size & 0xF ) << 8 ) | event->rbuf[rbc++];
+		//printf("event->dma0_completion_size = 0x%3x \n", event->dma0_completion_size);
 		event->dma0_completion_type = ((event->rbuf[rbc] >> 4 ) & 0x07);
-		printf("event->dma0_completion_type = 0x%3x \n", event->dma0_completion_type);
+		//printf("event->dma0_completion_type = 0x%3x \n", event->dma0_completion_type);
 		event->dma0_completion_utag = event->rbuf[rbc++];
 		event->dma0_completion_utag =
 			((event->dma0_completion_utag & 0x03) << 8 ) | event->rbuf[rbc++];
-		printf("event->dma0_completion_utag = 0x%3x \n", event->dma0_completion_utag);
+		//printf("event->dma0_completion_utag = 0x%3x \n", event->dma0_completion_utag);
 		event->dma0_completion_laddr = event->rbuf[rbc++];
-		printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
+		//printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
 		event->dma0_completion_byte_count = event->rbuf[rbc++];
-		printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
+		//printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
 		event->dma0_completion_laddr = ((event->rbuf[rbc++] << 4) | event->dma0_completion_laddr);
-		printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
+		//printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
 		event->dma0_completion_byte_count = ((event->rbuf[rbc] << 8) | event->dma0_completion_byte_count);
-		printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
+		//printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
 		for (bc = 0; bc < event->dma0_completion_size; bc++) {
 			event->dma0_completion_data[bc] = event->rbuf[rbc++];
 		//printf("data is 0x%2x, bc is %d, rbc is %d \n", event->dma0_completion_data[bc], bc, rbc);
@@ -1347,16 +1363,16 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	}
 	if (((event->rbuf[0] & 0x80) == 0x80) && ((event->rbuf[1] & 0xF0) == 0xF0)) {
 		event->dma0_sent_utag_valid = 1;
-printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
+		//printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		event->dma0_sent_utag_status = (event->rbuf[rbc++]  & 0x03);
 		event->dma0_sent_utag = event->rbuf[rbc++];
 		event->dma0_sent_utag =
 			((event->dma0_sent_utag & 0x03) << 8 ) | event->rbuf[rbc];
-		printf("dma0_sent_utag_status is 0x%3x \n", event->dma0_sent_utag_status);
-		printf("event->rbuf[1] is 0x%3x  \n", event->rbuf[1]);
-		printf("event->rbuf[2] is 0x%3x  \n", event->rbuf[2]);
-		printf("event->rbuf[%x] is 0x%3x  \n", rbc, event->rbuf[rbc]);
-		printf("dma0_sent_utag is 0x%3x \n", event->dma0_sent_utag);
+		//printf("dma0_sent_utag_status is 0x%3x \n", event->dma0_sent_utag_status);
+		//printf("event->rbuf[1] is 0x%3x  \n", event->rbuf[1]);
+		//printf("event->rbuf[2] is 0x%3x  \n", event->rbuf[2]);
+		//printf("event->rbuf[%x] is 0x%3x  \n", rbc, event->rbuf[rbc]);
+		//printf("dma0_sent_utag is 0x%3x \n", event->dma0_sent_utag);
 	}else {
 		event->dma0_sent_utag_status = 0;
 	}
@@ -1418,8 +1434,7 @@ printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		event->response_dma0_itag =
 		    (((event->response_dma0_itag) & 0x1) << 8) | event->rbuf[rbc++];
 		event->response_r_pgsize = event->rbuf[rbc++];
-		printf("PSL_GET_PSL_EVENTS:tag is 0x%x \n", event->response_tag);
-		printf("PSL_GET_PSL_EVENTS:response_code is 0x%x \n", event->response_code);
+		printf( "lgt: psl_get_psl_events: respsonse tag=0x%02x, tag parity=0x%02x, respsonse code=0x%02x. respsonse itag=0x%02x, \n", event->response_tag, event->response_tag_parity, event->response_code, event->response_dma0_itag );
 #endif
 
 
@@ -1436,7 +1451,7 @@ printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 			event->buffer_read_length = 64;
 		}
 		event->buffer_read_address = (event->rbuf[rbc++]) & 0x3F;
-	        printf( "lgt: psl_get_psl_event: buffer read: tag: 0x%02x, tag parity: 0x%02x\n", 
+	        printf( "lgt: psl_get_psl_events: buffer read: tag: 0x%02x, tag parity: 0x%02x\n", 
 		   	event->buffer_read_tag, 
 			event->buffer_read_tag_parity);
 	} else {
@@ -1458,6 +1473,9 @@ printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		for (bc = 0; bc < 2; bc++) {
 			event->buffer_wparity[bc] = event->rbuf[rbc++];
 		}
+	        printf( "lgt: psl_get_psl_events: buffer write: tag: 0x%02x, tag parity: 0x%02x\n", 
+		   	event->buffer_write_tag, 
+			event->buffer_write_tag_parity);
 	} else {
 		event->buffer_write = 0;
 	}
@@ -1610,7 +1628,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		}
 		if (event->dma0_req_type == DMA_DTYPE_RD_REQ)
 			event->dma0_rd_credits--;
-printf("psl_afu_dma0_req: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
+		//printf("psl_afu_dma0_req: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
 		event->dma0_dvalid = 1;			
 		return PSL_SUCCESS;
 
@@ -1630,7 +1648,7 @@ afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 {
 // if AFU has already checked/reset event->dma0_completion_valid, this has to change
 	if (!event->dma0_completion_valid) {
-		printf("THERE ISN'T ANY VALID BUFFER READ DATA- dma0_completion_valid != 1 \n");
+	        // printf("THERE ISN'T ANY VALID BUFFER READ DATA- dma0_completion_valid != 1 \n");
 		return PSL_BUFFER_READ_DATA_NOT_VALID;
 	} else { 
 		event->dma0_completion_valid = 0;
@@ -1657,7 +1675,7 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 	} else {
 		utag = event->dma0_sent_utag;
 		sent_sts = event->dma0_sent_utag_status;
-		printf("sent_utag_sts is 0%x \n", event->dma0_sent_utag_status);
+		//printf("sent_utag_sts is 0%x \n", event->dma0_sent_utag_status);
 		event->dma0_sent_utag_valid = 0;
 		//increment credit count here NOTE! This WON'T work for FAILED transactions! TODO
 		if (event->dma0_sent_utag_status == DMA_SENT_UTAG_STS_RD)
@@ -1667,7 +1685,7 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 		else
 			printf("Transaction FAILED, can't tell which credit counter to increment!! \n");
 
-printf("afu_get_dma0_sent_utag: sent_sts is %d  rd_credit count is %d  wr_credit count is %d \n", sent_sts, event->dma0_rd_credits, event->dma0_wr_credits);
+		//printf("afu_get_dma0_sent_utag: sent_sts is %d  rd_credit count is %d  wr_credit count is %d \n", sent_sts, event->dma0_rd_credits, event->dma0_wr_credits);
 		return PSL_SUCCESS;
 	}
 }

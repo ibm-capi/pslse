@@ -1424,7 +1424,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 	// Look for any XLAT cmds to process immediately
 	head = &cmd->list;
 	while (*head != NULL) {
-		printf ("handle_caia2_cmds: head->type is %2x, head->state is 0x%3x \n", (*head)->type, (*head)->state);
+	        // printf ("handle_caia2_cmds: head->type is %2x, head->state is 0x%3x \n", (*head)->type, (*head)->state);
 	//first look for xlat read/write requests
 		if ((((*head)->type == CMD_XLAT_RD) &&
 		    ((*head)->state == DMA_ITAG_REQ)) |
@@ -1450,7 +1450,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 // Test for client disconnect
 	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
-printf("HANDLE_CAIA2_CMDS start to process...\n");
+	// printf("HANDLE_CAIA2_CMDS start to process...\n");
 	//Process XLAT cmds and get them ready for handle_response to deal with
 	switch (event->command) {
 		case PSL_COMMAND_XLAT_RD_P0:

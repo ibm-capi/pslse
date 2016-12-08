@@ -47,7 +47,8 @@ PAGED_PERCENT:0
 REORDER_PERCENT:80,90
 
 # Percentage chance of PSL generating extra buffer read/write activity.
-BUFFER_PERCENT:80,90
+# BUFFER_PERCENT:80,90
+BUFFER_PERCENT:0
 
 # VSEC data lines 
 #CAIA_VERSION:0100
