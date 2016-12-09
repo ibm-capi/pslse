@@ -193,7 +193,7 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 
 	if (cmd == NULL)
 		return;
-        printf("in add cmd \n");
+        //printf("in add cmd \n");
 	event = (struct cmd_event *)calloc(1, sizeof(struct cmd_event));
 	event->context = context;
 	event->command = command;
@@ -386,7 +386,7 @@ static void _add_read_pe(struct cmd *cmd, uint32_t handle, uint32_t tag,
 	// Reads will be added to the list and will next be processed
 	// in the function handle_buffer_write()
 	// should this just call handle_buffer_write_pe???
-        printf( "in _add_read_pe \n" );
+        //printf( "in _add_read_pe \n" );
 	_add_cmd(cmd, handle, tag, command, abort, CMD_READ_PE, addr, size,
 		 MEM_IDLE, PSL_RESPONSE_DONE, 0);
 }
@@ -665,7 +665,7 @@ void handle_buffer_write(struct cmd *cmd)
 	if (cmd == NULL)
 		return;
 
-	printf( "handle_buffer_write \n" );
+	//printf( "handle_buffer_write \n" );
 	// Randomly select a pending read or read_pe (or none)
 	event = cmd->list;
 	while (event != NULL) {
@@ -686,7 +686,7 @@ void handle_buffer_write(struct cmd *cmd)
 		event = event->_next;
 	}
 
-	printf( "handle_buffer_write: we've picked an event \n" );
+	//printf( "handle_buffer_write: we've picked an event \n" );
 	// Test for client disconnect
 	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
