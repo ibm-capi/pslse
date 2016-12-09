@@ -853,29 +853,50 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		//       event->dma0_req_size, bp);
 		//printf("event->dma0_req_type is 0x%2x \n", event->dma0_req_type);
 		event->tbuf[bp++] = (event->dma0_req_type ) & 0xFF;
-		//printf("event->tbuf[1] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		event->tbuf[bp++] = (event->dma0_req_size >> 8 ) & 0x03;
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		event->tbuf[bp++] = (event->dma0_req_size ) & 0xFF;
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		//move up the req_aize so other side can determine what to do for dma writes < or > 128B
 		// if dtype == 3, then utag is only 8 bits, not 10 - TODO, do we check here?
 		event->tbuf[bp++] = (event->dma0_req_utag >> 8 ) & 0x03;
 		//printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
-		//printf("event->tbuf[2] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1,event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_utag ) & 0xFF;
-		//printf("event->tbuf[3] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_itag >> 8 ) & 0x01;
-		//printf("event->tbuf[4] is 0x%2x \n", event->tbuf[bp-1]);
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = (event->dma0_req_itag ) & 0xFF;
-		//printf("event->tbuf[5] is 0x%2x \n", event->tbuf[bp-1]);
-		event->tbuf[bp++] = (event->dma0_req_size >> 8 ) & 0x03;
+		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
+		//event->tbuf[bp++] = (event->dma0_req_size >> 8 ) & 0x03;
 		//printf("event->tbuf[6] is 0x%2x \n", event->tbuf[bp-1]);
-		event->tbuf[bp++] = (event->dma0_req_size ) & 0xFF;
+		//event->tbuf[bp++] = (event->dma0_req_size ) & 0xFF;
 		//printf("event->tbuf[7] is 0x%2x \n", event->tbuf[bp-1]);
 		// if type is dma read req, no data to xfer here 
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  {
-		//if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_128) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE))  {
-		// for DMA writes that are greater than 128B, AFU MUST send all data in one socket event
-		// MAX transfer for DMA is 512B but tbuf & rbuf are 1024 chars each
-		        // lgt - hacked this to always send 128 bytes of dma data to see if mcp006 works
-			// for (i = 0; i < event->dma0_req_size; i++) {
-			for (i = 0; i < 128; i++) {
+		// MAX transfer for DMA is 512B but assumption is socket transfers are <= 128B each
+			if (event->dma0_req_size <= 128) {
+				bc = event->dma0_req_size;
+				event->dma0_wr_partial = 0;   
+			} else {
+				bc = 128;
+				//event->dma0_wr_partial = event->dma0_req_size -128;
+			}
+			for (i = 0; i < bc; i++) {
+				event->tbuf[bp++] = event->dma0_req_data[i];
+				//printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
+				//printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
+			}
+		}
+		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE)  {
+			if (event->dma0_wr_partial <= 128)  
+				bc = event->dma0_wr_partial;
+			else {
+			   bc = 128;
+			   //event->dma0_wr_partial -= 128;
+			}
+			for (i = 0; i < bc; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
 				//printf("data is 0x%2x,  i is %d  \n", event->dma0_req_data[i], i);
 				//printf("data is 0x%2x,  bp is %d \n", event->tbuf[bp-1], bp-1);
@@ -1049,9 +1070,9 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 //printf("PSL_GET_AFU_EVENT-2 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			if ((event->rbuf[0] & 0x80) != 0)  {
 				rbc += 7;
-		// this only gets us a dma rd op w/o data, have to add more to rbc for now just support 128B writes (more/less is a TODO)
+		// this only gets us a dma rd op w/o data, have to add more to rbc so need to see what dtype  & req_size are)
 				//if ((bc = recv(event->sockfd, event->rbuf+1, 1, 0)) == -1) {
-				if ((bc = recv(event->sockfd, event->rbuf + event->rbp, 1, 0)) == -1) {
+				if ((bc = recv(event->sockfd, event->rbuf + event->rbp, 3, 0)) == -1) {
 					if (errno == EWOULDBLOCK) {
 						return 0;
 					} else {
@@ -1060,12 +1081,31 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 				}
 				//printf("psl_get_afu_events and we have a dma op \n");
 				event->rbp += bc;
-				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_128)
-		// event->dma0_req_size has size of TOTAL DMA data xfer, need to move this up to second byte and get it to be able to handle
-		// DMA ops of <128 and >128 so eventually rbc += event->dma0_req_size will work for DMA_DTYPE_WR_MORE but not Atomic Memory ops TODO
+		// event->dma0_req_size has size of TOTAL DMA data xfer
+		// TODO
+				event->dma0_req_size = event->rbuf[2];
+				printf("event->rbuf[2] is 0x%2x  \n", event->rbuf[2]);
+				event->dma0_req_size = (event->dma0_req_size << 8) | event->rbuf[3];
+				printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
+				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_128) {
+ 					if (event->dma0_req_size <= 128) {
+					rbc += event->dma0_req_size;
+					event->dma0_wr_partial = 0;
+				} else 
 					rbc += 128;
+					// may need to set up event->dma0_wr_partial here?
+				}
+				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_MORE) {
+ 					if (event->dma0_req_size <= 128) { //TODO THIS IS WRONG!!!!!
+					rbc += event->dma0_req_size;
+				} else 
+					rbc += 128;
+					// may need to set up event->dma0_wr_partial here?
+				}
+				
+
 		// If this is an Atomic Memory Op, will have one extra char for atomic_op and 16 for data payload
-				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_ATOMIC)
+				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_ATOMIC) 
 					rbc += 17;
 //printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			}
@@ -1100,25 +1140,26 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		//printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
 		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		rbc +=1;
+		event->dma0_req_size = event->rbuf[rbc++];
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc-1, event->rbuf[rbc-1]);
+		event->dma0_req_size = (event->dma0_req_size << 8) | event->rbuf[rbc++];
+		//printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc-1, event->rbuf[rbc-1]);
 		event->dma0_req_utag = event->rbuf[rbc++];
-		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc-1, event->rbuf[rbc-1]);
 		event->dma0_req_utag = (event->dma0_req_utag << 8) | event->rbuf[rbc++];
 		//printf("event->dma0_req_utag is 0x%3x \n", event->dma0_req_utag);
-		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc-1, event->rbuf[rbc-1]);
 		event->dma0_req_itag = event->rbuf[rbc++];
-		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc-1, event->rbuf[rbc-1]);
 		event->dma0_req_itag = (event->dma0_req_itag << 8) | event->rbuf[rbc++];
 		//printf("event->dma0_req_itag is 0x%3x \n", event->dma0_req_itag);
-		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
-		event->dma0_req_size = event->rbuf[rbc++];
-		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
-		event->dma0_req_size = (event->dma0_req_size << 8) | event->rbuf[rbc++];
+		//printf("event->rbuf[%x] is 0x%2x  \n", rbc-1, event->rbuf[rbc-1]);
 		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		//printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
 		// if type is 1 (dma read req), no data to xfer here 
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  { //right now, only write op supported is 128b
-		// but, for DMA writes that are greater than 128B, AFU MUST send all data in one socket event
-		// MAX transfer for DMA is 512B but tbuf & rbuf are 1024 chars each
+		// but, for DMA writes that are greater than 128B total, AFU MUST send only 128B per socket event
 		//if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_128) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE))  {
 			for (bc = 0; bc < event->dma0_req_size; bc++) {
 				event->dma0_req_data[bc] = event->rbuf[rbc++];
@@ -1367,11 +1408,11 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		event->dma0_sent_utag_status = (event->rbuf[rbc++]  & 0x03);
 		event->dma0_sent_utag = event->rbuf[rbc++];
 		event->dma0_sent_utag =
-			((event->dma0_sent_utag & 0x03) << 8 ) | event->rbuf[rbc];
+			((event->dma0_sent_utag & 0x03) << 8 ) | event->rbuf[rbc++];
 		//printf("dma0_sent_utag_status is 0x%3x \n", event->dma0_sent_utag_status);
 		//printf("event->rbuf[1] is 0x%3x  \n", event->rbuf[1]);
 		//printf("event->rbuf[2] is 0x%3x  \n", event->rbuf[2]);
-		//printf("event->rbuf[%x] is 0x%3x  \n", rbc, event->rbuf[rbc]);
+		//printf("event->rbuf[%x] is 0x%3x  \n", rbc-1, event->rbuf[rbc-1]);
 		//printf("dma0_sent_utag is 0x%3x \n", event->dma0_sent_utag);
 	}else {
 		event->dma0_sent_utag_status = 0;
@@ -1515,6 +1556,14 @@ psl_afu_command(struct AFU_EVENT *event,
 #if defined PSL9 || defined PSL9lite
 		event->command_cpagesize = cpagesize;
 #endif
+#ifdef PSL9
+// if cmd is for xlat_abrt_rd or xlat_abrt_wr, increment counters here
+// instead of sent_utag_sts bc there won't be a sent utag sts for aborts
+		if (code == PSL_COMMAND_ITAG_ABRT_RD)
+			event->dma0_rd_credits +=1;
+		if (code == PSL_COMMAND_ITAG_ABRT_WR)
+			event->dma0_wr_credits +=1;
+#endif			
 		return PSL_SUCCESS;
 	}
 }
@@ -1599,32 +1648,47 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 
 {
 	//check to be sure rd & wr credits are available, otherwise reject
-	if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits == 0))
-		return PSL_NO_DMA_PORT_CREDITS;
-	if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0))
-		return PSL_NO_DMA_PORT_CREDITS;
+	if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
+		printf("AFU IS OUT OF DMA RD CREDITS !!!!!! \n"); 
+		return PSL_NO_DMA_PORT_CREDITS; }
+	if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
+		printf("AFU IS OUT OF DMA WR CREDITS !!!!!! \n"); 
+		return PSL_NO_DMA_PORT_CREDITS; }
 	if  (event->dma0_dvalid) {
-		printf("ALREADY A DMA CMD PENDING  \n");
+		printf("ALREADY A DMA CMD PENDING  !!!!!! \n");
 		return PSL_DOUBLE_DMA0_REQ;
 	} else {
 		event->dma0_req_utag = utag;
 		event->dma0_req_itag = itag;
 		event->dma0_req_type = type;			
+		if (size > 512)
+			printf("MAX DMA PAYLOAD OF 512B EXCEEDED!!! \n");
 		event->dma0_req_size = size;			
 		event->dma0_atomic_op = atomic_op;
 		event->dma0_atomic_le = atomic_le;
 	// For DMA write or atomic op need to send data - TODO add support for >128 up to 512B writes
-	// if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_128) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE))  
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128) { 
-			memcpy(event->dma0_req_data, dma_wr_data, size);
+			event->dma0_req_size = size;
+			if (size <= 128)  {
+				memcpy(event->dma0_req_data, dma_wr_data, size);
+			} else { //the start of a >128B write operation
+				event->dma0_wr_partial = size - 128;
+				memcpy(event->dma0_req_data, dma_wr_data, 128);
+			}
+			event->dma0_wr_credits--;
+		}
+ 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE)  { 
+			if (event->dma0_wr_partial <= 128) 
+				memcpy(event->dma0_req_data, dma_wr_data, event->dma0_wr_partial);
+			else {
+				memcpy(event->dma0_req_data, dma_wr_data, 128);
+				event->dma0_wr_partial -= 128;
+			}
 			event->dma0_wr_credits--;
 		}
 		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)  {  
 			memcpy(event->dma0_req_data, dma_wr_data, 16);
-			if (event->dma0_atomic_op < 0x20)
-				event->dma0_rd_credits --;
-			else	
-				event->dma0_wr_credits--;
+			event->dma0_wr_credits--;
 		}
 		if (event->dma0_req_type == DMA_DTYPE_RD_REQ)
 			event->dma0_rd_credits--;
@@ -1669,7 +1733,7 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 		 uint32_t utag,
 		 uint32_t sent_sts)
 {
-// if AFU has already checked/reset event->dma0_sent_utag_valid, this has to change
+// if AFU doesn't use this to function, AFU has to manually increment credit count
 	if (!event->dma0_sent_utag_valid) {
 		return PSL_BUFFER_READ_DATA_NOT_VALID;
 	} else {
@@ -1677,13 +1741,15 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 		sent_sts = event->dma0_sent_utag_status;
 		//printf("sent_utag_sts is 0%x \n", event->dma0_sent_utag_status);
 		event->dma0_sent_utag_valid = 0;
-		//increment credit count here NOTE! This WON'T work for FAILED transactions! TODO
 		if (event->dma0_sent_utag_status == DMA_SENT_UTAG_STS_RD)
 			event->dma0_rd_credits++;
 		else if (event->dma0_sent_utag_status == DMA_SENT_UTAG_STS_WR)
 			event->dma0_wr_credits++;
-		else
-			printf("Transaction FAILED, can't tell which credit counter to increment!! \n");
+		else {
+			printf("Transaction FAILED, can't tell which credit counter to increment so will increment both!! \n");
+			//event->dma0_wr_credits++;
+			//event->dma0_rd_credits++;
+		     }
 
 		//printf("afu_get_dma0_sent_utag: sent_sts is %d  rd_credit count is %d  wr_credit count is %d \n", sent_sts, event->dma0_rd_credits, event->dma0_wr_credits);
 		return PSL_SUCCESS;
