@@ -696,7 +696,8 @@ void handle_buffer_write(struct cmd *cmd)
 	// prepare for response.
 	// While a read_pe generates it's own data and doesn't go through the _handle_mem_read() routine,
 	// a read_pe still needs to generate a call to psl_buffer_write 
-	// are there other reasons to do the psl_buffer_write?  For example, do any of the atomic ops send back data via the buffer write port?
+	// OTHER REASONS to call are: CAS commands...they need to get back data via the buffer write port
+	// but don't send the read data back, it's used for the operation
 	if ((event->state == MEM_RECEIVED) && ((event->type == CMD_READ) || (event->type == CMD_READ_PE))) {
 		if (psl_buffer_write(cmd->afu_event, event->tag, event->addr,
 				     CACHELINE_BYTES, event->data,
@@ -1323,10 +1324,12 @@ void handle_mem_write(struct cmd *cmd)
 		client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 	}
 	debug_cmd_client(cmd->dbg_fp, cmd->dbg_id, event->tag, event->context);
+	  	printf ("handle_mem_write1: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
 #if defined PSL9 || defined PSL9lite
-	if ((event->type != CMD_CAS_4B) || (event->type != CMD_CAS_8B))
+	if ((event->type != CMD_CAS_4B) && (event->type != CMD_CAS_8B))
 #endif
 		event->state = MEM_REQUEST;
+	  	printf ("handle_mem_write2: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
 	client->mem_access = (void *)event;
 }
 
@@ -1337,10 +1340,12 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
 	
 #if defined PSL9 || defined PSL9lite
-	if ((event->type == CMD_READ) || (event->type == CMD_CAS_4B) || (event->type == CMD_CAS_8B)) {
+	if ((event->type == CMD_READ) ||
+		 (((event->type == CMD_CAS_4B) || (event->type == CMD_CAS_8B)) && event->state != MEM_CAS_WR)) {
 #else
 	if (event->type == CMD_READ) {
 #endif
+	  	printf ("handle_mem_read: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
 		// Client is returning data from memory read
 		printf("before get bytes silent in handle_mem_read \n");
 		if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
@@ -1348,6 +1353,10 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 	        	debug_msg("%s:_handle_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
 				  cmd->afu_name, event->tag, event->size, event->addr);
 			event->resp = PSL_RESPONSE_DERROR;
+#if defined PSL9 || PSL9lite
+			if ((event->type == CMD_CAS_4B) || (event->type == CMD_CAS_8B))
+				event->resp = PSL_RESPONSE_CAS_INV;
+#endif
 			event->state = MEM_DONE;
 			debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
 				 event->context, event->resp);
@@ -1492,18 +1501,17 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 		_handle_mem_read(cmd, event, fd);
 #ifdef PSL9
  	// have to account for AMO fetch cmds with returned data
- 	// else if (event->type == CMD_DMA_RD)
  	else if (event->type == CMD_DMA_RD) 	
 		_handle_mem_read(cmd, event, fd);
  	else if (event->type == CMD_DMA_WR_AMO) {
-                 if ((event->atomic_op & 0x3f) < 0x20)  {
-		printf("yes, less than 0x020 \n");
-		_handle_mem_read(cmd, event, fd);
-		} else{
-			printf("no?? event->atomic_op = 0x%x \n", event->atomic_op);
+                 if ((event->atomic_op & 0x3f) < 0x20)  
+			_handle_mem_read(cmd, event, fd);
+		 else
 			event->state = MEM_DONE;
-			}
 		}
+	else if ((event->type == CMD_CAS_4B) || (event->type == CMD_CAS_8B)) 
+			event->state = MEM_DONE;
+		
 #endif /* ifdef PSL9 */
 	else if (event->type == CMD_TOUCH)
 		event->state = MEM_DONE;
@@ -1530,25 +1538,25 @@ void _handle_op1_op2_load(struct cmd *cmd, struct cmd_event *event)
 
 	memcpy((char *)&event->cas_op1, (char *)event->data, sizeof(uint64_t));
 	printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op1);
-	event->cas_op1 = ntohll (event->cas_op1);
-	printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op1);
+	//event->cas_op1 = ntohll (event->cas_op1);
+	//printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op1);
 	memcpy((char *)&event->cas_op2, (char *)event->data+8, sizeof(uint64_t));
 	printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op2);
-	event->cas_op2 = ntohll (event->cas_op2);
-	printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op2);
+	//event->cas_op2 = ntohll (event->cas_op2);
+	//printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op2);
 
 }
 
 void _handle_cas_op(struct cmd *cmd, struct cmd_event *event)
 {
-//could also set event->resp and mem_state here, wouldn't need to have cas_wb
 	uint32_t lvalue, op_A, op_1, op_2;
-	uint64_t llvalue, op_Al;
+	uint64_t offset, op_Al;
 	unsigned char op_size;
 
+	offset = event->addr & ~CACHELINE_MASK;
 	if (event->type == CMD_CAS_4B) {
 		op_size = 4;
-		memcpy((char *) &lvalue, (void *)event->addr, op_size);
+		memcpy((char *) &lvalue, (void *)&(event->data[offset]), op_size);
 		op_A = (uint32_t)(lvalue);
 		op_1 = (uint32_t) event->cas_op1;
 		op_2 = (uint32_t) event->cas_op2;
@@ -1556,42 +1564,53 @@ void _handle_cas_op(struct cmd *cmd, struct cmd_event *event)
 		if ((event->command == PSL_COMMAND_CAS_U_4B)  || 
 		   ((event->command == PSL_COMMAND_CAS_E_4B) && (op_A == op_1 )) ||
 		   ((event->command == PSL_COMMAND_CAS_NE_4B) && (op_A != op_1))) {
-			memcpy((char *)event-> addr, (char *) op_2, op_size);
+			memcpy((char *)(&event->data[offset]), (char *) &event->cas_op2, op_size);
 			if (event->command == PSL_COMMAND_CAS_E_4B)
 				event->resp = PSL_RESPONSE_COMP_EQ;
 			else if (event->command == PSL_COMMAND_CAS_NE_4B)
 				event->resp = PSL_RESPONSE_COMP_NEQ;
-			else
-				event->resp = PSL_RESPONSE_DONE;
+			else if ((event->command == PSL_COMMAND_CAS_U_4B) && (op_A == op_1))
+				  event->resp = PSL_RESPONSE_COMP_EQ;
+				else
+				  event->resp = PSL_RESPONSE_COMP_NEQ;
 			event->state = MEM_CAS_WR;
 			printf("HANDLE_CAS_OP CAS_U or CAS_E_4B IS EQUAL or CAS_NE_4B NOT EQUAL \n");
 		} else	{
-			event->resp = PSL_SUCCESS;
+			if (event->command == PSL_COMMAND_CAS_E_4B)
+				event->resp = PSL_RESPONSE_COMP_NEQ;
+			else
+				event->resp = PSL_RESPONSE_COMP_EQ;
 			event->state = MEM_DONE;
 			printf("HANDLE_CAS_OP CAS_E_4B NOT EQUAL or CAS_NE_4B IS EQUAL \n");
-		}
+		} 
 	} else if (event->type == CMD_CAS_8B) {
 		op_size = 8;
-		memcpy((char *) &llvalue, (void *)event->addr, op_size);
-		op_Al = (uint64_t)(llvalue);
-		printf("op_Al is %08"PRIx64 " and op_1 is %08"PRIx64 "\n", op_Al, event->cas_op1);
+		printf("op_1l is %016"PRIx64 "\n", event->cas_op1);
+		printf("op_2l is %016"PRIx64 "\n", event->cas_op2);
+		memcpy((char *)&op_Al, (void *)&(event->data[offset]), op_size);
+		printf("op_Al is %016"PRIx64 " and op_1 is %016"PRIx64 "\n", op_Al,event->cas_op1);
 		if ((event->command == PSL_COMMAND_CAS_U_8B)  || 
 		   ((event->command == PSL_COMMAND_CAS_E_8B) && (op_Al == event->cas_op1 )) ||
 		   ((event->command == PSL_COMMAND_CAS_NE_8B) && (op_Al != event->cas_op1))) {
-			memcpy((char *)event-> addr, (char *) event->cas_op2, op_size);
+			memcpy((char *)&event-> data[offset], (char *) &event->cas_op2, op_size);
 			if (event->command == PSL_COMMAND_CAS_E_8B)
 				event->resp = PSL_RESPONSE_COMP_EQ;
 			else if (event->command == PSL_COMMAND_CAS_NE_8B)
 				event->resp = PSL_RESPONSE_COMP_NEQ;
-			else
-				event->resp = PSL_RESPONSE_DONE;
+			else if ((event->command == PSL_COMMAND_CAS_U_8B) && (op_Al == event->cas_op1))
+				  event->resp = PSL_RESPONSE_COMP_EQ;
+				else
+				  event->resp = PSL_RESPONSE_COMP_NEQ;
 			event->state = MEM_CAS_WR;
 			printf("HANDLE_CAS_OP CAS_U or CAS_E_8B IS EQUAL or CAS_NE_8B NOT EQUAL \n");
 		} else	{
-			event->resp = PSL_RESPONSE_DONE;
+			if (event->command == PSL_COMMAND_CAS_E_8B)
+				event->resp = PSL_RESPONSE_COMP_NEQ;
+			else
+				event->resp = PSL_RESPONSE_COMP_EQ;
 			event->state = MEM_DONE;
 			printf("HANDLE_CAS_OP CAS_E_8B NOT EQUAL or CAS_NE_8B IS EQUAL \n");
-		}
+		} 
 	}
 }
 
@@ -1660,7 +1679,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 				event->state = MEM_CAS_RD;
 				printf("HANDLE_CAIA2_CMDS read in op1/op2 \n");
 			} else if (event->state == MEM_RECEIVED) {
-				printf("HANDLE_CAIA@_CMDS calling handle cas op \n");
+				printf("HANDLE_CAIA2_CMDS calling handle cas op \n");
 				_handle_cas_op(cmd, event);}
 			break;
 
@@ -1873,7 +1892,7 @@ void handle_response(struct cmd *cmd)
 			return;
 		} else if ((((*head)->type == CMD_DMA_RD) && ((*head)->state == DMA_CPL_SENT)) ||
 		          (((*head)->type == CMD_XLAT_RD) && ((*head)->state == MEM_DONE))) {
-	 	// if dm read and we've send completion data OR itag aborted , we can remove this event		
+	 	// if dma read and we've send completion data OR itag aborted , we can remove this event		
 			//  update dma0_rd_credits IF CMD_DMA_RD 
 			//if ((*head)->type != CMD_XLAT_RD)
 			//	cmd->dma0_rd_credits++;
@@ -1957,6 +1976,8 @@ void handle_response(struct cmd *cmd)
 	if ((event->type == CMD_XLAT_RD) ||
 	   (event->type == CMD_XLAT_WR )) {
 		event->state = DMA_PENDING;
+		// do this to "free" the tag since AFU thinks it's free now
+		event->tag = 0xdeadbeef;
 		printf("DMA_PENDING set for event \n");
 		cmd->credits++; 
 	 } else { 
