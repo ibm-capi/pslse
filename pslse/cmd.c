@@ -221,6 +221,7 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 		head = &((*head)->_next);
 	event->_next = *head;
 	*head = event;
+	debug_msg("_add_cmd:created cmd_event:command=0x%02x, type=0x%02x, tag=0x%02x, state=0x%03x", event->command, event->type, event->tag, event-> state );
 	debug_cmd_add(cmd->dbg_fp, cmd->dbg_id, tag, context, command);
 }
 
@@ -1954,9 +1955,13 @@ void handle_response(struct cmd *cmd)
 //		*head = event->_next;
 // if this was an xlat cmd, don't want to free the event so add code to check - HMP
 #ifdef PSL9
-	if ((event->type == CMD_XLAT_RD) ||
-	   (event->type == CMD_XLAT_WR )) {
+	if ( (event->type == CMD_XLAT_RD ) ||
+	     (event->type == CMD_XLAT_WR ) ) {
 		event->state = DMA_PENDING;
+		// lgt - hack to "free" the tag in this command.  
+		// presumably, this new tag value will not match any subsquent tag on a new incoming command
+		event->tag = 0xdeadbeef;
+		//
 		printf("DMA_PENDING set for event \n");
 		cmd->credits++; 
 	 } else { 
