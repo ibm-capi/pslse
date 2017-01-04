@@ -31,7 +31,12 @@
 //#define PSL9lite 1
 #define PSL9 1
 
-#define PSL_BUFFER_SIZE 200
+// this is the size of the transimit and receive buffers in the afu_event
+// it needs to be large enough to transmit/receive the maximum size of legally concurrent events
+// for example from psl to afu this might be response, dma completion, and buffer write.
+// we'll set it at 512 for now and see if we can come up with the correct value later
+#define PSL_BUFFER_SIZE 512
+
 #ifdef PSL8
 #define PROTOCOL_PRIMARY 0
 #define PROTOCOL_SECONDARY 9908
