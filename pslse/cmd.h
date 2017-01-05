@@ -41,8 +41,11 @@ enum cmd_type {
 	CMD_READ_PE,
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
-	CMD_CAS,
+	CMD_CAS_4B,
+	CMD_CAS_8B,
 	CMD_CAIA2,
+#endif
+#ifdef PSL9
 	CMD_XLAT_RD,
 	CMD_XLAT_WR,
 	CMD_DMA_RD,
@@ -62,6 +65,11 @@ enum mem_state {
 	MEM_TOUCHED,
 	MEM_BUFFER,
 	MEM_REQUEST,
+#if defined PSL9 || PSL9lite
+	MEM_CAS_OP,
+	MEM_CAS_RD,
+	MEM_CAS_WR,
+#endif
 	MEM_RECEIVED,
 #ifdef PSL9
 	DMA_ITAG_REQ,
@@ -93,19 +101,24 @@ struct cmd_event {
 	uint32_t abt;
 	uint32_t size;
 	uint32_t resp;
-#ifdef PSL9
+#if defined PSL9 || PSL9lite
+	uint64_t cas_op1;
+	uint64_t cas_op2;
+	uint32_t cpagesize;
+#endif // defined for both PSL9 & PSL9lite
+#ifdef PSL9  //defined just for PSL9, ie DMA port related
 	uint32_t port;
 	uint32_t itag;
 	uint32_t utag;
 	uint32_t dsize;
 	uint32_t dtype;
 	uint32_t atomic_op;
-	uint32_t cpagesize;
 	uint32_t sent_sts;
 	uint32_t cpl_type;
 	uint32_t cpl_size;
 	uint32_t cpl_laddr;
 	uint32_t cpl_byte_count;
+	uint32_t cpl_xfers_to_go;
 #endif /*ifdef PSL9 */
 	uint8_t unlock;
 	uint8_t buffer_activity;
