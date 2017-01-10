@@ -369,22 +369,44 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 		return;
 	}
 	// select op_1 & op_2 based on op_size & addr [60:61]
+	// lgt and possibly the endian hint - not coded yet
 	op_ptr = (int) (addr & 0x000000000000000c);
+	// at this point, op1 and op2 are memcpy's of the data that sent over ddata
+	// no byte swapping has taken place, however, we have stored them here as little endian 64 bit ints
+	// if we use int ops, we'll get defacto byte swapping as we go.  that might not be what we want
 	switch (op_ptr) {
 		case 0x0:
 			if (op_size == 4) {
-				op_1 = (uint32_t) (op1 >>32);
-				op_2 = (uint32_t) (op2 >> 32);
+			        // OP1 is in ((__u8 *)(&op1))[0 to 3]
+			        // OP2 is in ((__u8 *)(&op2))[0 to 3]
+			        // don't shift as the 32bits we want are already le on the left, 
+			        // so the cast will grab the correct end
+ 			        // op_1 = (uint32_t) op1;// (op1 >> 32); 
+				// op_2 = (uint32_t) op2;// (op2 >> 32);
+				memcpy( (void *)&op_1, (void *)&op1, op_size);
+				memcpy( (void *)&op_2, (void *)&op2, op_size);
+				// printf(" case 0: op_1 is %08"PRIx32 "\n", op_1);
+				// printf(" case 0: op_2 is %08"PRIx32 "\n", op_2);
 			} else if (op_size == 8) {
 				op_1l = op1;
 				op_2l = op2;
-	printf(" case 0: op_1l is %016"PRIx64 "\n", op_1l);
+				// printf(" case 0: op_1l is %016"PRIx64 "\n", op_1l);
 			}
 			break;
 		case 0x4:
 			if (op_size == 4) {
-				op_1 = (uint32_t) op1;
-				op_2 = (uint32_t) op2;
+			        // OP1 is in (__u8 *)(&op1)[4 to 7]
+			        // OP2 is in (__u8 *)(&op2)[4 to 7]
+			        // if the ops are really be, we have to handle them differently
+			        // I think we should switch to memcpy to extract the data...
+			        // the below  worked because the mcp afu replicated the ops, 
+			        // architecturally, it is not correct, but how to change it?
+				// op_1 = (uint32_t) op1;
+				// op_2 = (uint32_t) op2;
+				memcpy( (void *)&op_1, (void *)&op1 + 4, op_size);
+				memcpy( (void *)&op_2, (void *)&op2 + 4, op_size);
+				// printf(" case 4: op_1 is %08"PRIx32 "\n", op_1);
+				// printf(" case 4: op_2 is %08"PRIx32 "\n", op_2);
 			} else if (op_size == 8) {
 				DPRINTF("INVALID op_size  0x%x for  addr  0x%016" PRIx64 "\n", op_size, addr);
 				buffer = (uint8_t) PSLSE_MEM_FAILURE;
@@ -397,18 +419,30 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			break;
 		case 0x8:
 			if (op_size == 4) {
-				op_1 = (uint32_t) (op1 >>32);
-				op_2 = (uint32_t) (op2 >> 32);
+			        // OP1 is in (__u8 *)(&op2)[0 to 3] !!!
+			        // OP2 is in (__u8 *)(&op1)[0 to 3] !!!
+				// op_1 = (uint32_t) (op1 >>32);
+				// op_2 = (uint32_t) (op2 >> 32);
+				memcpy( (void *)&op_1, (void *)&op2, op_size);
+				memcpy( (void *)&op_2, (void *)&op1, op_size);
+				// printf(" case 8: op_1 is %08"PRIx32 "\n", op_1);
+				// printf(" case 8: op_2 is %08"PRIx32 "\n", op_2);
 			} else if (op_size == 8) {
 				op_1l = op2;
 				op_2l = op1;
-	printf(" case 8: op_1l is %016"PRIx64 "\n", op_1l);
+	                        // printf(" case 8: op_1l is %016"PRIx64 "\n", op_1l);
 			}
 			break;
 		case 0xc:
 			if (op_size == 4) {
-				op_1 = (uint32_t) op2;
-				op_2 = (uint32_t) op1;
+			        // OP1 is in (__u8 *)(&op2)[4 to 7] !!!
+			        // OP2 is in (__u8 *)(&op1)[4 to 7] !!!
+				// op_1 = (uint32_t) op2;
+				// op_2 = (uint32_t) op1;
+				memcpy( (void *)&op_1, (void *)&op2 + 4, op_size);
+				memcpy( (void *)&op_2, (void *)&op1 + 4, op_size);
+				// printf(" case c: op_1 is %08"PRIx32 "\n", op_1);
+				// printf(" case c: op_2 is %08"PRIx32 "\n", op_2);
 			} else if (op_size == 8) {
 				DPRINTF("INVALID op_size  0x%x for  addr  0x%016" PRIx64 "\n", op_size, addr);
 				buffer = (uint8_t) PSLSE_MEM_FAILURE;
@@ -441,7 +475,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 	if (op_size == 0x4) {
 		memcpy((char *) &lvalue, (void *)addr, op_size);
 		op_A = (uint32_t)(lvalue);
-	printf("op_A is %08"PRIx32 " and op_1 is %08"PRIx32 "\n", op_A, op_1);
+	        printf("op_A is %08"PRIx32 " and op_1 is %08"PRIx32 "\n", op_A, op_1);
 		if (atomic_le == 0) {
 			op_1 = ntohl(op_1);
 			op_2 = ntohl(op_2);
@@ -454,8 +488,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			op_1l = ntohll(op_1l);
 			op_2l = ntohll(op_2l);
 		}
-	printf("op_Al is %016"PRIx64 " and op_1l is %016"PRIx64 "\n", op_Al, op_1l);
-	printf("llvalue read from location -> by addr is %016" PRIx64 " and addr is 0x%016" PRIx64 " \n", llvalue, addr);
+	        printf("op_Al is %016"PRIx64 " and op_1l is %016"PRIx64 "\n", op_Al, op_1l);
+	        printf("llvalue read from location -> by addr is %016" PRIx64 " and addr is 0x%016" PRIx64 " \n", llvalue, addr);
 	} else // need else error bc only valid sizes are 4 or 8
 		warn_msg("unsupported op_size of 0x%2x \n", op_size);
 

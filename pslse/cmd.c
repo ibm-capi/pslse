@@ -1340,15 +1340,16 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 	uint8_t data[MAX_LINE_CHARS];
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
 	
+	// printf ("_handle_mem_read: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
 #if defined PSL9 || defined PSL9lite
 	if ((event->type == CMD_READ) ||
 		 (((event->type == CMD_CAS_4B) || (event->type == CMD_CAS_8B)) && event->state != MEM_CAS_WR)) {
 #else
 	if (event->type == CMD_READ) {
 #endif
-	  	printf ("handle_mem_read: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
+	        // printf ("_handle_mem_read: CMD_READ \n" );
 		// Client is returning data from memory read
-		printf("before get bytes silent in handle_mem_read \n");
+		// printf("_handle_mem_read: before get bytes silent \n");
 		if (get_bytes_silent(fd, event->size, data, cmd->parms->timeout,
 			     event->abort) < 0) {
 	        	debug_msg("%s:_handle_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
@@ -1363,17 +1364,17 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 				 event->context, event->resp);
 			return;
 		}
-		printf("AFTER get bytes silent in handle_mem_read \n");
+		// printf("_handle_mem_read: AFTER get bytes silent \n");
 		memcpy((void *)&(event->data[offset]), (void *)&data, event->size);
 		generate_cl_parity(event->data, event->parity);
 		event->state = MEM_RECEIVED;
 	} 
 #ifdef PSL9
-// have to expect data back from some AMO ops
+        // have to expect data back from some AMO ops
 	else if ((event->type == CMD_DMA_RD) || (event->type == CMD_DMA_WR_AMO)) {
-	  //else if (event->type == CMD_DMA_RD) {
 		// Client is returning data from DMA memory read
-//	printf("offset is =0x%016"PRIx64" and data is 0x%08"PRIx8" \n", offset, data);
+                // printf( "_handle_mem_read: CMD_DMA_RD or CMD_DMA_WR_AMO \n" );
+		// printf( "_handle_mem_read: before get bytes silent \n");
 		if (get_bytes_silent(fd, event->dsize, data, cmd->parms->timeout,
 			     event->abort) < 0) {
 	        	debug_msg("%s:_handle_dma0_mem_read failed tag=0x%02x size=%d addr=0x%016"PRIx64,
@@ -1384,9 +1385,11 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 				 event->context, event->resp);
 			return;
 		}
-printf("got as far as memcpy in handle_mem_read \n");
-// TODO need to remove the OFFSET from DMA ops, it's first data byte first for DMA bus
-		memcpy((void *)&(event->data[offset]), (void *)&data, event->dsize);
+		// printf("_handle_mem_read: AFTER get bytes silent \n");
+		// printf("_handle_mem_read: got as far as dma memcpy \n");
+		// DMA return data goes at offset 0 in the event data instead of some other offset.
+                // should we clear event->data first?
+		memcpy((void *)event->data, (void *)&data, event->dsize);
 		event->state = DMA_MEM_RESP;
 	
 	}
