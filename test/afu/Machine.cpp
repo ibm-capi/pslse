@@ -101,9 +101,11 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_WRITE_C:
     case PSL_COMMAND_WRITE_INJ:
     case PSL_COMMAND_WRITE_NA:
+#ifdef	PSL9
     case PSL_COMMAND_CAS_E_8B:
     case PSL_COMMAND_CAS_NE_8B:
     case PSL_COMMAND_CAS_U_8B:
+#endif
 	command =
             new StoreCommand (command_code, command_address_parity,
                               command_code_parity, command_tag_parity,
@@ -124,7 +126,7 @@ MachineController::Machine::read_machine_config ()
     	command = new DmaStoreCommand (command_code, command_address_parity, 
                                    command_code_parity, command_tag_parity,
                                    buffer_read_parity);	
-	debug_msg("Machine::read_machine_config: command_code = 0x%x atomic_op = 0x%x", command_code, atomic_op);
+	debug_msg("Machine::read_machine_config: call DmaStoreCommand with command_code = 0x%x atomic_op = 0x%x", command_code, atomic_op);
         break;
     #endif
     case PSL_COMMAND_INTREQ:
@@ -258,7 +260,8 @@ bool MachineController::Machine::attempt_new_command (AFU_EVENT * afu_event,
     if ((!command || command->is_completed ()) && delay == 0) {
         debug_msg("Machine::attempt_new_command: read_machine_config");
 	read_machine_config ();
-
+	afu_event->dma0_req_size = memory_size;
+	debug_msg("MachineController::Machine::dma0_req_size = 0x%x", afu_event->dma0_req_size);
         // randomly generates address within the range
         uint64_t
         address_offset =

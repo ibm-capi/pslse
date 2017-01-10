@@ -455,12 +455,13 @@ DmaLoadCommand::send_command (AFU_EVENT * afu_event, uint32_t new_tag,
     // atomic ADD value	
     //for(i=0; i<8; i++) 
     //	afu_event->dma0_req_data[i] = i;
-
+    debug_msg("DmaLoadCommand::send_command: calling psl_afu_command with");
+    debug_msg("command_code = 0x%x  atomic_op = 0x%x", command_code, afu_event->dma0_atomic_op);
     if (psl_afu_command
             (afu_event, new_tag, tag_parity, command_code, code_parity, address,
              address_parity, command_size, abort, context, 0) != PSL_SUCCESS)
         error_msg ("DmaLoadCommand: failed to send command");
-    debug_msg ("DmaLoadCommand::send_command: command_code = 0x%x atomic_op = 0x%x sent", command_code, afu_event->dma0_atomic_op);
+    
     Command::state = WAITING_DATA;
     Command::tag = new_tag;
     debug_msg("DmaLoadCommands::send_command: Command::state = WAITING_DATA");
@@ -470,12 +471,12 @@ void
 DmaLoadCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 {
     int i, psl_return;
-    debug_msg("LLL: state = %d", state);
-    debug_msg("LLL: dma0_completion_valid = %d", afu_event->dma0_completion_valid);
-    debug_msg("LLL: response_valid = %d", afu_event->response_valid);
-    debug_msg("LLL: utag = %d    command tag = %d", afu_event->dma0_req_utag, Command::tag);
-    debug_msg("LLL: dma0_sent_utag_valid = %d", afu_event->dma0_sent_utag_valid);
-    debug_msg("LLL: dma0_sent_utag_status = %d", afu_event->dma0_sent_utag_status);
+    debug_msg("DMALC: state = %d", state);
+    debug_msg("DMALC: dma0_completion_valid = %d", afu_event->dma0_completion_valid);
+    debug_msg("DMALC: response_valid = %d", afu_event->response_valid);
+    debug_msg("DMALC: utag = %d    command tag = %d", afu_event->dma0_req_utag, Command::tag);
+    debug_msg("DMALC: dma0_sent_utag_valid = %d", afu_event->dma0_sent_utag_valid);
+    debug_msg("DMALC: dma0_sent_utag_status = %d", afu_event->dma0_sent_utag_status);
     if (Command::state == WAITING_DATA) {
         if (afu_event->dma0_completion_valid == 1) {
             //    && afu_event->dma0_req_itag == Command::tag) {
@@ -496,7 +497,7 @@ DmaLoadCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 	    debug_msg("DmaLoadCommand::process_command: start DMA Read request");
 	    if(afu_event->dma0_atomic_op == 0xFF) {
 	     	afu_event->dma0_req_type = DMA_DTYPE_RD_REQ;
-		afu_event->dma0_req_size = 128;
+		//afu_event->dma0_req_size = 128;
 	    }
 	    else {
 		afu_event->dma0_req_type = DMA_DTYPE_ATOMIC;
@@ -513,11 +514,14 @@ DmaLoadCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 		//afu_event->dma0_req_data[i] = i;
 		debug_msg("0x%02x",afu_event->dma0_req_data[i]);
 	    }
+	    
 	    psl_return = psl_afu_dma0_req(afu_event, afu_event->dma0_req_utag, afu_event->dma0_req_itag,
 			     afu_event->dma0_req_type, afu_event->dma0_req_size, 
 			     afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data);
+	    
+	    afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
 	    debug_msg("DmaLoadCommand::process_command: psl_return = %d", psl_return);
-
+	    debug_msg("DmaLoadCommand::process_command: dma0_req_size = 0x%x", afu_event->dma0_req_size);
         }
         else {
             error_msg ("DmaLoadCommand: input not recognized, state: %d",
@@ -687,21 +691,15 @@ void
 DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 {
     int psl_return;
-    debug_msg("DmaStoreCommand::process_command: dma0_sent_utag_valid = %d", afu_event->dma0_sent_utag_valid);
-    debug_msg("DmaStoreCommand::process_command: dma0_sent_utag_status = %d", afu_event->dma0_sent_utag_status);
-    debug_msg("DmaStoreCommand::process_command: response_valid = %d", afu_event->response_valid);
-    debug_msg("DmaStoreCommand::process_command: dma0_atomic_op = 0x%x", afu_event->dma0_atomic_op);
+    debug_msg("DmaSC::process_command: dma0_sent_utag_valid = %d", afu_event->dma0_sent_utag_valid);
+    debug_msg("DmaSC::process_command: dma0_sent_utag_status = %d", afu_event->dma0_sent_utag_status);
+    debug_msg("DmaSC::process_command: response_valid = %d", afu_event->response_valid);
+    debug_msg("DmaSC::process_command: dma0_atomic_op = 0x%x", afu_event->dma0_atomic_op);
     if (Command::state == WAITING_READ) {
-	debug_msg("DmaStoreCommand::process_command: state = WAITING_READ");
-        //if (afu_event->dma0_sent_utag_valid == 0x1) {
-        //    process_dma_read (afu_event, cache_line);
-        //    afu_event->dma0_dvalid = 0;
-        //    Command::state = WAITING_RESPONSE;
-	//    debug_msg("DmaStoreCommand::process_command: Command state = WAITING_RESPONSE");
-        //}
-        //else if (afu_event->response_valid == 1
+	debug_msg("DmaSC::process_command: state = WAITING_READ");
+        
 	if (afu_event->dma0_sent_utag_status == 1) {
-	    debug_msg("DmaStoreCommand::process_command: calling afu_get_dma0_sent_utag");
+	    debug_msg("DmaSC::process_command: calling afu_get_dma0_sent_utag");
 	    if(afu_get_dma0_sent_utag(afu_event, afu_event->dma0_req_utag, 
 		afu_event->dma0_sent_utag_status) != PSL_SUCCESS)
 			printf("AFU: Failed dma0_sent_utag_status\n");
@@ -710,14 +708,14 @@ DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
                  && afu_event->response_tag == Command::tag) {
             Command::completed = true;
             //Command::state = IDLE;
-	    debug_msg("DmaStoreCommand::process_command: Command state = IDLE in WAITING_READ");
+	    debug_msg("DmaSC::process_command: Command state = IDLE in WAITING_READ");
  	    afu_event->dma0_req_itag = afu_event->response_dma0_itag;
-	    debug_msg("DmaStoreCommand::process_command: dma0_req_itag = %x", afu_event->dma0_req_itag);
-            debug_msg ("DmaStoreCommand::process_command: received response ");
-	    debug_msg ("DmaStoreCommand::process_command: send DMA Write command request");
+	    debug_msg("DmaSC::process_command: dma0_req_itag = %x", afu_event->dma0_req_itag);
+            debug_msg ("DmaSC::process_command: received response ");
+	    debug_msg ("DmaSC::process_command: send DMA Write command request");
 	    if(afu_event->dma0_atomic_op == 0xff) {
 		afu_event->dma0_req_type = DMA_DTYPE_WR_REQ_128;
-		afu_event->dma0_req_size = 128;
+		//afu_event->dma0_req_size = 128;
 	    }
 	    else {
 		afu_event->dma0_req_type = DMA_DTYPE_ATOMIC;
@@ -731,13 +729,22 @@ DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 	    debug_msg("DMA req size = %d", afu_event->dma0_req_size);
 	    debug_msg("DMA atomic op = 0x%x", afu_event->dma0_atomic_op);
 	    debug_msg("DMA dma0_req_data = 0x%x", afu_event->dma0_req_data);
+
 	    psl_return = psl_afu_dma0_req(afu_event, afu_event->dma0_req_utag, afu_event->dma0_req_itag, 
                              afu_event->dma0_req_type, afu_event->dma0_req_size, 
 			     afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data);
-	    debug_msg("DmaStoreCommand::process_command: psl_return = %d", psl_return);
+	    debug_msg("DmaSC::process_command: psl_return = %d", psl_return);
+	    afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
+	    debug_msg("DmaSC::process_command: dma0_req_size = %d", afu_event->dma0_req_size);
+	    afu_event->dma0_req_type = DMA_DTYPE_WR_REQ_MORE;
+	    while ( psl_afu_dma0_req(afu_event, afu_event->dma0_req_utag, afu_event->dma0_req_itag,
+				afu_event->dma0_req_type, afu_event->dma0_req_size,
+				afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data) == PSL_DOUBLE_DMA0_REQ)
+	    { sleep(1); }
+
         }
         else {
-            error_msg ("DmaStoreCommand: input not recognized");
+            error_msg ("DmaSC: input not recognized");
         }
     }
     else if (Command::state == WAITING_RESPONSE) {
@@ -750,20 +757,20 @@ DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
                  && afu_event->response_tag == Command::tag) {
             Command::completed = true;
             Command::state = IDLE;
-	    debug_msg("DmaStoreCommand::process_command: Command state = IDLE in WAITING_RESPONSE");
+	    debug_msg("DmaSC::process_command: Command state = IDLE in WAITING_RESPONSE");
         }
         else {
-            error_msg ("DmaStoreCommand: input not recognized");
+            error_msg ("DmaSC: input not recognized");
         }
     }
     else if (Command::state == IDLE) {
         error_msg
-        ("DmaStoreCommand: Atempt to process response when no command is currently active");
+        ("DmaSC: Atempt to process response when no command is currently active");
     }
     else {
-        error_msg ("DmaStoreCommand: should never be in this state");
+        error_msg ("DmaSC: should never be in this state");
     }
-    debug_msg("DmaStoreCommand::process_command: end of function");
+    debug_msg("DmaSC::process_command: end of function");
 }
 
 void
@@ -781,7 +788,7 @@ DmaStoreCommand::process_dma_read (AFU_EVENT * afu_event,
  	    debug_msg("DMA utag = 0x%x", afu_event->dma0_req_utag);
 	    debug_msg("DMA itag = 0x%x", afu_event->dma0_req_itag);
 	    debug_msg("DMA cpl type = %d", afu_event->dma0_completion_type);
-	    debug_msg("DMA req size = %d", afu_event->dma0_req_size);
+	    debug_msg("DMA req size = 0x%x", afu_event->dma0_req_size);
     debug_msg("DmaStoreCommand::process_dma_read: dma0_atomic_op = 0x%x", afu_event->dma0_atomic_op);	   
     if (afu_event->dma0_atomic_op == 0xff) { 
 	 if (afu_get_dma0_cpl_bus_data(afu_event, afu_event->dma0_sent_utag, afu_event->dma0_completion_type,

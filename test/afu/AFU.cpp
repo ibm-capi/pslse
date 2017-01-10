@@ -191,7 +191,7 @@ AFU::start ()
 		    //debug_msg("AFU: call MachineController->send_command");
                     if (highest_priority_mc->
                             second->send_command (&afu_event, cycle)) {
-                        debug_msg ("AFU: context %d sent command",
+                        debug_msg ("AFU: RUNNING MC send command with context %d",
                                    highest_priority_mc->first);
                         ++highest_priority_mc;
                         break;
