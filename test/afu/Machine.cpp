@@ -105,6 +105,11 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_CAS_E_8B:
     case PSL_COMMAND_CAS_NE_8B:
     case PSL_COMMAND_CAS_U_8B:
+    case PSL_COMMAND_CAS_E_4B:
+    case PSL_COMMAND_CAS_NE_4B:
+    case PSL_COMMAND_CAS_U_4B:
+	for(uint32_t i = 0; i<32; i++)
+	    cache_line[i] = i;
 #endif
 	command =
             new StoreCommand (command_code, command_address_parity,

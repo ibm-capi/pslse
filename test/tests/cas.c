@@ -137,12 +137,12 @@ int main(int argc, char *argv[])
 	}
 
 	// Pollute first cacheline with random values
-	for (i = 0; i < 8; i++) { 
+	for (i = 0; i < 15; i++) { 
 	    cacheline0[i] = i;
 	    //cacheline0[8+i] = i;
 	}
-	for (i = 8; i < CACHELINE_BYTES; i++)
-		cacheline0[i] = rand();
+	//for (i = 8; i < CACHELINE_BYTES; i++)
+	//	cacheline0[i] = rand();
 
 	// Initialize machine configuration
 	printf("initialize machine\n");
@@ -157,17 +157,20 @@ int main(int argc, char *argv[])
 	}
 	printf("End configure enable and run machine\n");
 	// Check for valid response
-	//if (response != PSL_RESPONSE_DONE)
-	//{
-	//	printf("FAILED: Unexpected response code 0x%x\n", response);
-	//	goto done;
-	//}
-
-	printf("Completed PSL_COMMAND_CAS_E_8B\n");
+	if (response == PSL_RESPONSE_COMP_EQ) {
+		printf("PASS: PSL_COMMAND_CAS_E_8B\n");
+		for(i=0; i<15; i++)
+		 	printf("%02x", cacheline0[i]);
+		printf("\n");
+	}
+	else {
+		printf("FAILED: Unexpected response code 0x%x\n", response);
+		goto done;
+	}
 
 	// Use AFU Machine 1 to write the data to the second cacheline
 	for (i = 0; i < 15; i++) 
-	    cacheline0[i] = rand();
+	    cacheline1[i] = rand();
 
 	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_CAS_NE_8B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED_M)) < 0)
 	{
@@ -176,12 +179,34 @@ int main(int argc, char *argv[])
 	}
 	printf("End configure enable and run machine psl write\n");
 	// Check for valid response
-	//if (response != PSL_RESPONSE_DONE)
-	//{
-	//	printf("FAILED: Unexpected response code 0x%x\n", response);
-	//	goto done;
-	//}
+	if (response == PSL_RESPONSE_COMP_NEQ) {
+		printf("PASS: PSL_COMMAND_CAS_NE_8B\n");
+		for(i=0; i<15; i++)
+			printf("%02x", cacheline1[i]);
+		printf("\n");
+	}
+	else {
+		printf("FAILED: Unexpected response code 0x%x\n", response);
+		goto done;
+	}
 
+	for(i=0; i<15; i++)
+		cacheline1[i] = rand();
+
+	if ((response = config_enable_and_run_machine(afu_m, &machine, 0, context, PSL_COMMAND_CAS_U_8B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline1, CACHELINE_BYTES, DIRECTED_M)) < 0)
+	{
+		printf("FAILED: config_enable_and_run_machine for master");
+		goto done;
+	}
+	if (response == PSL_RESPONSE_COMP_NEQ) {
+		printf("PASS: PSL_COMMAND_CAS_U_8B\n");
+		for(i=0; i<15; i++)
+			printf("%02x", cacheline1[i]);
+		printf("\n");
+	}
+	else {
+		printf("FAILED: PSL_COMMAND_CAS_U_8B TEST\n");
+	}
 	printf("Master AFU: PASSED\n");
         
         // afu slave
@@ -239,19 +264,46 @@ int main(int argc, char *argv[])
 
 	// Use AFU Machine 1 to read the first cacheline from memory to AFU
 	printf("Start config enable and run machine for slave\n");
-	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_CAS_U_8B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
+	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_CAS_U_4B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
 	{
 		printf("FAILED:config_enable_and_run_machine for slave");
 		goto done;
 	}
 	printf("End config enable and run machine for slave\n");
 	// Check for valid response
-	//if (response != PSL_RESPONSE_DONE)
-	//{
-	//	printf("FAILED: Unexpected response code 0x%x\n", response);
-	//	goto done;
-	//}
+	if (response == PSL_RESPONSE_COMP_NEQ) {
+		printf("PASS: PSL_COMMAND_CAS_U_4B\n");
+	} else {
+		printf("FAILED: Unexpected response code 0x%x\n", response);
+		goto done;
+	}
+	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_CAS_NE_4B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
+	{
+		printf("FAILED:config_enable_and_run_machine for slave");
+		goto done;
+	}
+	if (response == PSL_RESPONSE_COMP_NEQ) {
+		printf("PASS: PSL_COMMAND_CAS_NE_4B\n");
+	}
+	else {
+		printf("FAILED: PSL_COMMAND_CAS_NE_4B\n");
+		goto done;
+	}
+	for (i=0; i<16; i++)
+		cacheline0[i] = i;
 
+	if ((response = config_enable_and_run_machine(afu_s, &machine, machine_number, context, PSL_COMMAND_CAS_E_4B, CACHELINE_BYTES, 0, 0, (uint64_t)cacheline0, CACHELINE_BYTES, DIRECTED)) < 0)
+	{
+		printf("FAILED:config_enable_and_run_machine for slave");
+		goto done;
+	}
+	if (response == PSL_RESPONSE_COMP_EQ) {
+		printf("PASS: PSL_COMMAND_CAS_E_4B\n");
+	}
+	else {
+		printf("FAILED: PSL_COMMAND_CAS_E_4B\n");
+		goto done;
+	}
 	printf("Completed cacheline read for slave\n");
 
 	printf("Slave AFU: PASSED\n");

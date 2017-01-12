@@ -341,11 +341,10 @@ StoreCommand::process_buffer_read (AFU_EVENT * afu_event,
             PSL_SUCCESS) {
         error_msg ("StoreCommand; failed to build buffer read data");
     }
-
-    for (int i = 0; i < 4; ++i)
-        debug_msg ("StoreCommand: sending 0x%x for buffer read %d",
-                   cache_line[i], i);
-    debug_msg ("StoreCommand: processed_buffer_read");
+  
+    debug_msg("SC::process_buffer_read: Buffer READ data");
+    for (int i = 0; i < 15; ++i)
+        debug_msg ("0x%x", cache_line[i]);
 }
 
 bool StoreCommand::is_restart () const
@@ -519,7 +518,7 @@ DmaLoadCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 			     afu_event->dma0_req_type, afu_event->dma0_req_size, 
 			     afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data);
 	    
-	    afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
+	    //afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
 	    debug_msg("DmaLoadCommand::process_command: psl_return = %d", psl_return);
 	    debug_msg("DmaLoadCommand::process_command: dma0_req_size = 0x%x", afu_event->dma0_req_size);
         }
@@ -734,13 +733,9 @@ DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
                              afu_event->dma0_req_type, afu_event->dma0_req_size, 
 			     afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data);
 	    debug_msg("DmaSC::process_command: psl_return = %d", psl_return);
-	    afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
-	    debug_msg("DmaSC::process_command: dma0_req_size = %d", afu_event->dma0_req_size);
-	    afu_event->dma0_req_type = DMA_DTYPE_WR_REQ_MORE;
-	    while ( psl_afu_dma0_req(afu_event, afu_event->dma0_req_utag, afu_event->dma0_req_itag,
-				afu_event->dma0_req_type, afu_event->dma0_req_size,
-				afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data) == PSL_DOUBLE_DMA0_REQ)
-	    { sleep(1); }
+	    //afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
+	    //debug_msg("DmaSC::process_command: dma0_req_size = %d", afu_event->dma0_req_size);
+	    //afu_event->dma0_req_type = DMA_DTYPE_WR_REQ_MORE;
 
         }
         else {
