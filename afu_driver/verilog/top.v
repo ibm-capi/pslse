@@ -346,7 +346,7 @@ module top (
   wire   [0:3]    ah_brlat;
   wire   [0:1023] ah_brdata;
   wire   [0:15]   ah_brpar;
-  wire            ha_bwvalid_ul;
+  reg             ha_bwvalid_ul;
   wire            ha_mmval;
   wire            ha_mmcfg;
   wire            ha_mmrnw;
@@ -759,7 +759,10 @@ module top (
       bwtagpar_array[bw_wr_ptr] <= ha_bwtagpar_top;
   end
 
-  assign ha_bwvalid_ul = (bw_rd_ptr==bw_wr_ptr) ? 1'b0 : 1'b1;
+  always @ (posedge ha_pclock)
+    ha_bwvalid_ul <= ha_bwvalid_top;
+
+//  assign ha_bwvalid_ul = (bw_rd_ptr==bw_wr_ptr) ? 1'b0 : 1'b1;
 
   always @ (posedge ha_pclock) begin
     if (ha_bwvalid_ul)
@@ -816,7 +819,8 @@ module top (
   end
 
   always @ (posedge ha_pclock)
-    ha_bwad <= {5'b0, bwhalf};
+//    ha_bwad <= {5'b0, bwhalf};
+    ha_bwad <= {6'b0};
 
   always @ (posedge ha_pclock) begin
     if (!bwhalf)
@@ -899,7 +903,8 @@ module top (
       brhalf <= 1'b0;
   end
 
-  assign ha_brad = {5'b0, brhalf};
+//  assign ha_brad = {5'b0, brhalf};
+  assign ha_brad = {6'b0};
  
   always @ (posedge ha_pclock) begin
 //    brdata_delay <= ah_brdata;
