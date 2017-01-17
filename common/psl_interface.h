@@ -111,7 +111,7 @@ int psl_buffer_write(struct AFU_EVENT *event,
 int psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		     uint32_t utag,
 		     uint32_t cpl_type,
-		     uint32_t dsize,
+		     uint32_t cpl_size,
 	 	     uint32_t cpl_laddr,
 		     uint32_t cpl_byte_count,
 		     uint8_t * write_data);
@@ -252,7 +252,7 @@ int
 afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 		 uint32_t utag,
 		 uint32_t cpl_type,
-		 uint32_t dsize, 
+		 uint32_t cpl_size, 
 		 uint32_t laddr,
 		 uint32_t byte_count, uint8_t * dma_rd_data);
 

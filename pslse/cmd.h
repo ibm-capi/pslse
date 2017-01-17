@@ -75,10 +75,12 @@ enum mem_state {
 	DMA_ITAG_REQ,
 	DMA_ITAG_RET,
 	DMA_PENDING,
+	DMA_PARTIAL,
 	DMA_OP_REQ,
 	DMA_SEND_STS,
 	DMA_MEM_REQ,
 	DMA_MEM_RESP,
+	DMA_CPL_PARTIAL,
 	DMA_CPL_SENT,
 #endif /* ifdef PSL9 */
 	MEM_DONE
@@ -112,6 +114,7 @@ struct cmd_event {
 	uint32_t utag;
 	uint32_t dsize;
 	uint32_t dtype;
+	uint32_t dpartial;
 	uint32_t atomic_op;
 	uint32_t sent_sts;
 	uint32_t cpl_type;

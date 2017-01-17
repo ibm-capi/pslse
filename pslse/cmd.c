@@ -205,8 +205,15 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 	event->state = state;
 	event->resp = resp;
 	event->unlock = unlock;
+#ifdef PSL9
+	// make sure data buffer is big enough to hold 512B (MAX DMA xfer)
+	event->data = (uint8_t *) malloc(CACHELINE_BYTES * 4);
+	memset(event->data, 0xFF, CACHELINE_BYTES * 4);
+	event->cpl_xfers_to_go = 0;  //init this to 0 (used for DMA read multi completion flow)
+#else
 	event->data = (uint8_t *) malloc(CACHELINE_BYTES);
 	memset(event->data, 0xFF, CACHELINE_BYTES);
+#endif /* ifdef PSL9 */
 	event->parity = (uint8_t *) malloc(DWORDS_PER_CACHELINE / 8);
 	memset(event->parity, 0xFF, DWORDS_PER_CACHELINE / 8);
 
@@ -895,16 +902,17 @@ void handle_dma0_write(struct cmd *cmd)
 	// confirmation from the client that the memory write was
 	// successful before generating a response.  
 	if (event->type == CMD_DMA_WR) {
-		buffer = (uint8_t *) malloc(event->dsize + 10);
+		buffer = (uint8_t *) malloc(event->dsize + 11);
 		buffer[0] = (uint8_t) PSLSE_DMA0_WR;
-		buffer[1] = (uint8_t) event->dsize;
-		addr = (uint64_t *) & (buffer[2]);
+		buffer[1] = (uint8_t) ((event->dsize & 0x0F00) >>8);
+		buffer[2] = (uint8_t) (event->dsize & 0xFF);
+		addr = (uint64_t *) & (buffer[3]);
 		*addr = htonll(event->addr);
-		memcpy(&(buffer[10]), &(event->data[0]), event->dsize);
+		memcpy(&(buffer[11]), &(event->data[0]), event->dsize);
 		event->abort = &(client->abort);
 		debug_msg("%s:DMA0 MEMORY WRITE utag=0x%02x size=%d addr=0x%016"PRIx64" port=0x%2x",
 		  	cmd->afu_name, event->utag, event->dsize, event->addr, client->fd);
-		if (put_bytes(client->fd, event->dsize + 10, buffer, cmd->dbg_fp,
+		if (put_bytes(client->fd, event->dsize + 11, buffer, cmd->dbg_fp,
 		      cmd->dbg_id, client->context) < 0) {
 			client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		}
@@ -1002,7 +1010,7 @@ void handle_dma0_sent_sts(struct cmd *cmd)
 }
 
 // Handle randomly selected pending DMA0 read, send request to client for real data
-//  or do final write with to AFU w/valid data after it is received from client.
+//  or do final write to AFU w/valid data after it is received from client.
 void handle_dma0_read(struct cmd *cmd)
 {
 	struct cmd_event *event;
@@ -1020,6 +1028,12 @@ void handle_dma0_read(struct cmd *cmd)
 	event = cmd->list;
 	while (event != NULL) {
 	        if ((event->type == CMD_DMA_RD) &&
+		    (event->state == DMA_CPL_PARTIAL) &&
+		    ((event->client_state != CLIENT_VALID) ||
+		     !allow_reorder(cmd->parms))) {
+			break;
+		}
+	        if ((event->type == CMD_DMA_RD) &&
 		    (event->state != DMA_CPL_SENT) &&
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
@@ -1036,39 +1050,98 @@ void handle_dma0_read(struct cmd *cmd)
 	// write with valid data and
 	// prepare for response.
 	// TODO update to handle cpl_response from DMA_WR_AMO commands
-	if (event->state == DMA_MEM_RESP) {
-	//randomly decide not to return data yet
-		if (!allow_resp(cmd->parms)) {
+	if ((event->state == DMA_CPL_PARTIAL) || (event->state == DMA_MEM_RESP)) {
+	//randomly decide not to return data yet only if this isn't a multi-cycle cpl in progress
+		if ((event->state == DMA_MEM_RESP) && (!allow_resp(cmd->parms))) {
 			printf("not going to send compl data yet \n");
 			return;
 		}
-
-		event->cpl_type = 0; //always 0 for read up to 128bytes
-		// eventually need to put real values in cpl_byte_count...TODO
-		event->cpl_byte_count = event->dsize;
-		event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
-			event->dsize, event->cpl_laddr, event->cpl_byte_count,
-			event->data) == PSL_SUCCESS) {
-			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
-				  event->utag);
-			int line = 0;
-			for (quadrant = 0; quadrant < 4; quadrant++) {
-				DPRINTF("DEBUG: Q%d 0x", quadrant);
-				//for (byte = 0; byte < CACHELINE_BYTES / 4;
-				for (byte = line; byte < line+32;
-				     byte++) {
-					DPRINTF("%02x", event->data[byte]);
-				}
-				DPRINTF("\n");
-			line +=32;
+		if (event->cpl_xfers_to_go == 0) {
+			if (event->state == DMA_MEM_RESP)  {  //start of transaction
+				event->cpl_byte_count = event->dsize;
+				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 			}
-			event->resp = PSL_RESPONSE_DONE;
-			event->state = DMA_CPL_SENT;
-			//debug_cmd_buffer_write(cmd->dbg_fp, cmd->dbg_id,
-	//				       event->tag);
-	//		debug_cmd_update(cmd->dbg_fp, cmd->dbg_id, event->tag,
-	//				 event->context, event->resp);
+			if (event->cpl_byte_count <= 128) { // Single cycle single completion flow
+				event->cpl_type = 0; //always 0 for read up to 128bytes
+				event->cpl_size = event->cpl_byte_count;;
+				//event->cpl_byte_count = event->dsize;
+				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
+					event->data) == PSL_SUCCESS) {
+						debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
+				  		event->utag);
+						int line = 0;
+						for (quadrant = 0; quadrant < 4; quadrant++) {
+							DPRINTF("DEBUG: Q%d 0x", quadrant);
+							for (byte = line; byte < line+32; byte++) {
+								DPRINTF("%02x", event->data[byte]);
+							}
+							DPRINTF("\n");
+							line +=32;
+						}
+					event->resp = PSL_RESPONSE_DONE;
+					event->state = DMA_CPL_SENT;
+				} 
+			} else	if (event->cpl_byte_count <= 512) { //Multi cycle single completion flow
+			// need way to lock DMA bus so nothing else goes out over it until this transaction completes TODO
+					event->cpl_xfers_to_go = 1;
+					event->cpl_type = 0; //always 0 for first xfer of 128bytes
+					event->cpl_size = 128;
+					//event->cpl_byte_count = event->dsize;
+					//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+						event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
+						event->data) == PSL_SUCCESS) {
+							debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
+				  			event->utag);
+							int line = 0;
+							for (quadrant = 0; quadrant < 4; quadrant++) {
+								DPRINTF("DEBUG: Q%d 0x", quadrant);
+								for (byte = line; byte < line+32; byte++) {
+									DPRINTF("%02x", event->data[byte]);
+								}
+								DPRINTF("\n");
+								line +=32;
+							}
+					event->state = DMA_CPL_PARTIAL;
+					}
+				} else 
+					error_msg ("ERROR: REQ FOR DMA xfer > 512B we should not be here!!!");
+			} else  {  //  second pass thru
+				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
+				event->cpl_xfers_to_go = 0;
+				event->cpl_type = 1; //1 for last cycle, nothing valid but cpl_type, data and utag
+				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
+				event->cpl_size = event->dsize;
+				event->cpl_byte_count = event->dsize;
+				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
+					event->data) == PSL_SUCCESS) {
+						debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
+				  		event->utag);
+						int line = 128;
+						for (quadrant = 0; quadrant < 4; quadrant++) {
+							DPRINTF("DEBUG: Q%d 0x", quadrant);
+							for (byte = line; byte < line+32; byte++) {
+								DPRINTF("%02x", event->data[byte]);
+							}
+							DPRINTF("\n");
+							line +=32;
+						}
+				}
+				if (event->cpl_byte_count == event->cpl_size) {  //this was last transfer
+					event->resp = PSL_RESPONSE_DONE;
+					event->state = DMA_CPL_SENT;
+					}
+				else  { //dec byte count, inc addr for next transfer
+					event->cpl_byte_count -= 256;
+					if (event->cpl_byte_count < 128)// last transfer will be single cycle	
+						event->cpl_size = event->cpl_byte_count;
+					event->cpl_laddr +=256;
+					
+				}
 		}
 	}
 
@@ -1083,13 +1156,15 @@ void handle_dma0_read(struct cmd *cmd)
 		// to the _handle_mem_read() function.
                 if (event->type == CMD_DMA_RD) {
 		  buffer[0] = (uint8_t) PSLSE_DMA0_RD;
-		  buffer[1] = (uint8_t) event->dsize;
-		  addr = (uint64_t *) & (buffer[2]);
+		  buffer[1] = (uint8_t) ((event->dsize & 0x0F00) >>8);
+		  buffer[2] = (uint8_t) (event->dsize & 0xFF);
+		 // buffer[1] = (uint8_t) event->dsize;
+		  addr = (uint64_t *) & (buffer[3]);
 		  *addr = htonll(event->addr);
 		  event->abort = &(client->abort);
 		  debug_msg("%s:DMA0 MEMORY READ utag=0x%02x size=%d addr=0x%016"PRIx64" port = 0x%2x",
 			    cmd->afu_name, event->utag, event->dsize, event->addr, client->fd);
-		  if (put_bytes(client->fd, 10, buffer, cmd->dbg_fp,
+		  if (put_bytes(client->fd, 11, buffer, cmd->dbg_fp,
 				cmd->dbg_id, event->context) < 0) {
 		    client_drop(client, PSL_IDLE_CYCLES, CLIENT_NONE);
 		  }
@@ -1654,7 +1729,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 		  (((*head)->type == CMD_XLAT_WR_TOUCH) && ((*head)->state != MEM_DONE))) 
 			break;
 	// finally look for incoming DMA op requests
-		if ((*head)->state == DMA_PENDING)
+		if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
 			goto dmaop_chk;
 		head = &((*head)->_next);
 	}
@@ -1811,32 +1886,57 @@ void handle_caia2_cmds(struct cmd *cmd)
 		if (event->dtype == DMA_DTYPE_RD_REQ) { 
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_RD;
-	// check to make sure transaction will stay within a 4K boundary
-	if ((event->addr+0x1000) <= (event->addr+(uint64_t)event->dsize))
-		warn_msg("TRANSACTION WILL BE FRAGMENTED, it crosses 4K boundary !!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64, 
+		// check to make sure transaction will stay within a 4K boundary
+		if ((event->addr+0x1000) <= (event->addr+(uint64_t)event->dsize))
+			warn_msg("TRANSACTION WILL BE FRAGMENTED, it crosses 4K boundary!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64, 
 			(event->addr+0x1000), (event->addr +event->dsize));
-	else
-		printf("TRANSACTION IS GOOD TO GO !!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64"\n",
+		else
+			printf("TRANSACTION IS GOOD TO GO !!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64"\n",
 			 (event->addr+0x1000), (event->addr +event->dsize));
-
-			//printf("next stop is to request data from client \n");
 			}
 		// If DMA write, pull data in and set up for subsequent handle dma_mem_write
 		// ALSO send over any AMO cmds that come across as dma wr
-		if (event->dtype == DMA_DTYPE_WR_REQ_128)  {
-		// TODO update this to hande DMA write ops > 128B
-			printf("trying to copy from event to event buffer for write dma data \n");
+		if ((event->dtype == DMA_DTYPE_WR_REQ_128) && (event->dsize <= 128))  {
+			printf("copy to event buffer for write dma data  <= 128B type 1\n");
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_WR;
 		  	memcpy((void *)&(event->data[0]), (void *)&(cmd->afu_event->dma0_req_data), event->dsize);
 			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
 		  		event->itag, event->utag, event->addr, event->dtype, event->dsize);
 			}
-		//if (event->dtype == DMA_DTYPE_ATOMIC)  {
+		// TODO update this to handle DMA write ops > 128B
+		if ((event->dtype == DMA_DTYPE_WR_REQ_128) && (event->dsize > 128))  {
+			printf("FIRST copy to event buffer for write dma data  > 128B type 1\n");
+			event->state = DMA_PARTIAL;
+			event->type = CMD_DMA_WR;
+		  	memcpy((void *)&(event->data[0]), (void *)&(cmd->afu_event->dma0_req_data), 128);
+			event->dpartial = 128;
+			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x total xfeed =0x%02x", cmd->afu_name,
+		  		event->itag, event->utag, event->addr, event->dtype, event->dpartial);
+			}
+		if ((event->dtype == DMA_DTYPE_WR_REQ_MORE) && ((event->dsize - event->dpartial) > 128))  {
+			printf("copy to event buffer for write dma data  > 128B type 2\n");
+			event->state = DMA_PARTIAL;
+			event->type = CMD_DMA_WR;
+		  	memcpy((void *)&(event->data[event->dpartial]), (void *)&(cmd->afu_event->dma0_req_data), 128);
+			event->dpartial += 128;
+			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x total xfered =0x%02x", cmd->afu_name,
+		  		event->itag, event->utag, event->addr, event->dtype, event->dpartial);
+			}
+		if ((event->dtype == DMA_DTYPE_WR_REQ_MORE) && ((event->dsize - event->dpartial) <= 128))  {
+			printf("FINAL copy to event buffer for write dma data  > 128B type 2\n");
+			event->state = DMA_OP_REQ;
+			event->type = CMD_DMA_WR;
+		  	memcpy((void *)&(event->data[event->dsize - event->dpartial]), (void *)&(cmd->afu_event->dma0_req_data),
+				 (event->dsize - event->dpartial));
+			event->dpartial += (event->dsize - event->dpartial);;
+			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x total xfered =0x%02x", cmd->afu_name,
+		  		event->itag, event->utag, event->addr, event->dtype, event->dpartial);
+			}
 		if ((event->dtype == DMA_DTYPE_ATOMIC) && (event->type == CMD_XLAT_RD))  
 			error_msg("%s:INVALID REQ: DMA AMO W/XLAT_RD ITAG ITAG = 0x%3x DTYPE = %d ", cmd->afu_name, this_itag, event->dtype); 
 		if ((event->dtype == DMA_DTYPE_ATOMIC) && (event->type == CMD_XLAT_WR))  {
-		// TODO update this to fully hande Atomic Mem Ops
+		// TODO update this to fully handle Atomic Mem Ops
 			printf("trying to copy from event to event buffer for write dma data for AMO \n");
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_WR_AMO;

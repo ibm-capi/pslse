@@ -489,15 +489,15 @@ psl_buffer_write(struct AFU_EVENT *event,
 
 #ifdef PSL9
 /* Call this to write a dma port completion bus
- * For DMA read returns, dsize must be 128 for now, 
- * For AMO returns, dsize is only 4 or 8.
+ * For DMA returns, 128B max returned per cycle
+ * For AMO returns, cpl_size is only 4 or 8.
  * TODO handle <128 and >128 up to 512B transfers using laddr & byte_count. */
 
 int
 psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		 uint32_t utag,
 		 uint32_t cpl_type,
-		 uint32_t dsize, 
+		 uint32_t cpl_size, 
 		 uint32_t cpl_laddr,
 		 uint32_t cpl_byte_count, uint8_t * write_data)
 {
@@ -507,10 +507,17 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		event->dma0_completion_valid = 1;
 		event->dma0_completion_utag = utag;
 		event->dma0_completion_type = cpl_type;
-		event->dma0_completion_size = dsize;
+		event->dma0_completion_size = cpl_size;
 		event->dma0_completion_laddr = cpl_laddr;
 		event->dma0_completion_byte_count = cpl_byte_count;
-		memcpy(event->dma0_completion_data, write_data, dsize);
+		// is this a multi cycle transaction? check cpl_byte_count
+		if (cpl_byte_count > 128)   {
+			if (cpl_type == 0)
+				memcpy(event->dma0_completion_data, write_data, 128);
+			if (cpl_type == 1)
+				memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
+		} else  // cpl_byte_count <= 128 so just single cycle
+			memcpy(event->dma0_completion_data, write_data, cpl_size);
 		return PSL_SUCCESS;
 	}
 }
@@ -648,7 +655,7 @@ psl_get_command(struct AFU_EVENT *event,
 
 int psl_signal_afu_model(struct AFU_EVENT *event)
 {
-	int i, bc, bl;
+	int i, bc, bl, bytes_to_xfer;
 	int bp = 1;
 	if (event->clock != 0)
 		return PSL_TRANSMISSION_ERROR;
@@ -662,7 +669,7 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->tbuf[bp++] = ((event->dma0_completion_size) >> 8) & 0x0F;
 		// printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		//upper 4 bits in second byte always 0 to indicate this transaction is dma0_completion
-		// NOTE - this will assume read transactions are never anything other than 128bytes
+		// NOTE - read transactions can never be greater than 128bytes per cycle
 		// if this works, swap byte send order to send actual byte count (TODO)
 		//printf("event->dma0_completion_size is 0x%3x \n", event->dma0_completion_size);
 		//printf("event->dma0_completion_type is 0x%3x \n", event->dma0_completion_type);
@@ -683,7 +690,14 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->tbuf[bp++] = ((event->dma0_completion_byte_count >> 8) | 
 					((event->dma0_completion_laddr & 0x0300) >> 4));
 		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
-		for (i = 0; i < event->dma0_completion_size; i++) {
+		if (event->dma0_completion_byte_count > 128)   {
+			if (event->dma0_completion_type == 0)
+				bytes_to_xfer = 128;
+			if (event->dma0_completion_type == 1)
+				bytes_to_xfer = (event->dma0_completion_size - 128);
+		} else  // cpl_byte_count <= 128 so just single cycle
+			bytes_to_xfer = event->dma0_completion_size;
+		for (i = 0; i < bytes_to_xfer; i++) {
 			event->tbuf[bp++] = event->dma0_completion_data[i];
 		}
 		event->dma0_completion_valid = 0;
@@ -1026,6 +1040,9 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 	int i = 0;
 	int bc = 0;
 	uint32_t rbc = 1;
+#ifdef PSL9
+	uint32_t pbc = 0;
+#endif
 	fd_set watchset;	/* fds to read from */
 	/* initialize watchset */
 	FD_ZERO(&watchset);
@@ -1090,17 +1107,24 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_128) {
  					if (event->dma0_req_size <= 128) {
 					rbc += event->dma0_req_size;
+					pbc = event->dma0_req_size;
 					event->dma0_wr_partial = 0;
 				} else 
 					rbc += 128;
-					// may need to set up event->dma0_wr_partial here?
+					pbc = 128;
+					event->dma0_wr_partial = event->dma0_req_size - 128;;
+					// initalize  event->dma0_wr_partial to show remaining bytes
 				}
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_MORE) {
- 					if (event->dma0_req_size <= 128) { //TODO THIS IS WRONG!!!!!
-					rbc += event->dma0_req_size;
+ 					if (event->dma0_wr_partial <= 128) { //TODO testing
+					rbc += event->dma0_wr_partial;
+					pbc = event->dma0_wr_partial;
+					event->dma0_wr_partial = 0;
 				} else 
 					rbc += 128;
-					// may need to set up event->dma0_wr_partial here?
+					pbc = 128;
+					event->dma0_wr_partial -= 128;
+					// decrement event->dma0_wr_partial here
 				}
 				
 
@@ -1158,13 +1182,19 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
 		//printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
 		// if type is 1 (dma read req), no data to xfer here 
-		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  { //right now, only write op supported is 128b
-		// but, for DMA writes that are greater than 128B total, AFU MUST send only 128B per socket event
-		//if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_128) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE))  {
-			for (bc = 0; bc < event->dma0_req_size; bc++) {
+		//if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128)  { 
+		// for DMA writes that are greater than 128B total, AFU MUST send max 128B per socket event
+		//	for (bc = 0; bc < event->dma0_req_size; bc++) {
+		//		event->dma0_req_data[bc] = event->rbuf[rbc++];
+			//printf("data is 0x%2x, bc is %d, rbc is %d \n", event->rbuf[rbc-1], bc, rbc-1);
+		//	}
+		//}
+		if ((event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE) || (event->dma0_req_type == DMA_DTYPE_WR_REQ_128))  { 
+			for (bc = 0; bc < pbc; bc++) {
 				event->dma0_req_data[bc] = event->rbuf[rbc++];
 			//printf("data is 0x%2x, bc is %d, rbc is %d \n", event->rbuf[rbc-1], bc, rbc-1);
 			}
+	
 		}
 		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)  {
 		// for Atomic memory ops, data xfer is always 16B; dsize refers to size of operand (4B or 8B)
@@ -1340,10 +1370,26 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				if (bc == 0)
 					return -1;
 				event->rbp += bc;
-				// this will be bc for  dma read cpl data, have to also add 7  
+				if (event->rbuf[2] > 128)  { // need to look at next byte to see type 
+					if ((bc = recv(event->sockfd, event->rbuf + event->rbp, 1, 0)) == -1) {
+						if (errno == EWOULDBLOCK) {
+							return 0;
+						} else {
+							return -1;
+						}
+					}
+					if (bc == 0)
+						return -1;
+					event->rbp += bc;
+					if (event->rbuf[3] == 0)
+						rbc = rbc + 7 + 128;
+					if (event->rbuf[3] == 1)
+						rbc = rbc + 7 + (event->rbuf[2] - 128);
+				} else  
+				// this will be ok for single cycle cpl bc, have to also add 7  
 				rbc = rbc + 7 + event->rbuf[2];
 	
-				//printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
+				printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
 			}
 
 		}	
@@ -1706,7 +1752,7 @@ int
 afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 		 uint32_t utag,
 		 uint32_t cpl_type,
-		 uint32_t dsize, 
+		 uint32_t cpl_size, 
 		 uint32_t laddr,
 		 uint32_t byte_count, uint8_t * dma_rd_data)
 {
@@ -1718,10 +1764,10 @@ afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 		event->dma0_completion_valid = 0;
 		utag = event->dma0_completion_utag;
 		cpl_type = event->dma0_completion_type;
-		dsize = event->dma0_completion_size;
+		cpl_size = event->dma0_completion_size;
 		laddr = event->dma0_completion_laddr;
 		byte_count = event->dma0_completion_byte_count;
-		memcpy(dma_rd_data, event->dma0_completion_data, dsize);
+		memcpy(dma_rd_data, event->dma0_completion_data, cpl_size);
 		return PSL_SUCCESS;
 	}
 }
