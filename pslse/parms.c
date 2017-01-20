@@ -23,7 +23,7 @@
 #include "../common/debug.h"
 
 #define DEFAULT_CREDITS 64
-#ifdef PSL9
+#if defined PSL9 || defined PSL9lite
 #define DEFAULT_PAGESIZE 0
 #endif
 
@@ -95,7 +95,7 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 	// Set default parameter values
 	parms->timeout = 10;
 	parms->credits = DEFAULT_CREDITS;
-#ifdef PSL9
+#if defined PSL9 || defined PSL9lite
 	parms->pagesize = DEFAULT_PAGESIZE;
 #endif
 	parms->seed = (unsigned int)time(NULL);
@@ -158,7 +158,7 @@ struct parms *parse_parms(char *filename, FILE * dbg_fp)
 			else
 				parms->credits = data;
 			debug_parm(dbg_fp, DBG_PARM_CREDITS, parms->credits);
-#ifdef PSL9
+#if defined PSL9 || defined PSL9lite
 		} else if (!(strcmp(parm, "PAGESIZE"))) {
 			data = atoi(value);
 			if ((data < DEFAULT_PAGESIZE) || (data == 1) || (data == 6) || (data >= 8))

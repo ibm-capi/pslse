@@ -107,6 +107,8 @@ struct cmd_event {
 	uint64_t cas_op1;
 	uint64_t cas_op2;
 	uint32_t cpagesize;
+	uint32_t resp_r_pgsize;
+	uint32_t resp_extra;
 #endif // defined for both PSL9 & PSL9lite
 #ifdef PSL9  //defined just for PSL9, ie DMA port related
 	uint32_t port;
@@ -150,7 +152,7 @@ struct cmd {
 	uint64_t res_addr;
 	uint32_t credits;
 	int max_clients;
-#ifdef PSL9
+#if defined PSL9 || PSL9lite
 	uint32_t pagesize;
 #endif
 	uint16_t irq;

@@ -71,7 +71,7 @@ int psl_response(struct AFU_EVENT *event,
 		 uint32_t response_code,
 #if defined PSL9 || defined PSL9lite
 //		 uint32_t response_extra, uint32_t response_r_pgsize,
-		 int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize);
+		 int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize, uint32_t resp_extra);
 #else
 		 int credits, uint32_t cache_state, uint32_t cache_position);
 #endif

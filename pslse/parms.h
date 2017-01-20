@@ -24,7 +24,7 @@ struct parms {
 	unsigned int timeout;
 	unsigned int credits;
 	unsigned int seed;
-#ifdef PSL9
+#if defined PSL9 || defined PSL9lite
 	unsigned int pagesize;
 #endif
 	unsigned int resp_percent;

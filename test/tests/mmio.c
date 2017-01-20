@@ -27,6 +27,7 @@
 #include <time.h>
 
 #include "libcxl.h"
+#include "utils.h"
 
 void usage(char *name)
 {
@@ -128,6 +129,8 @@ int main(int argc, char *argv[])
 		perror("FAILED:cxl_mmio_read64");
 		goto done;
 	}
+	// WED is supposed to be in BE format in PSL, so got to shift?
+	wed_check = htonll(wed_check);
 	if (wed != wed_check) {
 		printf("\nFAILED:WED mismatch!\n");
 		printf("\tExpected:0x%016"PRIx64"\n", wed);

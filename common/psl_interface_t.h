@@ -288,9 +288,11 @@ struct AFU_EVENT {
   #ifdef PSL9 /* add new PSL response interface signals for CAIA2 */
   uint32_t response_dma0_itag;        /* DMA translation tag for xlat_ *requests */
   uint32_t response_dma0_itag_parity; /* DMA translation tag parity   */
+  #endif /* ifdef PSL9 */
+  #if defined PSL9 || PSL9lite
   uint32_t response_extra;            /* extra response information received from xlate logic */
   uint32_t response_r_pgsize;         /* command translated page size. values defined in CAIA2 workbook */
-  #endif /* ifdef PSL9 */
+  #endif /* ifdef PSL9 or PSL9lite */
   uint32_t buffer_read;               /* AFU event contains a valid buffer read request */
   uint32_t buffer_read_tag;           /* tag from command in PSL_EVENT which requested the buffer read */
   uint32_t buffer_read_tag_parity;    /* Odd parity for buffer read tag */

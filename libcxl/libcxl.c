@@ -475,7 +475,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 	if (op_size == 0x4) {
 		memcpy((char *) &lvalue, (void *)addr, op_size);
 		op_A = (uint32_t)(lvalue);
-	        printf("op_A is %08"PRIx32 " and op_1 is %08"PRIx32 "\n", op_A, op_1);
+	        debug_msg("op_A is %08"PRIx32 " and op_1 is %08"PRIx32 , op_A, op_1);
 		if (atomic_le == 0) {
 			op_1 = ntohl(op_1);
 			op_2 = ntohl(op_2);
@@ -488,8 +488,8 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			op_1l = ntohll(op_1l);
 			op_2l = ntohll(op_2l);
 		}
-	        printf("op_Al is %016"PRIx64 " and op_1l is %016"PRIx64 "\n", op_Al, op_1l);
-	        printf("llvalue read from location -> by addr is %016" PRIx64 " and addr is 0x%016" PRIx64 " \n", llvalue, addr);
+	        debug_msg("op_Al is %016"PRIx64 " and op_1l is %016"PRIx64 , op_Al, op_1l);
+	        debug_msg("llvalue read from location -> by addr is %016" PRIx64 " and addr is 0x%016" PRIx64 , llvalue, addr);
 	} else // need else error bc only valid sizes are 4 or 8
 		warn_msg("unsupported op_size of 0x%2x \n", op_size);
 
@@ -499,56 +499,56 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
  *  encode (op_code). The result is returned to memory, the original value is returned to the AFU as completion data */
 			case AMO_ARMWF_ADD:
 				if  (op_size == 4) {
-				printf("ADD %08"PRIx32" to %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+				debug_msg("ADD %08"PRIx32" to %08"PRIx32 " store it & return op_A ", op_A, op_1);
 					op_1 += op_A;
 					wb = 1;
 				} else {
-				printf("ADD %016"PRIx64" to %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+				debug_msg("ADD %016"PRIx64" to %016"PRIx64 " store it & return op_Al ", op_Al, op_1l);
 					op_1l += op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_XOR:
 				if  (op_size == 4) {
-				printf("XOR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+				debug_msg("XOR %08"PRIx32" with %08"PRIx32 " store it & return op_A ", op_A, op_1);
 					op_1 ^= op_A;
 					wb = 1;
 				} else {
-				printf("XOR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+				debug_msg("XOR %016"PRIx64" with %016"PRIx64 " store it & return op_Al ", op_Al, op_1l);
 					op_1l ^= op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_OR:
 				if  (op_size == 4) {
-				printf("OR %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+				debug_msg("OR %08"PRIx32" with %08"PRIx32 " store it & return op_A ", op_A, op_1);
 					op_1 |= op_A;
 					wb = 1;
 				} else {
-				printf("OR %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+				debug_msg("OR %016"PRIx64" with %016"PRIx64 " store it & return op_Al ", op_Al, op_1l);
 					op_1l |= op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_AND:
 				if  (op_size == 4) {
-				printf("AND %08"PRIx32" with %08"PRIx32 " store it & return op_A \n", op_A, op_1);
+				debug_msg("AND %08"PRIx32" with %08"PRIx32 " store it & return op_A ", op_A, op_1);
 					op_1 &= op_A;
 					wb = 1;
 				} else {
-				printf("AND %016"PRIx64" with %016"PRIx64 " store it & return op_Al \n", op_Al, op_1l);
+				debug_msg("AND %016"PRIx64" with %016"PRIx64 " store it & return op_Al ", op_Al, op_1l);
 					op_1l &= op_Al;
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_CAS_MAX_U:
 				if  (op_size == 4) {
-				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " , store larger & return op_A \n", op_A, op_1);
+				debug_msg("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " , store larger & return op_A ", op_A, op_1);
 					if (op_A > op_1)
 						op_1 = op_A;   
 					wb = 1;
 				} else {
-				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " , store larger & return op_Al  \n", op_Al, op_1l);
+				debug_msg("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " , store larger & return op_Al  ", op_Al, op_1l);
 					if (op_Al > op_1l)
 						op_1l = op_Al;   
 					wb = 2;
@@ -559,14 +559,14 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if (op_size == 4) {
 					op_A = sign_extend(op_A);
 					op_1 = sign_extend(op_1);
-				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store larger & return op_A \n", op_A, op_1);
+				debug_msg("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store larger & return op_A ", op_A, op_1);
 					if ((int32_t)op_A > (int32_t)op_1)
 						op_1 = op_A;   
 					wb = 1;
 				} else {
 					op_Al = sign_extend64(op_Al);
 					op_1l = sign_extend64(op_1l);
-				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store larger & return op_Al  \n", op_Al, op_1l);
+				debug_msg("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store larger & return op_Al ", op_Al, op_1l);
 					if ((int64_t)op_Al > (int64_t)op_1l)
 						op_1l = op_Al;   
 					wb = 2;
@@ -574,12 +574,12 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				break;
 			case AMO_ARMWF_CAS_MIN_U:
 				if  (op_size == 4) {
-				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store smaller & return op_A \n", op_A, op_1);
+				debug_msg("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store smaller & return op_A ", op_A, op_1);
 					if (op_A < op_1)
 						op_1 = op_A;  
 					wb = 1;
 				} else {
-				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al \n", op_Al, op_1l);
+				debug_msg("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al ", op_Al, op_1l);
 					if (op_Al < op_1l)
 						op_1l = op_Al;  
 					wb = 2;
@@ -589,14 +589,14 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if (op_size == 4) {
 					op_A = sign_extend(op_A);
 					op_1 = sign_extend(op_1);
-				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store smaller & return op_A \n", op_A, op_1);
+				debug_msg("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store smaller & return op_A ", op_A, op_1);
 					if ((int32_t)op_A < (int32_t)op_1)
 						op_1 = op_A;   
 					wb = 1;
 				} else {
 					op_Al = sign_extend64(op_Al);
 					op_1l = sign_extend64(op_1l);
-				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al \n", op_Al, op_1l);
+				debug_msg("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store smaller & return op_Al ", op_Al, op_1l);
 					if ((int64_t)op_Al < (int64_t)op_1l)
 						op_1l = op_Al;   
 					wb = 2;
@@ -608,25 +608,25 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
  * is written to memory at location specified for op_A. Original value of op_A is returned to AFU. */
 			case AMO_ARMWF_CAS_U:
 				if  (op_size == 4) {
-				printf("COMPARE & SWAP  %08"PRIx32" with %08"PRIx32 " ,store op_2 & return op_A \n", op_A, op_1);
+				debug_msg("COMPARE & SWAP  %08"PRIx32" with %08"PRIx32 " ,store op_2 & return op_A ", op_A, op_1);
 					op_1 = op_2;  
 					wb = 1;
 				} else {
-				printf("COMPARE & SWAP  %016"PRIx64" with %016"PRIx64 " ,store op_2l & return op_Al \n", op_Al, op_1l);
+				debug_msg("COMPARE & SWAP  %016"PRIx64" with %016"PRIx64 " ,store op_2l & return op_Al ", op_Al, op_1l);
 					op_1l = op_2l;  
 					wb = 2;
 				}
 				break;
 			case AMO_ARMWF_CAS_E:
 				if  (op_size == 4) {
-				printf("COMPARE & SWAP == %08"PRIx32" with %08"PRIx32 " ,if true store op_2 & return op_A \n", op_A, op_1);
+				debug_msg("COMPARE & SWAP == %08"PRIx32" with %08"PRIx32 " ,if true store op_2 & return op_A ", op_A, op_1);
 					if (op_A == op_1)
 						op_1 = op_2;  
 					else 
 						op_1 = op_A;
 					wb = 1;
 				} else {
-				printf("COMPARE & SWAP == %016"PRIx64" with %016"PRIx64 " ,if true store op_2l & return op_Al \n", op_Al, op_1l);
+				debug_msg("COMPARE & SWAP == %016"PRIx64" with %016"PRIx64 " ,if true store op_2l & return op_Al ", op_Al, op_1l);
 					if (op_Al == op_1l)
 						op_1l = op_2l;  
 					else 
@@ -636,14 +636,14 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				break;
 			case AMO_ARMWF_CAS_NE:
 				if  (op_size == 4) {
-				printf("COMPARE & SWAP != %08"PRIx32" with %08"PRIx32 " ,if true, store op_2 & return op_A \n", op_A, op_1);
+				debug_msg("COMPARE & SWAP != %08"PRIx32" with %08"PRIx32 " ,if true, store op_2 & return op_A ", op_A, op_1);
 					if (op_A != op_1)
 						op_1 = op_2;  
 					else 
 						op_1 = op_A;
 					wb = 1;
 				} else {
-				printf("COMPARE & SWAP != %016"PRIx64" with %016"PRIx64 " ,if true, store op_2l & return op_Al \n", op_Al, op_1l);
+				debug_msg("COMPARE & SWAP != %016"PRIx64" with %016"PRIx64 " ,if true, store op_2l & return op_Al ", op_Al, op_1l);
 					if (op_Al != op_1l)
 						op_1l = op_2l;  
 					else 
@@ -661,7 +661,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if  (op_size == 4) {
 					memcpy((char *) &lvalue, (void *)addr+4, op_size);
 					op_1 = (uint32_t)(lvalue);
-				printf("COMPARE & INC Bounded %08"PRIx32" with %08"PRIx32 ", if !=, inc op_A, ret orig op_A, else..\n", op_A, op_1);
+				debug_msg("COMPARE & INC Bounded %08"PRIx32" with %08"PRIx32 ", if !=, inc op_A, ret orig op_A, else..", op_A, op_1);
 					if (op_A != op_1)
 						op_1 = op_A +1;  
 					else {
@@ -673,7 +673,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				} else {
 					memcpy((char *) &llvalue, (void *)addr+8, op_size);
 					op_1l = (uint64_t)(llvalue);
-				printf("COMPARE & INC Bounded %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
+				debug_msg("COMPARE & INC Bounded %016"PRIx64" with %016"PRIx64 ", if !=, inc op_A, ret orig op_a, else..", op_Al, op_1l);
 					if (op_Al != op_1l)
 						op_1l = op_A +1;
 					else  {
@@ -688,7 +688,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if  (op_size == 4) {
 					memcpy((char *) &lvalue, (void *)addr+4, op_size);
 					op_1 = (uint32_t)(lvalue);
-				printf("COMPARE & INC Equal %08"PRIx32" with %08"PRIx32 ", if =, inc op_A, ret orig op_A, else..\n", op_A, op_1);
+				debug_msg("COMPARE & INC Equal %08"PRIx32" with %08"PRIx32 ", if =, inc op_A, ret orig op_A, else..", op_A, op_1);
 					if (op_A == op_1)
 						op_1 = op_A +1;  
 					else   {
@@ -700,7 +700,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				} else {
 					memcpy((char *) &llvalue, (void *)addr+8, op_size);
 					op_1l = (uint64_t)(llvalue);
-				printf("COMPARE & INC Equal %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..\n", op_Al, op_1l);
+				debug_msg("COMPARE & INC Equal %016"PRIx64" with %016"PRIx64 ", if =, inc op_A, ret orig op_a, else..", op_Al, op_1l);
 					if (op_Al == op_1l)
 						op_1l = op_A +1;
 					else    {
@@ -715,7 +715,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if  (op_size == 4) {
 					memcpy((char *) &lvalue, (void *)addr-4, op_size);
 					op_1 = (uint32_t)(lvalue);
-				printf("COMPARE & DEC Bounded %08"PRIx32" with %08"PRIx32 ", if != dec op_A, ret orig op_A, else..\n", op_A, op_1);
+				debug_msg("COMPARE & DEC Bounded %08"PRIx32" with %08"PRIx32 ", if != dec op_A, ret orig op_A, else..", op_A, op_1);
 					if (op_A != op_1)
 						op_1 = op_A -1;  
 					else  {
@@ -727,7 +727,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				} else {
 					memcpy((char *) &llvalue, (void *)addr-8, op_size);
 					op_1l = (uint64_t)(llvalue);
-				printf("COMPARE & DEC Bounded %016"PRIx64" with %016"PRIx64 ", if !=, dec op_A, ret orig op_a, else..\n", op_Al, op_1l);
+				debug_msg("COMPARE & DEC Bounded %016"PRIx64" with %016"PRIx64 ", if !=, dec op_A, ret orig op_a, else..", op_Al, op_1l);
 					if (op_Al != op_1l)
 						op_1l = op_Al -1;
 					else   {
@@ -743,10 +743,10 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
  *  encode (op_code). The result is returned to memory, the original value is returned to the AFU as completion data */
 			case AMO_ARMW_ADD:
 				if  (op_size == 4) {
-				printf("ADD %08"PRIx32" to %08"PRIx32 " and store it  \n", op_A, op_1);
+				debug_msg("ADD %08"PRIx32" to %08"PRIx32 " and store it  ", op_A, op_1);
 					op_1 += op_A;
 				} else {
-				printf("ADD %016"PRIx64" to %016"PRIx64 " and store it  \n", op_Al, op_1l);
+				debug_msg("ADD %016"PRIx64" to %016"PRIx64 " and store it  ", op_Al, op_1l);
 					op_1l += op_Al;
 				}
 				wb = 0;
@@ -754,41 +754,41 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 
 			case AMO_ARMW_XOR:
 				if  (op_size == 4) {
-				printf("XOR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, op_1);
+				debug_msg("XOR %08"PRIx32" with %08"PRIx32 " and store it  ", op_A, op_1);
 					op_1 ^= op_A;
 				} else {
-				printf("XOR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, op_1l);
+				debug_msg("XOR %016"PRIx64" with %016"PRIx64 " and store it  ", op_Al, op_1l);
 					op_1l ^= op_Al;
 				}
 				wb = 0;
 				break;
 			case AMO_ARMW_OR:
 				if  (op_size == 4) {
-				printf("OR %08"PRIx32" with %08"PRIx32 " and store it  \n", op_A, op_1);
+				debug_msg("OR %08"PRIx32" with %08"PRIx32 " and store it  ", op_A, op_1);
 					op_1 |= op_A;
 				} else {
-				printf("OR %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, op_1l);
+				debug_msg("OR %016"PRIx64" with %016"PRIx64 " and store it  ", op_Al, op_1l);
 					op_1l |= op_Al;
 				}
 				wb = 0;
 				break;
 			case AMO_ARMW_AND:
 				if  (op_size == 4) {
-				printf("AND %08"PRIx32" with %08"PRIx32 " and store it \n", op_A, op_1);
+				debug_msg("AND %08"PRIx32" with %08"PRIx32 " and store it ", op_A, op_1);
 					op_1 &= op_A;
 				} else {
-				printf("AND %016"PRIx64" with %016"PRIx64 " and store it  \n", op_Al, op_1l);
+				debug_msg("AND %016"PRIx64" with %016"PRIx64 " and store it  ", op_Al, op_1l);
 					op_1l &= op_Al;
 				}
 				wb = 0;
 				break;
 			case AMO_ARMW_CAS_MAX_U:
 				if  (op_size == 4) {
-				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the larger \n", op_A, op_1);
+				debug_msg("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the larger ", op_A, op_1);
 					if (op_A > op_1)
 						op_1 = op_A;  
 				} else {
-				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  \n", op_Al, op_1l);
+				debug_msg("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  ", op_Al, op_1l);
 					if (op_Al > op_1l)
 						op_1l = op_Al; 
 				}
@@ -800,14 +800,14 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if (op_size == 4) {
 					op_A = sign_extend(op_A);
 					op_1 = sign_extend(op_1);
-				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the larger \n", op_A, op_1);
+				debug_msg("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the larger ", op_A, op_1);
 					if ((int32_t)op_A > (int32_t)op_1)
 						op_1 = op_A;   
 					wb = 0;
 				} else {
 					op_Al = sign_extend64(op_Al);
 					op_1l = sign_extend64(op_1l);
-				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  \n", op_Al, op_1l);
+				debug_msg("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the larger  ", op_Al, op_1l);
 					if ((int64_t)op_Al > (int64_t)op_1l)
 						op_1l = op_Al;   
 					wb = 0;
@@ -815,11 +815,11 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				break;
 			case AMO_ARMW_CAS_MIN_U:
 				if  (op_size == 4) {
-				printf("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the smaller \n", op_A, op_1);
+				debug_msg("UNSIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the smaller ", op_A, op_1);
 					if (op_A < op_1)
 						op_1 = op_A;   
 				} else {
-				printf("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  \n", op_Al, op_1l);
+				debug_msg("UNSIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  ", op_Al, op_1l);
 					if (op_Al < op_1l)
 						op_1l = op_Al; 
 				}
@@ -829,14 +829,14 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if (op_size == 4) {
 					op_A = sign_extend(op_A);
 					op_1 = sign_extend(op_1);
-				printf("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the smaller \n", op_A, op_1);
+				debug_msg("SIGNED COMPARE %08"PRIx32" with %08"PRIx32 " store the smaller ", op_A, op_1);
 					if ((int32_t)op_A < (int32_t)op_1)
 						op_1 = op_A;   
 					wb = 0;
 				} else {
 					op_Al = sign_extend64(op_Al);
 					op_1l = sign_extend64(op_1l);
-				printf("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  \n", op_Al, op_1l);
+				debug_msg("SIGNED COMPARE %016"PRIx64" with %016"PRIx64 " store the smaller  ", op_Al, op_1l);
 					if ((int64_t)op_Al < (int64_t)op_1l)
 						op_1l = op_Al;   
 					wb = 0;
@@ -850,7 +850,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				if  (op_size == 4) {
 					memcpy((char *) &lvalue, (void *)addr+4, op_size);
 					op_2 = (uint32_t)(lvalue);
-				printf("STORE TWIN compare %08"PRIx32" with %08"PRIx32 ", if == store op_1 to both locations\n", op_A, op_2);
+				debug_msg("STORE TWIN compare %08"PRIx32" with %08"PRIx32 ", if == store op_1 to both locations", op_A, op_2);
 					if (op_A == op_2) 
 						op_2 = op_1;  
 					else 
@@ -859,7 +859,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 				} else {
 					memcpy((char *) &llvalue, (void *)addr+8, op_size);
 					op_2l = (uint64_t)(llvalue);
-				printf("STORE TWIN compare %016"PRIx64" with %016"PRIx64 ", if == store op_1l to both locations\n", op_Al, op_2l);
+				debug_msg("STORE TWIN compare %016"PRIx64" with %016"PRIx64 ", if == store op_1l to both locations", op_Al, op_2l);
 					if (op_Al == op_2l)
 						op_2l = op_1l;
 					else
@@ -1339,9 +1339,9 @@ static void *_psl_loop(void *ptr)
 				break;
 			}
 			memcpy((char *)&addr, (char *)buffer, sizeof(uint64_t));
-	printf(" addr is 0x%016" PRIx64 "\n", addr);
+	//printf(" addr is 0x%016" PRIx64 "\n", addr);
 			addr = ntohll(addr);
-	printf(" addr is 0x%016" PRIx64 "\n", addr);
+	//printf(" addr is 0x%016" PRIx64 "\n", addr);
 			if (get_bytes_silent(afu->fd, (17 * sizeof(uint8_t)), buffer,
 					     -1, 0) < 0) {
 				_all_idle(afu);
@@ -1349,13 +1349,13 @@ static void *_psl_loop(void *ptr)
 			}
 			function_code = (uint8_t) buffer[0];
 			memcpy((char *)&op1, (char *)&buffer[1], sizeof(uint64_t));
-			printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", op1);
+			debug_msg("op1 bytes 1-8 are 0x%016" PRIx64, op1);
 			//op1 = ntohll (op1);
-			printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", op1);
+			//printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", op1);
 			memcpy((char *)&op2, (char *)&buffer[9], sizeof(uint64_t));
-			printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", op2);
+			debug_msg("op2 bytes 1-8 are 0x%016" PRIx64, op2);
 			//op2 = ntohll (op2);
-			printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", op2);
+			//printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", op2);
 			
 			_handle_DMO_OPs(afu, op_size, addr, function_code, op1, op2);	
 			break;

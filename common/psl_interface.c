@@ -419,7 +419,7 @@ psl_response(struct AFU_EVENT *event,
 	     uint32_t tag,
 	     uint32_t response_code,
 #if defined PSL9 || defined PSL9lite
-	     int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize)
+	     int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize, uint32_t resp_extra)
 #else
 	     int credits, uint32_t cache_state, uint32_t cache_position)
 #endif
@@ -437,6 +437,7 @@ psl_response(struct AFU_EVENT *event,
 		event->cache_position = cache_position;
 #if defined PSL9 || defined PSL9lite
 		event->response_r_pgsize = pagesize;
+		event->response_extra = resp_extra;
 #endif
 		return PSL_SUCCESS;
 	}
@@ -766,10 +767,10 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->mmio_valid = 0;
 	}
 	if (event->response_valid != 0) {
-	        printf( "lgt: psl_signal_afu_model: response: tag=0x%02x, tag parity=0x%02x, code=0x%02x \n", 
-			event->response_tag, 
-			event->response_tag_parity, 
-			event->response_code);
+	      //  printf( "lgt: psl_signal_afu_model: response: tag=0x%02x, tag parity=0x%02x, code=0x%02x \n", 
+	//		event->response_tag, 
+	//		event->response_tag_parity, 
+	//		event->response_code);
 		event->tbuf[0] = event->tbuf[0] | 0x04;
 		event->tbuf[bp++] = event->response_tag;
 		event->tbuf[bp++] = event->response_tag_parity;
@@ -830,11 +831,11 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	}
 
 	// dump tbuf
-	if ( bp > 1 ) {
-	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
-	  for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
-	  printf( "\n" );
-	}
+//	if ( bp > 1 ) {
+//	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
+//	  for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
+//	  printf( "\n" );
+//	}
 
 	bl = bp;
 	bp = 0;
@@ -1001,11 +1002,11 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 
 
         // dump tbuf
-	if ( bp > 1 ) {
-	  printf( "lgt: psl_signal_psl_model: tbuf length:0x%02x tbuf: 0x", bp ); 
-	  for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
-	  printf( "\n" );
-	}
+//	if ( bp > 1 ) {
+//	  printf( "lgt: psl_signal_psl_model: tbuf length:0x%02x tbuf: 0x", bp ); 
+//	  for ( i = 0; i < bp; i++ ) printf( "%02x", event->tbuf[i] );
+//	  printf( "\n" );
+//	}
 
 	bl = bp;
 	bp = 0;
@@ -1014,8 +1015,6 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		if (bc < 0) {
 			return PSL_TRANSMISSION_ERROR; }
 		bp += bc;
-//if ((event->tbuf[0] & 0x20) != 0)
-//printf("sent ok on afu side \n");
 	}
 	return PSL_SUCCESS;
 }
@@ -1096,14 +1095,13 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 						return -1;
 						}
 				}
-				//printf("psl_get_afu_events and we have a dma op \n");
 				event->rbp += bc;
 		// event->dma0_req_size has size of TOTAL DMA data xfer
 		// TODO
 				event->dma0_req_size = event->rbuf[2];
-				printf("event->rbuf[2] is 0x%2x  \n", event->rbuf[2]);
+				//printf("event->rbuf[2] is 0x%2x  \n", event->rbuf[2]);
 				event->dma0_req_size = (event->dma0_req_size << 8) | event->rbuf[3];
-				printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
+				//printf("event->dma0_req_size is 0x%3x \n", event->dma0_req_size);
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_128) {
  					if (event->dma0_req_size <= 128) {
 					rbc += event->dma0_req_size;
@@ -1131,7 +1129,6 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		// If this is an Atomic Memory Op, will have one extra char for atomic_op and 16 for data payload
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_ATOMIC) 
 					rbc += 17;
-//printf("PSL_GET_AFU_EVENT-3 - rbuf[0] is 0x%02x and rbc is %2d \n", event->rbuf[0], rbc);
 			}
 #endif
 	}
@@ -1151,9 +1148,9 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		return 0;
 
 	// dump rbuf
-	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-	printf( "\n" ); 
+//	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+//	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+//	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
@@ -1389,7 +1386,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				// this will be ok for single cycle cpl bc, have to also add 7  
 				rbc = rbc + 7 + event->rbuf[2];
 	
-				printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
+				//printf("rbc will be 0x%2x and event->rbp is 0x%2X \n", rbc, event->rbp);
 			}
 
 		}	
@@ -1411,9 +1408,9 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		return 0;
 	
 	// dump rbuf
-	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-	printf( "\n" ); 
+//	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+//	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+//	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
@@ -1521,7 +1518,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		event->response_dma0_itag =
 		    (((event->response_dma0_itag) & 0x1) << 8) | event->rbuf[rbc++];
 		event->response_r_pgsize = event->rbuf[rbc++];
-		printf( "lgt: psl_get_psl_events: respsonse tag=0x%02x, tag parity=0x%02x, respsonse code=0x%02x. respsonse itag=0x%02x, \n", event->response_tag, event->response_tag_parity, event->response_code, event->response_dma0_itag );
+//		printf( "lgt: psl_get_psl_events: respsonse tag=0x%02x, tag parity=0x%02x, respsonse code=0x%02x. respsonse itag=0x%02x, \n", event->response_tag, event->response_tag_parity, event->response_code, event->response_dma0_itag );
 #endif
 
 
@@ -1538,9 +1535,9 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 			event->buffer_read_length = 64;
 		}
 		event->buffer_read_address = (event->rbuf[rbc++]) & 0x3F;
-	        printf( "lgt: psl_get_psl_events: buffer read: tag: 0x%02x, tag parity: 0x%02x\n", 
-		   	event->buffer_read_tag, 
-			event->buffer_read_tag_parity);
+	      //  printf( "lgt: psl_get_psl_events: buffer read: tag: 0x%02x, tag parity: 0x%02x\n", 
+		 //  	event->buffer_read_tag, 
+	//		event->buffer_read_tag_parity);
 	} else {
 		event->buffer_read = 0;
 	}
@@ -1560,9 +1557,9 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		for (bc = 0; bc < 2; bc++) {
 			event->buffer_wparity[bc] = event->rbuf[rbc++];
 		}
-	        printf( "lgt: psl_get_psl_events: buffer write: tag: 0x%02x, tag parity: 0x%02x\n", 
-		   	event->buffer_write_tag, 
-			event->buffer_write_tag_parity);
+	//        printf( "lgt: psl_get_psl_events: buffer write: tag: 0x%02x, tag parity: 0x%02x\n", 
+	//	   	event->buffer_write_tag, 
+	//		event->buffer_write_tag_parity);
 	} else {
 		event->buffer_write = 0;
 	}
