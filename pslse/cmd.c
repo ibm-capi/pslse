@@ -873,7 +873,6 @@ void handle_dma0_write(struct cmd *cmd)
 	// Send any ready write data to client immediately
 	head = &cmd->list;
 	while (*head != NULL) {
-	//TODO update for CMD_DMA_WR_AMO
 		if ((((*head)->type == CMD_DMA_WR) || ((*head)->type == CMD_DMA_WR_AMO)) &&
 		    ((*head)->state == DMA_OP_REQ))
 			break;
@@ -987,7 +986,6 @@ void handle_dma0_sent_sts(struct cmd *cmd)
 	// look for any pending sent_utag_sts to send to AFU 
 	head = &cmd->list;
 	while (*head != NULL) {
-	//TODO update for CMD_DMA_WR_AMO
 		if ((((*head)->type == CMD_DMA_WR) || ((*head)->type == CMD_DMA_WR_AMO)) &&
 		    ((*head)->state == DMA_SEND_STS))
 			break;
@@ -1052,7 +1050,6 @@ void handle_dma0_read(struct cmd *cmd)
 	// _handle_mem_read() issue dma0 completion bus
 	// write with valid data and
 	// prepare for response.
-	// TODO update to handle cpl_response from DMA_WR_AMO commands
 	if ((event->state == DMA_CPL_PARTIAL) || (event->state == DMA_MEM_RESP)) {
 	//randomly decide not to return data yet only if this isn't a multi-cycle cpl in progress
 		if ((event->state == DMA_MEM_RESP) && (!allow_resp(cmd->parms))) 
@@ -1086,7 +1083,7 @@ void handle_dma0_read(struct cmd *cmd)
 					event->state = DMA_CPL_SENT;
 				} 
 			} else	if (event->cpl_byte_count <= 512) { //Multi cycle single completion flow
-			// need way to lock DMA bus so nothing else goes out over it until this transaction completes TODO
+			// need way to lock DMA bus so nothing else goes out over it until this transaction completes? TODO
 					event->cpl_xfers_to_go = 1;
 					event->cpl_type = 0; //always 0 for first xfer of 128bytes
 					event->cpl_size = 128;
@@ -1903,7 +1900,6 @@ void handle_caia2_cmds(struct cmd *cmd)
 			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x size=0x%02x", cmd->afu_name,
 		  		event->itag, event->utag, event->addr, event->dtype, event->dsize);
 			}
-		// TODO update this to handle DMA write ops > 128B
 		if ((event->dtype == DMA_DTYPE_WR_REQ_128) && (event->dsize > 128))  {
 			debug_msg("FIRST copy to event buffer for write dma data  > 128B type 1");
 			event->state = DMA_PARTIAL;
@@ -1935,8 +1931,6 @@ void handle_caia2_cmds(struct cmd *cmd)
 		if ((event->dtype == DMA_DTYPE_ATOMIC) && (event->type == CMD_XLAT_RD))  
 			error_msg("%s:INVALID REQ: DMA AMO W/XLAT_RD ITAG ITAG = 0x%3x DTYPE = %d ", cmd->afu_name, this_itag, event->dtype); 
 		if ((event->dtype == DMA_DTYPE_ATOMIC) && (event->type == CMD_XLAT_WR))  {
-		// TODO update this to fully handle Atomic Mem Ops
-			//printf("trying to copy from event to event buffer for write dma data for AMO \n");
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_WR_AMO;
 			event->atomic_op = cmd->afu_event->dma0_atomic_op;

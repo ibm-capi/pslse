@@ -491,8 +491,7 @@ psl_buffer_write(struct AFU_EVENT *event,
 #ifdef PSL9
 /* Call this to write a dma port completion bus
  * For DMA returns, 128B max returned per cycle
- * For AMO returns, cpl_size is only 4 or 8.
- * TODO handle <128 and >128 up to 512B transfers using laddr & byte_count. */
+ * For AMO returns, cpl_size is only 4 or 8. */
 
 int
 psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
@@ -671,7 +670,6 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		// printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		//upper 4 bits in second byte always 0 to indicate this transaction is dma0_completion
 		// NOTE - read transactions can never be greater than 128bytes per cycle
-		// if this works, swap byte send order to send actual byte count (TODO)
 		//printf("event->dma0_completion_size is 0x%3x \n", event->dma0_completion_size);
 		//printf("event->dma0_completion_type is 0x%3x \n", event->dma0_completion_type);
 		//printf("event->dma0_completion_utag is 0x%3x \n", event->dma0_completion_utag);
@@ -874,7 +872,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 		event->tbuf[bp++] = (event->dma0_req_size ) & 0xFF;
 		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		//move up the req_aize so other side can determine what to do for dma writes < or > 128B
-		// if dtype == 3, then utag is only 8 bits, not 10 - TODO, do we check here?
+		// if dtype == 3, then utag is only 8 bits, not 10 - TODO, do we check here? if not, where?
 		event->tbuf[bp++] = (event->dma0_req_utag >> 8 ) & 0x03;
 		//printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
 		//printf("event->tbuf[%x] is 0x%2x \n", bp-1,event->tbuf[bp-1]);
@@ -1097,7 +1095,6 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 				}
 				event->rbp += bc;
 		// event->dma0_req_size has size of TOTAL DMA data xfer
-		// TODO
 				event->dma0_req_size = event->rbuf[2];
 				//printf("event->rbuf[2] is 0x%2x  \n", event->rbuf[2]);
 				event->dma0_req_size = (event->dma0_req_size << 8) | event->rbuf[3];
@@ -1709,7 +1706,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		event->dma0_req_size = size;			
 		event->dma0_atomic_op = atomic_op;
 		event->dma0_atomic_le = atomic_le;
-	// For DMA write or atomic op need to send data - TODO add support for >128 up to 512B writes
+	// TODO testing
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128) { 
 			event->dma0_req_size = size;
 			if (size <= 128)  {
