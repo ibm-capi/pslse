@@ -234,7 +234,7 @@ static void _add_cmd(struct cmd *cmd, uint32_t context, uint32_t tag,
 		head = &((*head)->_next);
 	event->_next = *head;
 	*head = event;
-	debug_msg("_add_cmd:created cmd_event:command=0x%02x, type=0x%02x, tag=0x%02x, state=0x%03x", event->command, event->type, event->tag, event-> state );
+	debug_msg("_add_cmd:created cmd_event @ 0x%016"PRIx64":command=0x%02x, type=0x%02x, tag=0x%02x, state=0x%03x", event, event->command, event->type, event->tag, event-> state );
 	debug_cmd_add(cmd->dbg_fp, cmd->dbg_id, tag, context, command);
 }
 
@@ -1967,61 +1967,81 @@ void handle_response(struct cmd *cmd)
 	client = NULL;
 	head = &cmd->list;
 	while (*head != NULL) {
+	        debug_msg( "%s:RESPONSE examine event @ 0x%016" PRIx64 ", command=0x%x, tag=0x%08x, type=0x%02x, state=0x%02x, resp=0x%x", 
+			   cmd->afu_name,
+			   (*head), 
+			   (*head)->command, 
+			   (*head)->tag, 
+			   (*head)->type, 
+			   (*head)->state, 
+			   (*head)->resp ); 
 		// Fast track error responses
-		if (((*head)->resp == PSL_RESPONSE_PAGED) ||
-		    ((*head)->resp == PSL_RESPONSE_NRES) ||
-		    ((*head)->resp == PSL_RESPONSE_NLOCK) ||
-		    ((*head)->resp == PSL_RESPONSE_FAILED) ||
-		    ((*head)->resp == PSL_RESPONSE_FLUSHED)) {
+		if ( ( (*head)->resp == PSL_RESPONSE_PAGED ) ||
+		     ( (*head)->resp == PSL_RESPONSE_NRES ) ||
+		     ( (*head)->resp == PSL_RESPONSE_NLOCK ) ||
+		     ( (*head)->resp == PSL_RESPONSE_FAILED ) ||
+		     ( (*head)->resp == PSL_RESPONSE_FLUSHED ) ) {
 			event = *head;
+			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ",drive response because resp is PSL_RESPONSE_error", cmd->afu_name, (*head) ); 
 			goto drive_resp;
 		}
 #ifdef PSL9
 		// if (dma write and we've sent utag sent status AND it wasn't AMO that has pending cpl resp), 
 		// OR (dma write and it was AMO and we've sent cpl resp)
 		// OR (itag was aborted),  we can remove this event 
-		if ((((*head)->type == CMD_DMA_WR) && ((*head)->state == MEM_DONE)) ||
-		   (((*head)->type == CMD_DMA_WR_AMO) && ((*head)->state == MEM_DONE)) ||
-		   (((*head)->type == CMD_XLAT_WR) && ((*head)->state == MEM_DONE))) {
+		if ( ( ( (*head)->type == CMD_DMA_WR )     && ( (*head)->state == MEM_DONE ) ) ||
+		     ( ( (*head)->type == CMD_DMA_WR_AMO ) && ( (*head)->state == MEM_DONE ) ) ||
+		     ( ( (*head)->type == CMD_XLAT_WR )    && ( (*head)->state == MEM_DONE ) ) ) {
 			//  update dma0_wr_credits IF CMD_DMA_WR or CMD_DMA_WR_AM0
 			//if ((*head)->type != CMD_XLAT_WR)
 			//	cmd->dma0_wr_credits++;
 			event = *head;
 			*head = event->_next;
+			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma write related is done", 
+				   cmd->afu_name, event ); 
 			free(event->data);
 			free(event->parity);
 			free(event);
-		//printf("in handle_response and finally freeing original xlat/dma write event \n");
+		        //printf("in handle_response and finally freeing original xlat/dma write event \n");
 			return;
-		} else if ((((*head)->type == CMD_DMA_RD) && ((*head)->state == DMA_CPL_SENT)) ||
-		          (((*head)->type == CMD_XLAT_RD) && ((*head)->state == MEM_DONE))) {
-	 	// if dma read and we've send completion data OR itag aborted , we can remove this event		
+		} else if ( ( ( (*head)->type == CMD_DMA_RD )  && ( (*head)->state == DMA_CPL_SENT ) ) ||
+			    ( ( (*head)->type == CMD_XLAT_RD ) && ( (*head)->state == MEM_DONE ) ) ) {
+		        // if dma read and we've send completion data OR itag aborted , we can remove this event
 			//  update dma0_rd_credits IF CMD_DMA_RD 
 			//if ((*head)->type != CMD_XLAT_RD)
 			//	cmd->dma0_rd_credits++;
 			event = *head;
 			*head = event->_next;
+			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma read related is CPL or DONE", 
+				   cmd->afu_name, event ); 
 			free(event->data);
 			free(event->parity);
 			free(event);
-		//printf("in handle_response and finally freeing original xlat/dma read event \n");
+	                //printf("in handle_response and finally freeing original xlat/dma read event \n");
 			return;
 		}
 
 
-		if (((*head)->type == CMD_XLAT_RD) ||
-	   		((*head)->type == CMD_XLAT_WR )) {
+		if ( ( (*head)->type == CMD_XLAT_RD ) ||
+		     ( (*head)->type == CMD_XLAT_WR ) ) {
 				if ((*head)->state == DMA_ITAG_RET) {
 					event = *head;
 					event->resp = PSL_RESPONSE_DONE;
-					debug_msg("returning response from handle_resp on DMA WR or RD ");
+					debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", drive response because xlat type state was DMA_ITAG_RET", 
+						   cmd->afu_name, event ); 
 					goto drive_resp;
-				} 
+				} else {
+					debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", skip response because xlat type state was not DMA_ITAG_RET", 
+						   cmd->afu_name, (*head) ); 
+					return;
+				}
 		}
 
 #endif /* ifdef PSL9 */
 
 		if (((*head)->state == MEM_DONE) && !allow_reorder(cmd->parms)) {
+		        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", drive response because MEM_DONE", 
+				   cmd->afu_name, (*head) ); 
 			break;
 		}
 		head = &((*head)->_next);
@@ -2031,20 +2051,34 @@ void handle_response(struct cmd *cmd)
 	event = *head;
 	if ((event == NULL) || ((event->client_state == CLIENT_VALID)
 				&& !allow_resp(cmd->parms))) {
+	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 "skipped because suppressed by allow_resp", cmd->afu_name, event );
 		return;
 	}
 	// Test for client disconnect
-	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
+	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL)) {
+	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 "skipped because client NULL", cmd->afu_name, event );
 		return;
+	}
 
 	// Send response, remove command from list and free memory
 	if ((event->resp == PSL_RESPONSE_PAGED) ||
 	    (event->resp == PSL_RESPONSE_AERROR) ||
 	    (event->resp == PSL_RESPONSE_DERROR)) {
+	        debug_msg( "%s:RESPONSE flushing events because this one is an error", cmd->afu_name );
 		client->flushing = FLUSH_FLUSHING;
 		_update_pending_resps(cmd, PSL_RESPONSE_FLUSHED);
 	}
  drive_resp:
+	// debug - dump the event we picked...
+	debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", command=0x%x, tag=0x%08x, type=0x%02x, state=0x%02x, resp=0x%x", 
+		   cmd->afu_name,
+		   event, 
+		   event->command, 
+		   event->tag, 
+		   event->type, 
+		   event->state, 
+		   event->resp );
+
 	// Check for pending buffer activity
 	while (event == cmd->buffer_read) {
 		if (cmd->afu_event->buffer_rdata_valid) {
@@ -2062,34 +2096,43 @@ void handle_response(struct cmd *cmd)
 	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0, cmd->pagesize, event->resp_extra);
 	debug_msg("returning pagesize value of 0x%x and resp_extra = 0x%x" , cmd->pagesize, event->resp_extra);
 #else
-	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0);
+	rc = psl_response( cmd->afu_event, event->tag, event->resp, 1, 0, 0 );
 #endif
 	if (rc == PSL_SUCCESS) {
-		debug_msg("%s:RESPONSE tag=0x%02x code=0x%x", cmd->afu_name,
-			  event->tag, event->resp);
+		debug_msg("%s:RESPONSE event @ 0x%016" PRIx64 ", sent tag=0x%02x code=0x%x", cmd->afu_name,
+			  event, event->tag, event->resp);
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
-		if ((client != NULL) && (event->command == PSL_COMMAND_RESTART))
+		if ( ( client != NULL ) && ( event->command == PSL_COMMAND_RESTART ) )
 			client->flushing = FLUSH_NONE;
-//		*head = event->_next;
-// if this was an xlat cmd, don't want to free the event so add code to check - HMP
 #ifdef PSL9
-	if ( (event->type == CMD_XLAT_RD ) ||
-	     (event->type == CMD_XLAT_WR ) ) {
-		event->state = DMA_PENDING;
-		// do this to "free" the tag since AFU thinks it's free now
-		event->tag = 0xdeadbeef;
-		//printf("DMA_PENDING set for event \n");
-		cmd->credits++; 
-	 } else { 
+		// if this was an xlat cmd, don't want to free the event so add code to check - HMP
+	        if ( ( event->type == CMD_XLAT_RD ) ||
+		     ( event->type == CMD_XLAT_WR ) ) {
+		  debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", set state dma pending and tag to deadbeef", 
+			     cmd->afu_name,
+			     event );
+		  event->state = DMA_PENDING;
+		  // do this to "free" the tag since AFU thinks it's free now
+		  event->tag = 0xdeadbeef;
+		  printf("DMA_PENDING set for event \n");
+		  cmd->credits++; 
+		} else { 
 #endif /* ifdef PSL9 */
-		*head = event->_next;
-		free(event->data);
-		free(event->parity);
-		free(event);
-		cmd->credits++;
+	          debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event", 
+			     cmd->afu_name,
+			     event );
+		  *head = event->_next;
+		  free(event->data);
+		  free(event->parity);
+		  free(event);
+		  cmd->credits++;
 #ifdef PSL9
 		}
 #endif /* ifdef PSL9 */
+	} else {
+		  debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", psl_response() failed", 
+			     cmd->afu_name,
+			     event );
 	}
 }
 

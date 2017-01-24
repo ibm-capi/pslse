@@ -549,8 +549,8 @@ static void *_psl_loop(void *ptr)
 		// not be presented to an idle AFU to keep simulation
 		// waveforms from getting huge with no activity cycles.
 		if (psl->state != PSLSE_IDLE) {
-		  // if there are not any clients, don't set idle_cycles so that the afu clock might
-		  // be allowed to be stopped to save afu event simulator cycles
+		  // if we have clients or we are in the reset state, refresh idle_cycles 
+		  // so that the afu clock will not be allowed to stop to save afu event simulator cycles
 		  if ((psl->attached_clients > 0) || (psl->state == PSLSE_RESET)) {
 			psl->idle_cycles = PSL_IDLE_CYCLES;
 			if (stopped)
