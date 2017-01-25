@@ -1071,10 +1071,11 @@ void handle_dma0_read(struct cmd *cmd)
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x", 
+				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x laddr = 0x%8x", 
 							   cmd->afu_name, 
 							   event->dsize,
-							   event->utag );
+							   event->utag,
+							   event->cpl_laddr );
 						int line = 0;
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);
@@ -1098,9 +1099,10 @@ void handle_dma0_read(struct cmd *cmd)
 					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 						event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 						event->data) == PSL_SUCCESS) {
-							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x", cmd->afu_name, 
+							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x laddr= 0x%8x", cmd->afu_name, 
 								   event->dsize,
-								   event->utag );
+								   event->utag ,
+							           event->cpl_laddr );
 							int line = 0;
 							for (quadrant = 0; quadrant < 4; quadrant++) {
 								DPRINTF("DEBUG: Q%d 0x", quadrant);
@@ -1123,9 +1125,10 @@ void handle_dma0_read(struct cmd *cmd)
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x tag=0x%02x", cmd->afu_name,
+						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x tag=0x%02x, laddr= 0x%8x", cmd->afu_name,
 							   event->dsize,
-							   event->utag );
+							   event->utag ,
+							   event->cpl_laddr );
 						int line = 128;
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);

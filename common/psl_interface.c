@@ -510,6 +510,7 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		event->dma0_completion_size = cpl_size;
 		event->dma0_completion_laddr = cpl_laddr;
 		event->dma0_completion_byte_count = cpl_byte_count;
+		printf(" IN PSL_DMA0_CPL_BUS_WRITE and cpl_laddr is ox%3x and cpl_byte_count is 0x%3x\n", cpl_laddr, cpl_byte_count);
 		// is this a multi cycle transaction? check cpl_byte_count
 		if (cpl_byte_count > 128)   {
 			if (cpl_type == 0)
@@ -670,11 +671,11 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		// printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		//upper 4 bits in second byte always 0 to indicate this transaction is dma0_completion
 		// NOTE - read transactions can never be greater than 128bytes per cycle
-		//printf("event->dma0_completion_size is 0x%3x \n", event->dma0_completion_size);
-		//printf("event->dma0_completion_type is 0x%3x \n", event->dma0_completion_type);
+		printf("event->dma0_completion_size is 0x%3x \n", event->dma0_completion_size);
+		printf("event->dma0_completion_type is 0x%3x \n", event->dma0_completion_type);
 		//printf("event->dma0_completion_utag is 0x%3x \n", event->dma0_completion_utag);
-		//printf("event->dma0_completion_laddr is 0x%3x \n", event->dma0_completion_laddr);
-		//printf("event->dma0_completion_byte_count is 0x%3x \n", event->dma0_completion_byte_count);
+		printf("event->dma0_completion_laddr is 0x%3x \n", event->dma0_completion_laddr);
+		printf("event->dma0_completion_byte_count is 0x%3x \n", event->dma0_completion_byte_count);
 		event->tbuf[bp++] = (event->dma0_completion_size & 0xFF);
 		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = ((event->dma0_completion_utag >> 8) & 0x03);
@@ -1417,21 +1418,25 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 //printf("PSL_GET_PSL_EVENTS setting event->dma0_completion_valid to 1 \n");
 		event->dma0_completion_size = event->rbuf[rbc++];
 		event->dma0_completion_size = ( ( event->dma0_completion_size & 0xF ) << 8 ) | event->rbuf[rbc++];
-		//printf("event->dma0_completion_size = 0x%3x \n", event->dma0_completion_size);
+		printf("event->dma0_completion_size = 0x%3x \n", event->dma0_completion_size);
 		event->dma0_completion_type = ((event->rbuf[rbc] >> 4 ) & 0x07);
-		//printf("event->dma0_completion_type = 0x%3x \n", event->dma0_completion_type);
+		printf("event->dma0_completion_type = 0x%3x \n", event->dma0_completion_type);
 		event->dma0_completion_utag = event->rbuf[rbc++];
 		event->dma0_completion_utag =
 			((event->dma0_completion_utag & 0x03) << 8 ) | event->rbuf[rbc++];
 		//printf("event->dma0_completion_utag = 0x%3x \n", event->dma0_completion_utag);
 		event->dma0_completion_laddr = event->rbuf[rbc++];
-		//printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
+		printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
 		event->dma0_completion_byte_count = event->rbuf[rbc++];
-		//printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
-		event->dma0_completion_laddr = ((event->rbuf[rbc++] << 4) | event->dma0_completion_laddr);
-		//printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
-		event->dma0_completion_byte_count = ((event->rbuf[rbc] << 8) | event->dma0_completion_byte_count);
-		//printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
+		printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
+		i = event->rbuf[rbc++];
+		printf("event->rbuf = 0x%3x \n", i);
+		event->dma0_completion_laddr = (( (i & 0x0f0) <<4) | event->dma0_completion_laddr );
+		//event->dma0_completion_laddr = ((event->rbuf[rbc++] << 4) | event->dma0_completion_laddr);
+		printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
+		event->dma0_completion_byte_count = (( (i & 0x0f) <<8) | event->dma0_completion_byte_count );
+		//event->dma0_completion_byte_count = ((event->rbuf[rbc] << 8) | event->dma0_completion_byte_count);
+		printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
 		for (bc = 0; bc < event->dma0_completion_size; bc++) {
 			event->dma0_completion_data[bc] = event->rbuf[rbc++];
 		//printf("data is 0x%2x, bc is %d, rbc is %d \n", event->dma0_completion_data[bc], bc, rbc);
