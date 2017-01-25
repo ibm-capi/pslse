@@ -1081,10 +1081,11 @@ void handle_dma0_read(struct cmd *cmd)
 						}
 					event->resp = PSL_RESPONSE_DONE;
 					event->state = DMA_CPL_SENT;
+					event->cpl_xfers_to_go = 0; // Make sure this is cleared at end of xfer
 				} 
 			} else	if (event->cpl_byte_count <= 512) { //Multi cycle single completion flow
 			// need way to lock DMA bus so nothing else goes out over it until this transaction completes? TODO
-					event->cpl_xfers_to_go = 1;
+					event->cpl_xfers_to_go = 1; //will stay set to 1 until byte count= cpl_size 
 					event->cpl_type = 0; //always 0 for first xfer of 128bytes
 					event->cpl_size = 128;
 					//event->cpl_byte_count = event->dsize;
@@ -1108,8 +1109,6 @@ void handle_dma0_read(struct cmd *cmd)
 				} else 
 					error_msg ("ERROR: REQ FOR DMA xfer > 512B we should not be here!!!");
 			} else  {  //  second pass thru
-				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
-				event->cpl_xfers_to_go = 0;
 				event->cpl_type = 1; //1 for last cycle, nothing valid but cpl_type, data and utag
 				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
 				event->cpl_size = event->dsize;
@@ -1133,12 +1132,17 @@ void handle_dma0_read(struct cmd *cmd)
 				if (event->cpl_byte_count == event->cpl_size) {  //this was last transfer
 					event->resp = PSL_RESPONSE_DONE;
 					event->state = DMA_CPL_SENT;
+					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
+				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
 					}
 				else  { //dec byte count, inc addr for next transfer
+					// event->cpl_xfers_to_go should still be 1 from original setting
 					event->cpl_byte_count -= 256;
 					if (event->cpl_byte_count < 128)// last transfer will be single cycle	
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr +=256;
+					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x", cmd->afu_name,
+						event->cpl_byte_count, event->cpl_laddr);
 					
 				}
 		}
