@@ -24,7 +24,7 @@ MachineController::Machine::reset ()
 }
 
 void
-MachineController::Machine::read_machine_config ()
+MachineController::Machine::read_machine_config (AFU_EVENT* afu_event)
 {
     context = (config[0] >> 32) & 0xFFFF;
 
@@ -47,7 +47,6 @@ MachineController::Machine::read_machine_config ()
     memory_size = config[3];
 
     uint16_t command_code = (config[0] >> 48) & 0x1FFF;
-
     bool command_address_parity = get_command_address_parity ();
     bool command_code_parity = get_command_code_parity ();
     bool command_tag_parity = get_command_tag_parity ();
@@ -55,7 +54,21 @@ MachineController::Machine::read_machine_config ()
 
     if (command)
         delete command;
-
+#ifdef	PSL9
+    // atomic op 4B
+    if((command_code == 0x1F00) || (command_code == 0x1F01)) {
+	afu_event->dma0_req_size = 128;
+    }
+    else if((command_code & 0x0F00) == 0x0E00) {
+	command_code = command_code | 0x0100;
+ 	afu_event->dma0_req_size = 4;	
+    }
+    else if((command_code >= 0x1F20 && command_code <= 0x1F3C) || 
+       (command_code >= 0x1F40 && command_code <= 0x1F58)) {
+	afu_event->dma0_req_size = 8;
+    }
+  
+#endif
     switch (command_code) {
     case PSL_COMMAND_READ_CL_S:
     case PSL_COMMAND_READ_CL_M:
@@ -101,6 +114,9 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_WRITE_C:
     case PSL_COMMAND_WRITE_INJ:
     case PSL_COMMAND_WRITE_NA:
+	command = new StoreCommand ( command_code, command_address_parity,
+		command_code_parity, command_tag_parity, buffer_read_parity);
+	break;
 #ifdef	PSL9
     case PSL_COMMAND_CAS_E_8B:
     case PSL_COMMAND_CAS_NE_8B:
@@ -110,13 +126,12 @@ MachineController::Machine::read_machine_config ()
     case PSL_COMMAND_CAS_U_4B:
 	for(uint32_t i = 0; i<32; i++)
 	    cache_line[i] = i;
-#endif
+
 	command =
             new StoreCommand (command_code, command_address_parity,
                               command_code_parity, command_tag_parity,
                               buffer_read_parity);
 	break;
-    #ifdef	PSL9
     case PSL_COMMAND_XLAT_WR_P0_20:
     case PSL_COMMAND_XLAT_WR_P0_21:
     case PSL_COMMAND_XLAT_WR_P0_22:
@@ -264,9 +279,9 @@ bool MachineController::Machine::attempt_new_command (AFU_EVENT * afu_event,
 
     if ((!command || command->is_completed ()) && delay == 0) {
         debug_msg("Machine::attempt_new_command: read_machine_config");
-	read_machine_config ();
-	afu_event->dma0_req_size = memory_size;
-	debug_msg("MachineController::Machine::dma0_req_size = 0x%x", afu_event->dma0_req_size);
+	read_machine_config (afu_event);
+	//afu_event->dma0_req_size = memory_size;
+	//debug_msg("MachineController::Machine::dma0_req_size = 0x%x", afu_event->dma0_req_size);
         // randomly generates address within the range
         uint64_t
         address_offset =

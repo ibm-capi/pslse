@@ -48,7 +48,7 @@ bool MachineController::send_command (AFU_EVENT * afu_event, uint32_t cycle)
             ("MachineController::send_command: machine id %d sent new command", i);
             try_send = false;
             tag_to_machine[tag] = machines[i];
-	    debug_msg("MachineController::send_command tag = %d machine = 0x%x", tag, machines[i]);
+	    debug_msg("MachineController::send_command tag = 0x%x machine = 0x%x", tag, machines[i]);
 #ifdef	PSL9
 	    afu_event->dma0_req_utag = tag;
 	    debug_msg ("MachineController::send_command: get dma0_req_utag = %d", tag);
