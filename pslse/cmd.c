@@ -1046,12 +1046,15 @@ void handle_dma0_read(struct cmd *cmd)
 	// Test for client disconnect
 	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
+
 	// After the client returns data with a call to the function
 	// _handle_mem_read() issue dma0 completion bus
 	// write with valid data and
 	// prepare for response.
+	// TODO update to handle cpl_response from DMA_WR_AMO commands
+
 	if ((event->state == DMA_CPL_PARTIAL) || (event->state == DMA_MEM_RESP)) {
-	//randomly decide not to return data yet only if this isn't a multi-cycle cpl in progress
+        	//randomly decide not to return data yet only if this isn't a multi-cycle cpl in progress
 		if ((event->state == DMA_MEM_RESP) && (!allow_resp(cmd->parms))) 
 			return;
 		
@@ -1062,14 +1065,16 @@ void handle_dma0_read(struct cmd *cmd)
 			}
 			if (event->cpl_byte_count <= 128) { // Single cycle single completion flow
 				event->cpl_type = 0; //always 0 for read up to 128bytes
-				event->cpl_size = event->cpl_byte_count;;
+				event->cpl_size = event->cpl_byte_count;
 				//event->cpl_byte_count = event->dsize;
 				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-						debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
-				  		event->utag);
+				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x", 
+							   cmd->afu_name, 
+							   event->dsize,
+							   event->utag );
 						int line = 0;
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);
@@ -1093,8 +1098,9 @@ void handle_dma0_read(struct cmd *cmd)
 					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 						event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 						event->data) == PSL_SUCCESS) {
-							debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
-				  			event->utag);
+							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x", cmd->afu_name, 
+								   event->dsize,
+								   event->utag );
 							int line = 0;
 							for (quadrant = 0; quadrant < 4; quadrant++) {
 								DPRINTF("DEBUG: Q%d 0x", quadrant);
@@ -1117,8 +1123,9 @@ void handle_dma0_read(struct cmd *cmd)
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-						debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
-				  		event->utag);
+						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x tag=0x%02x", cmd->afu_name,
+							   event->dsize,
+							   event->utag );
 						int line = 128;
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);
@@ -1138,12 +1145,11 @@ void handle_dma0_read(struct cmd *cmd)
 				else  { //dec byte count, inc addr for next transfer
 					// event->cpl_xfers_to_go should still be 1 from original setting
 					event->cpl_byte_count -= 256;
-					if (event->cpl_byte_count < 128)// last transfer will be single cycle	
+					if (event->cpl_byte_count <= 128)// last transfer will be single cycle	
 						event->cpl_size = event->cpl_byte_count;
-					event->cpl_laddr +=256;
+					event->cpl_laddr += 256;
 					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x", cmd->afu_name,
 						event->cpl_byte_count, event->cpl_laddr);
-					
 				}
 		}
 	}
@@ -2049,7 +2055,7 @@ void handle_response(struct cmd *cmd)
 	event = *head;
 	if ((event == NULL) || ((event->client_state == CLIENT_VALID)
 				&& !allow_resp(cmd->parms))) {
-	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 "skipped because suppressed by allow_resp", cmd->afu_name, event );
+	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 " skipped because suppressed by allow_resp or NULL event", cmd->afu_name, event );
 		return;
 	}
 	// Test for client disconnect
