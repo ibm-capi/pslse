@@ -15,6 +15,7 @@ using std::vector;
 #define CONTEXT_SIZE 0x400
 #define CONTEXT_MASK (CONTEXT_SIZE - 1)
 
+
 AFU::AFU (int port, string filename, bool parity, bool jerror):
     descriptor (filename),
     context_to_mc ()
@@ -147,12 +148,9 @@ AFU::start ()
 	// process DMA read event
 	if ( (afu_event.dma0_completion_valid == 1 && afu_event.dma0_sent_utag_status == 0x1 && afu_event.dma0_req_type == 0x3) ||
 	     (afu_event.dma0_completion_valid == 1 && afu_event.dma0_sent_utag_status == 0x0) ) {
-	//if(afu_event.dma0_completion_valid == 1) {
+		debug_msg("AFU: process DMA read event");
 		debug_msg("AFU: call resolve_dma_read_event");
 		resolve_dma_read_event();
-		//if(afu_get_dma0_sent_utag(&afu_event, afu_event.dma0_req_utag, 
-		//   afu_event.dma0_sent_utag_status) != PSL_SUCCESS)
-		//	printf("AFU: Failed dma0_sent_utag_status\n");
 		afu_event.dma0_dvalid = 0;
 		afu_event.dma0_sent_utag_valid = 0;
 		afu_event.dma0_completion_valid = 0;
@@ -161,14 +159,12 @@ AFU::start ()
 	// process DMA write event
 	if(afu_event.dma0_sent_utag_status) {
 	    debug_msg("AFU: dma0_req_type = %d", afu_event.dma0_req_type);
-	    debug_msg("AFU: AAAA: dma0_sent_utag_status = %d", afu_event.dma0_sent_utag_status);
+	    debug_msg("AFU: dma0_sent_utag_status = %d", afu_event.dma0_sent_utag_status);
 	}
 	if(afu_event.dma0_req_type == 1 && afu_event.dma0_sent_utag_status == 0x1) {
+		debug_msg("AFU: process DMA write event");
 		debug_msg("AFU: calling resolve_dma_write_event");
 		resolve_dma_write_event();
-		//if(afu_get_dma0_sent_utag(&afu_event, afu_event.dma0_req_utag,
-		//   afu_event.dma0_sent_utag_status) != PSL_SUCCESS)
-		//	printf("AFU: Failed dma0_sent_utag_status\n");
 		afu_event.dma0_dvalid = 0;
 		afu_event.dma0_sent_utag_valid = 0;
 	}
@@ -191,7 +187,7 @@ AFU::start ()
 		    //debug_msg("AFU: call MachineController->send_command");
                     if (highest_priority_mc->
                             second->send_command (&afu_event, cycle)) {
-                        debug_msg ("AFU: RUNNING MC send command with context %d",
+                        debug_msg ("AFU: RUNNING complete send_command with context %d",
                                    highest_priority_mc->first);
                         ++highest_priority_mc;
                         break;

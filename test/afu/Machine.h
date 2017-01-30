@@ -57,7 +57,7 @@ private:
 
     /* private function to be called at the end of a command to update machine
      * settings in case the config space was changed */
-    void read_machine_config ();
+    void read_machine_config (AFU_EVENT* afu_event);
 
     void record_command (bool error_state, uint16_t cycle);
     void record_response (bool error_state, uint16_t cycle, uint8_t response_code);

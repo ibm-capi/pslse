@@ -1098,7 +1098,10 @@ void handle_dma0_read(struct cmd *cmd)
 
 					event->cpl_xfers_to_go = 1; //will stay set to 1 until byte count= cpl_size 
 					event->cpl_type = 0; //always 0 for first xfer of 128bytes
-					event->cpl_size = 128;
+					if (event->cpl_byte_count < 256)
+						event->cpl_size = event->cpl_byte_count;
+					else
+						event->cpl_size = 256;
 					//event->cpl_byte_count = event->dsize;
 					//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,

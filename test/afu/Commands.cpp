@@ -454,61 +454,61 @@ DmaLoadCommand::send_command (AFU_EVENT * afu_event, uint32_t new_tag,
     // atomic ADD value	
     //for(i=0; i<8; i++) 
     //	afu_event->dma0_req_data[i] = i;
-    debug_msg("DmaLoadCommand::send_command: calling psl_afu_command with");
+    debug_msg("DmaLC::send_command: calling psl_afu_command with");
     debug_msg("command_code = 0x%x  atomic_op = 0x%x", command_code, afu_event->dma0_atomic_op);
     if (psl_afu_command
             (afu_event, new_tag, tag_parity, command_code, code_parity, address,
              address_parity, command_size, abort, context, 0) != PSL_SUCCESS)
-        error_msg ("DmaLoadCommand: failed to send command");
+        error_msg ("DmaLC: failed to send command");
     
     Command::state = WAITING_DATA;
     Command::tag = new_tag;
-    debug_msg("DmaLoadCommands::send_command: Command::state = WAITING_DATA");
+    debug_msg("DmaLC::send_command: Command::state = WAITING_DATA");
 }
 
 void
 DmaLoadCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 {
     int i, psl_return;
-    debug_msg("DMALC: state = %d", state);
-    debug_msg("DMALC: dma0_completion_valid = %d", afu_event->dma0_completion_valid);
-    debug_msg("DMALC: response_valid = %d", afu_event->response_valid);
-    debug_msg("DMALC: utag = %d    command tag = %d", afu_event->dma0_req_utag, Command::tag);
-    debug_msg("DMALC: dma0_sent_utag_valid = %d", afu_event->dma0_sent_utag_valid);
-    debug_msg("DMALC: dma0_sent_utag_status = %d", afu_event->dma0_sent_utag_status);
+    debug_msg("DMALC::process_command: state = %d", state);
+    debug_msg("DMALC::process_command: dma0_completion_valid = %d", afu_event->dma0_completion_valid);
+    debug_msg("DMALC::process_command: response_valid = %d", afu_event->response_valid);
+    debug_msg("DMALC::process_command: utag = %d    command tag = %d", afu_event->dma0_req_utag, Command::tag);
+    debug_msg("DMALC::process_command: dma0_sent_utag_valid = %d", afu_event->dma0_sent_utag_valid);
+    debug_msg("DMALC::process_command: dma0_sent_utag_status = %d", afu_event->dma0_sent_utag_status);
     if (Command::state == WAITING_DATA) {
         if (afu_event->dma0_completion_valid == 1) {
             //    && afu_event->dma0_req_itag == Command::tag) {
-	    debug_msg("DmaLoadCommand::process_command: call process_dma_write");
+	    debug_msg("DmaLC::process_command: call process_dma_write");
             process_dma_write (afu_event, cache_line);
             afu_event->dma0_dvalid = 0;
 	    
             Command::state = WAITING_RESPONSE;
-            debug_msg("DmaLoadCommand::process_command: Command::state = WAITING_DATA => WAITING_RESPONSE");
+            debug_msg("DmaLC::process_command: Command::state = WAITING_DATA => WAITING_RESPONSE");
         }
         else if (afu_event->response_valid == 1 && afu_event->dma0_req_utag == Command::tag) {
             Command::completed = true;
             //Command::state = IDLE;
 	    Command::state = WAITING_DATA;
  	    afu_event->dma0_req_itag = afu_event->response_dma0_itag;
-	    debug_msg("DmaLoadCommand::process_command: Command::state = WAITING_DATA");
-	    debug_msg("DmaLoadCommand::process_command: get itag from PSLSE = %x", afu_event->dma0_req_itag);
-	    debug_msg("DmaLoadCommand::process_command: start DMA Read request");
+	    debug_msg("DmaLC::process_command: Command::state = WAITING_DATA");
+	    debug_msg("DmaLC::process_command: ITAG from PSLSE = 0x%x", afu_event->dma0_req_itag);
+	    debug_msg("DmaLC::process_command: start DMA Read request");
 	    if(afu_event->dma0_atomic_op == 0xFF) {
 	     	afu_event->dma0_req_type = DMA_DTYPE_RD_REQ;
 		//afu_event->dma0_req_size = 128;
 	    }
 	    else {
 		afu_event->dma0_req_type = DMA_DTYPE_ATOMIC;
-		afu_event->dma0_req_size = 8;
+		//afu_event->dma0_req_size = 8;
 	    }
 	    
-	    debug_msg("DMA utag = 0x%x", afu_event->dma0_req_utag);
-	    debug_msg("DMA itag = 0x%x", afu_event->dma0_req_itag);
-	    debug_msg("DMA req type = %d", afu_event->dma0_req_type);
-	    debug_msg("DMA req size = %d", afu_event->dma0_req_size);
-	    debug_msg("DMA atomic op %d", afu_event->dma0_atomic_op);
-	    debug_msg("DMA dma0_req_data");
+	    debug_msg("DmaLC utag = 0x%x", afu_event->dma0_req_utag);
+	    debug_msg("DmaLC itag = 0x%x", afu_event->dma0_req_itag);
+	    debug_msg("DmaLC req type = %d", afu_event->dma0_req_type);
+	    debug_msg("DmaLC req size = %d", afu_event->dma0_req_size);
+	    debug_msg("DmaLC atomic op %d", afu_event->dma0_atomic_op);
+	    debug_msg("DmaLC dma0_req_data");
 	    for(i=0; i<8; i++) {
 		//afu_event->dma0_req_data[i] = i;
 		debug_msg("0x%02x",afu_event->dma0_req_data[i]);
@@ -719,7 +719,7 @@ DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 	    else {
 		afu_event->dma0_req_type = DMA_DTYPE_ATOMIC;
 		afu_event->dma0_completion_type = DMA_CPL_TYPE_RD_128;
-		afu_event->dma0_req_size = 8;
+		//afu_event->dma0_req_size = 8;
 	    }
 
 	    debug_msg("DMA utag = 0x%x", afu_event->dma0_req_utag);
@@ -780,11 +780,11 @@ DmaStoreCommand::process_dma_read (AFU_EVENT * afu_event,
 
     //if (buffer_read_parity)
     //    parity[rand () % 2] += rand () % 256;
- 	    debug_msg("DMA utag = 0x%x", afu_event->dma0_req_utag);
-	    debug_msg("DMA itag = 0x%x", afu_event->dma0_req_itag);
-	    debug_msg("DMA cpl type = %d", afu_event->dma0_completion_type);
-	    debug_msg("DMA req size = 0x%x", afu_event->dma0_req_size);
-    debug_msg("DmaStoreCommand::process_dma_read: dma0_atomic_op = 0x%x", afu_event->dma0_atomic_op);	   
+ 	    debug_msg("DmaSC::process_dma_read: utag = 0x%x", afu_event->dma0_req_utag);
+	    debug_msg("DmaSC::process_dma_read: itag = 0x%x", afu_event->dma0_req_itag);
+	    debug_msg("DmaSC::process_dma_read: cpl type = %d", afu_event->dma0_completion_type);
+	    debug_msg("DmaSC::process_dma_read: req size = 0x%x", afu_event->dma0_req_size);
+    debug_msg("DmaSC::process_dma_read: dma0_atomic_op = 0x%x", afu_event->dma0_atomic_op);	   
     if (afu_event->dma0_atomic_op == 0xff) { 
 	 if (afu_get_dma0_cpl_bus_data(afu_event, afu_event->dma0_sent_utag, afu_event->dma0_completion_type,
 		afu_event->dma0_req_size, afu_event->dma0_completion_laddr,
