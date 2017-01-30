@@ -1090,7 +1090,12 @@ void handle_dma0_read(struct cmd *cmd)
 					event->cpl_xfers_to_go = 0; // Make sure this is cleared at end of xfer
 				} 
 			} else	if (event->cpl_byte_count <= 512) { //Multi cycle single completion flow
-			// need way to lock DMA bus so nothing else goes out over it until this transaction completes? TODO
+			                // need way to lock DMA bus so nothing else goes out over it until this transaction completes? TODO
+			                // 128 < dsize <= 256 implies multi cycle single completion
+			                // 256 < dsize <= 512 implies multi cycle multi completion
+			                // there could be up to 4 passes through this code - need to track where we are in data and dsize
+			                // maybe a cpl chunk pointer? or cpl bytes sent counter?
+
 					event->cpl_xfers_to_go = 1; //will stay set to 1 until byte count= cpl_size 
 					event->cpl_type = 0; //always 0 for first xfer of 128bytes
 					event->cpl_size = 128;
@@ -1114,9 +1119,9 @@ void handle_dma0_read(struct cmd *cmd)
 							}
 					event->state = DMA_CPL_PARTIAL;
 					}
-				} else 
-					error_msg ("ERROR: REQ FOR DMA xfer > 512B we should not be here!!!");
-			} else  {  //  second pass thru
+			} else 
+			        error_msg ("ERROR: REQ FOR DMA xfer > 512B we should not be here!!!");
+		} else  {  //  second pass thru
 				event->cpl_type = 1; //1 for last cycle, nothing valid but cpl_type, data and utag
 				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
 				event->cpl_size = event->dsize;
@@ -2056,13 +2061,16 @@ void handle_response(struct cmd *cmd)
 
 	// Randomly decide not to drive response yet
 	event = *head;
-	if ((event == NULL) || ((event->client_state == CLIENT_VALID)
-				&& !allow_resp(cmd->parms))) {
-	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 " skipped because suppressed by allow_resp or NULL event", cmd->afu_name, event );
+	if (event == NULL) {
+	  // debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 " skipped because NULL", cmd->afu_name, event );
+		return;
+	}
+	if ( ( event->client_state == CLIENT_VALID ) && !allow_resp( cmd->parms ) ) {
+	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 " skipped because suppressed by allow_resp", cmd->afu_name, event );
 		return;
 	}
 	// Test for client disconnect
-	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL)) {
+	if ( ( client = _get_client( cmd, event ) ) == NULL ) {
 	        debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 "skipped because client NULL", cmd->afu_name, event );
 		return;
 	}
