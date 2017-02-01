@@ -1036,7 +1036,6 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 
 int psl_get_afu_events(struct AFU_EVENT *event)
 {
-	int i = 0;
 	int bc = 0;
 	uint32_t rbc = 1;
 #ifdef PSL9
@@ -1148,6 +1147,7 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 
 	// dump rbuf
 //	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+//	int i = 0;
 //	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
 //	printf( "\n" ); 
 
@@ -1298,7 +1298,7 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 
 int psl_get_psl_events(struct AFU_EVENT *event)
 {
-        int bc, i, bytes_to_read;
+        int bc, bytes_to_read;
 	uint32_t rbc = 1;
 	if (event->rbp == 0) {
 		if ((bc = recv(event->sockfd, event->rbuf, 1, 0)) == -1) {
@@ -1410,6 +1410,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	
 	// dump rbuf
 	//printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+	//int i;
 	//for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
 	//printf( "\n" ); 
 
@@ -1780,7 +1781,8 @@ afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 			if (cpl_type == 0)
 				memcpy(dma_rd_data, event->dma0_completion_data, 128);
 			if (cpl_type == 1)
-				memcpy(&(dma_rd_data[128]), event->dma0_completion_data, cpl_size - 128);
+			  //memcpy(&(dma_rd_data[128]), event->dma0_completion_data, cpl_size - 128);
+			  memcpy( dma_rd_data, event->dma0_completion_data, cpl_size - 128 );
 		} else  // cpl_byte_count <= 128 so just single cycle
 				memcpy(dma_rd_data, event->dma0_completion_data, cpl_size);
 		return PSL_SUCCESS;
