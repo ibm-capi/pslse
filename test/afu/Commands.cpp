@@ -395,7 +395,7 @@ DmaLoadCommand::send_command (AFU_EVENT * afu_event, uint32_t new_tag,
     else {
 	command_code = 0x1F01;
 	// atomic add value
-	for(i=0; i<8; i++) {
+	for(i=0; i<16; i++) {
 	    afu_event->dma0_req_data[i] = i;
 	}
     }
@@ -516,7 +516,7 @@ DmaLoadCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 	    
 	    psl_return = psl_afu_dma0_req(afu_event, afu_event->dma0_req_utag, afu_event->dma0_req_itag,
 			     afu_event->dma0_req_type, afu_event->dma0_req_size, 
-			     afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data);
+			     afu_event->dma0_atomic_op, 1, afu_event->dma0_req_data);
 	    
 	    //afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
 	    debug_msg("DmaLoadCommand::process_command: psl_return = %d", psl_return);
@@ -731,7 +731,7 @@ DmaStoreCommand::process_command (AFU_EVENT * afu_event, uint8_t * cache_line)
 
 	    psl_return = psl_afu_dma0_req(afu_event, afu_event->dma0_req_utag, afu_event->dma0_req_itag, 
                              afu_event->dma0_req_type, afu_event->dma0_req_size, 
-			     afu_event->dma0_atomic_op, 0, afu_event->dma0_req_data);
+			     afu_event->dma0_atomic_op, 1, afu_event->dma0_req_data);
 	    debug_msg("DmaSC::process_command: psl_return = %d", psl_return);
 	    //afu_event->dma0_req_size = afu_event->dma0_req_size - 128;
 	    //debug_msg("DmaSC::process_command: dma0_req_size = %d", afu_event->dma0_req_size);
