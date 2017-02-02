@@ -514,11 +514,14 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		// is this a multi cycle transaction? check cpl_byte_count
 		if (cpl_byte_count > 128)   {
 			if (cpl_type == 0)
-				memcpy(event->dma0_completion_data, write_data, 128);
+				//memcpy(event->dma0_completion_data, write_data, 128);
+				memcpy(event->dma0_completion_data, &(write_data[cpl_laddr]), 128);
 			if (cpl_type == 1)
-				memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
+				//memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
+				memcpy(event->dma0_completion_data, &(write_data[cpl_laddr+128]), cpl_size - 128);
 		} else  // cpl_byte_count <= 128 so just single cycle
-			memcpy(event->dma0_completion_data, write_data, cpl_size);
+			//memcpy(event->dma0_completion_data, write_data, cpl_size);
+			memcpy(event->dma0_completion_data, &(write_data[cpl_laddr]), cpl_size);
 		return PSL_SUCCESS;
 	}
 }

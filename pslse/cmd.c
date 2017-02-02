@@ -1071,16 +1071,16 @@ void handle_dma0_read(struct cmd *cmd)
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x laddr = 0x%8x", 
+				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr = 0x%8x", 
 							   cmd->afu_name, 
-							   event->dsize,
+							   event->cpl_size,
 							   event->utag,
 							   event->cpl_laddr );
 						int line = 0;
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);
 							for (byte = line; byte < line+32; byte++) {
-								DPRINTF("%02x", event->data[byte]);
+								DPRINTF("%02x", event->data[byte+event->cpl_laddr]);
 							}
 							DPRINTF("\n");
 							line +=32;
@@ -1159,6 +1159,7 @@ void handle_dma0_read(struct cmd *cmd)
 					if (event->cpl_byte_count <= 128)// last transfer will be single cycle	
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr += 256;
+					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x", cmd->afu_name,
 						event->cpl_byte_count, event->cpl_laddr, event->cpl_byte_count);
 				}
