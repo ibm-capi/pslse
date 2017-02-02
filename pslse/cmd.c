@@ -955,7 +955,7 @@ debug_msg ("event->atomic_op = 0x%x ", event->atomic_op);
 		debug_msg("%s:DMA0 AMO FETCH DATA WB  utag=0x%02x size=%d addr=0x%016"PRIx64 ,
 		  	cmd->afu_name, event->utag, event->dsize, event->addr);
 
-		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 			event->dsize, event->cpl_laddr, event->cpl_byte_count,
 			event->data) == PSL_SUCCESS) {
 			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
@@ -1068,7 +1068,7 @@ void handle_dma0_read(struct cmd *cmd)
 				event->cpl_size = event->cpl_byte_count;
 				//event->cpl_byte_count = event->dsize;
 				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
 				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr = 0x%8x", 
@@ -1104,7 +1104,7 @@ void handle_dma0_read(struct cmd *cmd)
 						event->cpl_size = 256;
 					//event->cpl_byte_count = event->dsize;
 					//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 						event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 						event->data) == PSL_SUCCESS) {
 							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr= 0x%8x", cmd->afu_name, 
@@ -1130,7 +1130,7 @@ void handle_dma0_read(struct cmd *cmd)
 				//event->cpl_size = event->dsize; <<<<---THIS IS NOT RIGHT
 				event->cpl_byte_count = event->dsize;
 				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
+				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
 						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x tag=0x%02x, laddr= 0x%8x", cmd->afu_name,
