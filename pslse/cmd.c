@@ -1107,8 +1107,8 @@ void handle_dma0_read(struct cmd *cmd)
 					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
 						event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 						event->data) == PSL_SUCCESS) {
-							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: size=0x%04x utag=0x%02x laddr= 0x%8x", cmd->afu_name, 
-								   event->dsize,
+							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr= 0x%8x", cmd->afu_name, 
+								   event->cpl_size,
 								   event->utag ,
 							           event->cpl_laddr );
 							int line = 0;
@@ -1127,7 +1127,7 @@ void handle_dma0_read(struct cmd *cmd)
 		} else  {  //  second pass thru
 				event->cpl_type = 1; //1 for last cycle, nothing valid but cpl_type, data and utag
 				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
-				event->cpl_size = event->dsize;
+				//event->cpl_size = event->dsize; <<<<---THIS IS NOT RIGHT
 				event->cpl_byte_count = event->dsize;
 				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->cpl_type,
@@ -1159,8 +1159,8 @@ void handle_dma0_read(struct cmd *cmd)
 					if (event->cpl_byte_count <= 128)// last transfer will be single cycle	
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr += 256;
-					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x", cmd->afu_name,
-						event->cpl_byte_count, event->cpl_laddr);
+					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x", cmd->afu_name,
+						event->cpl_byte_count, event->cpl_laddr, event->cpl_byte_count);
 				}
 		}
 	}
