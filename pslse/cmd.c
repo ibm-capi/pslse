@@ -1128,7 +1128,7 @@ void handle_dma0_read(struct cmd *cmd)
 				event->cpl_type = 1; //1 for last cycle, nothing valid but cpl_type, data and utag
 				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
 				//event->cpl_size = event->dsize; <<<<---THIS IS NOT RIGHT
-				event->cpl_byte_count = event->dsize;
+				//event->cpl_byte_count = event->dsize; <<<<<---THIS MAY NOT BE RIGHT EITHER
 				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
