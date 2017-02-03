@@ -675,7 +675,7 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 					op_1l = (uint64_t)(llvalue);
 				debug_msg("COMPARE & INC Bounded %016"PRIx64" with %016"PRIx64 ", if !=, inc op_A, ret orig op_a, else..", op_Al, op_1l);
 					if (op_Al != op_1l)
-						op_1l = op_A +1;
+						op_1l = op_Al +1;
 					else  {
 						op_1l = op_Al;
 						op_Al = MIN_INT64;

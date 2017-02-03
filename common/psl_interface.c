@@ -496,6 +496,7 @@ psl_buffer_write(struct AFU_EVENT *event,
 int
 psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		 uint32_t utag,
+		 uint32_t dsize,
 		 uint32_t cpl_type,
 		 uint32_t cpl_size, 
 		 uint32_t cpl_laddr,
@@ -517,8 +518,12 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 				memcpy(event->dma0_completion_data, write_data, 128);
 			if (cpl_type == 1)
 				memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
-		} else  // cpl_byte_count <= 128 so just single cycle
-			memcpy(event->dma0_completion_data, write_data, cpl_size);
+		} else  {	// cpl_byte_count <= 128 so just single cycle
+				if (dsize > 256)
+					memcpy(event->dma0_completion_data, &(write_data[256]), cpl_size);
+				else
+					memcpy(event->dma0_completion_data, write_data, cpl_size);
+			}
 		return PSL_SUCCESS;
 	}
 }
