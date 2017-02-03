@@ -514,11 +514,18 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		printf(" IN PSL_DMA0_CPL_BUS_WRITE and cpl_laddr is ox%3x and cpl_byte_count is 0x%3x\n", cpl_laddr, cpl_byte_count);
 		// is this a multi cycle transaction? check cpl_byte_count
 		if (cpl_byte_count > 128)   {
-			if (cpl_type == 0)
-				memcpy(event->dma0_completion_data, write_data, 128);
-			if (cpl_type == 1)
-				memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
-		} else  {	// cpl_byte_count <= 128 so just single cycle
+			if ((384 < dsize) && (dsize <= 512) && (cpl_size == cpl_byte_count))  { // our second multi cycle completion pass
+				if (cpl_type == 0)
+					memcpy(event->dma0_completion_data, &(write_data[256]), 128);
+				if (cpl_type == 1)
+					memcpy(event->dma0_completion_data, &(write_data[384]), cpl_size - 128);
+			} else {  // our first multi cycle completion (128 < dsize <= 384)
+				if (cpl_type == 0)
+					memcpy(event->dma0_completion_data, write_data, 128);
+				if (cpl_type == 1)
+					memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
+				}
+		} else  {	// cpl_byte_count <= 128 so just single cycle (128 <= dsize OR last compl for <= 384B )
 				if (dsize > 256)
 					memcpy(event->dma0_completion_data, &(write_data[256]), cpl_size);
 				else
