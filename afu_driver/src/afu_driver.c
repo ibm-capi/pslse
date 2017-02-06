@@ -324,8 +324,8 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
           invalidVal = getMy64Bit(ah_jerror_top, &c_ah_jerror);
 //          if(invalidVal)
 //		printf("jerror has either X or Z value =0x%016llx\n", (long long)c_ah_jerror);
-          c_ah_brlat     = ah_brlat_top->aval & 0x3;	// 4 bits	// FIXME: warning says the valid values are only 1 & 3, therefore changing the mask to 0x3
-          invalidVal     = ah_brlat_top->bval & 0x3;	
+          c_ah_brlat     = ah_brlat_top->aval & 0xF;	// 4 bits	// 4 bit value: Values of 0, 1, 2 are valid. Values from 3-15 are invalid
+          invalidVal     = ah_brlat_top->bval & 0xF;	
           if(invalidVal)
           {
 	    printf("%08lld: ", (long long) c_sim_time);
