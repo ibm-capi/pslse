@@ -487,6 +487,7 @@ module top (
 //  hd0_cpl_dpar	<= 0;
     // $afu_init;
      psl_bfm_init();
+     brhalf <= 1'b0;
     // $register_clock(ha_pclock);
 /*
     $register_control(ha_jval_top, ha_jcom_top, ha_jcompar_top, ha_jea_top,
@@ -895,14 +896,14 @@ module top (
     else
       ha_brvalid <= 1'b1;
   end
-
+/*
   always @ (posedge ha_pclock) begin
     if (ha_brvalid & !brhalf)
       brhalf <= 1'b1;
     else
       brhalf <= 1'b0;
   end
-
+*/
 //  assign ha_brad = {5'b0, brhalf};
   assign ha_brad = {6'b0};
  
