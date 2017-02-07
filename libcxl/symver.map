@@ -23,6 +23,8 @@ LIBCXL_1 {
 		cxl_get_cr_class;
 		cxl_get_irqs_max;
 		cxl_get_irqs_min;
+		cxl_get_caia_version;
+		cxl_get_psl_revision;
 
 		cxl_errinfo_size;
 		cxl_errinfor_read;
