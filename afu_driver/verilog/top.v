@@ -123,6 +123,7 @@ module top (
   // Input
   reg    [0:7]    ha_croom_top;
   reg             ha_brvalid_top;
+  reg             ha_brvalid_d1;
   reg    [0:7]    ha_brtag_top;
   reg             ha_brtagpar_top;
   reg             ha_bwvalid_top;
@@ -412,6 +413,7 @@ module top (
     r_rd_ptr <= 0;
     ha_jval_top <= 0;
     ha_brvalid_top <= 0;
+    ha_brvalid_d1 <= 0;
     ha_bwvalid_top <= 0;
     ha_rvalid_top <= 0;
     ha_croom_top <= 0;
@@ -487,7 +489,6 @@ module top (
 //  hd0_cpl_dpar	<= 0;
     // $afu_init;
      psl_bfm_init();
-     brhalf <= 1'b0;
     // $register_clock(ha_pclock);
 /*
     $register_control(ha_jval_top, ha_jcom_top, ha_jcompar_top, ha_jea_top,
@@ -847,7 +848,14 @@ module top (
   end
 
   always @ (posedge ha_pclock) begin
-    if (ha_brvalid & !brhalf)
+    if (ha_brvalid_top)
+      ha_brvalid_d1 <= 1'b1;
+    else
+      ha_brvalid_d1 <= 1'b0;
+  end
+
+  always @ (posedge ha_pclock) begin
+    if (ha_brvalid_d1 & !brhalf)
       br_rd_ptr <= br_rd_ptr+6'h01;
     else
       br_rd_ptr <= br_rd_ptr;
@@ -891,19 +899,20 @@ module top (
   end
 
   always @ (posedge ha_pclock) begin
-    if (br_rd_ptr==br_wr_ptr)
+//    if (br_rd_ptr==br_wr_ptr)
+    if (!ha_brvalid_d1)
       ha_brvalid <= 1'b0;
     else
       ha_brvalid <= 1'b1;
   end
-/*
+
   always @ (posedge ha_pclock) begin
-    if (ha_brvalid & !brhalf)
+    if (ha_brvalid_d1 & !brhalf)
       brhalf <= 1'b1;
     else
       brhalf <= 1'b0;
   end
-*/
+
 //  assign ha_brad = {5'b0, brhalf};
   assign ha_brad = {6'b0};
  
