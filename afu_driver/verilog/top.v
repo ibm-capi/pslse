@@ -125,6 +125,7 @@ module top (
   reg             ha_brvalid_top;
   reg             ha_brvalid_d1;
   reg    [0:7]    ha_brtag_top;
+  reg    [0:7]    ha_brtag_d1;
   reg             ha_brtagpar_top;
   reg             ha_bwvalid_top;
   reg    [0:7]    ha_bwtag_top;
@@ -418,6 +419,7 @@ module top (
     ha_rvalid_top <= 0;
     ha_croom_top <= 0;
     ha_brtag_top <= 0;
+    ha_brtag_d1 <= 0;
     ha_brtagpar_top <= 0;
     ha_bwtag_top <= 0;
     ha_bwtagpar_top <= 0;
@@ -864,8 +866,10 @@ module top (
   always @ (posedge ha_pclock) begin
     for (i = 0; i <= 16; i = i + 1) begin
       if (i == ah_brlat+1) begin
-        brvalid_delay[i] <= ha_brvalid  & !brhalf;
-        brtag_delay[i] <= ha_brtag;
+//        brvalid_delay[i] <= ha_brvalid  & !brhalf;
+//        brtag_delay[i] <= ha_brtag;
+        brvalid_delay[i] <= ha_brvalid_d1;
+        brtag_delay[i] <= ha_brtag_d1;
       end else if (i == 16) begin
         brvalid_delay[16] <= 1'b0;
         brtag_delay[16] <= 8'h00;
@@ -879,6 +883,7 @@ module top (
   always @ (posedge ha_pclock) begin
     if (ha_brvalid_top)
       brtag_array[br_wr_ptr] <= ha_brtag_top;
+      ha_brtag_d1 	     <= ha_brtag_top;
   end
 
   always @ (posedge ha_pclock) begin
