@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 	unsigned seed;
 	int i, j, opt, option_index;	// quadrant, byte;
 	int response;
-	int context, machine_number;
+	int context;
 	bool result;
 	int command;
 	char op_name[32];
@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
 		    op_data.lword0 = 0x0f0e0d0c0b0a0908 + 1;
 		    break;
 		case FETCHDECBOUNDED:
-		    op_data.lword0 = 0x0f0e0d0c0b0a0908 - 1;
+		    op_data.lword0 = 0x0f0e0d0c0b0a0909 - 1;
 		    break;
 		default:
 	    	    for(i=0; i<8; i++) 
