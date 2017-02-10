@@ -1099,7 +1099,6 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 			if ((event->rbuf[0] & 0x80) != 0)  {
 				rbc += 7;
 		// this only gets us a dma rd op w/o data, have to add more to rbc so need to see what dtype  & req_size are)
-				//if ((bc = recv(event->sockfd, event->rbuf+1, 1, 0)) == -1) {
 				if ((bc = recv(event->sockfd, event->rbuf + event->rbp, 3, 0)) == -1) {
 					if (errno == EWOULDBLOCK) {
 						return 0;
