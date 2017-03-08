@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -400,6 +400,7 @@ static void _handle_afu(struct psl *psl)
 
 	reset_done = _handle_aux2(psl, &(psl->parity_enabled),
 				 &(psl->latency), &error);
+//printf("after reset_done in handle_afu \n");
 	if (error) {
 	  if (dedicated_mode_support(psl->mmio)) {
 		client = psl->client[0];
@@ -431,6 +432,13 @@ static void _handle_afu(struct psl *psl)
 	if (psl->cmd != NULL) {
 		if (reset_done)
 			psl->cmd->credits = psl->cmd->parms->credits;
+#if defined PSL9lite || defined PSL9
+//try moving this first???
+		handle_caia2_cmds(psl->cmd);
+		handle_dma0_write(psl->cmd);
+		handle_dma0_read(psl->cmd);
+#endif /* ifdef PSL9 */
+
 		handle_response(psl->cmd);
 		handle_buffer_write(psl->cmd);
 		handle_buffer_read(psl->cmd);
@@ -439,6 +447,13 @@ static void _handle_afu(struct psl *psl)
 		handle_touch(psl->cmd);
 		handle_cmd(psl->cmd, psl->parity_enabled, psl->latency);
 		handle_interrupt(psl->cmd);
+//#ifdef PSL9
+//#if defined PSL9lite || defined PSL9
+//		handle_caia2_cmds(psl->cmd);
+//		handle_dma0_write(psl->cmd);
+//		handle_dma0_read(psl->cmd);
+//#endif /* ifdef PSL9 */
+
 	}
 }
 
@@ -537,13 +552,13 @@ static void *_psl_loop(void *ptr)
 			fflush(stdout);
 			stopped = 0;
 		}
-
 		if (psl->idle_cycles) {
 			// Clock AFU
+//printf("before psl_signal_afu_model in psl_loop, events is 0x%3x \n", events);
 			psl_signal_afu_model(psl->afu_event);
 			// Check for events from AFU
 			events = psl_get_afu_events(psl->afu_event);
-
+//printf("after psl_get_afu_events, events is 0x%3x \n", events);
 			// Error on socket
 			if (events < 0) {
 				warn_msg("Lost connection with AFU");
@@ -601,6 +616,7 @@ static void *_psl_loop(void *ptr)
 			}
 			if (psl->state == PSLSE_RESET)
 				continue;
+//printf("before handle client \n");
 			_handle_client(psl, psl->client[i]);
 			if (psl->client[i]->idle_cycles) {
 				psl->client[i]->idle_cycles--;
