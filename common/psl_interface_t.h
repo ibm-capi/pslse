@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,40 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define PSL_BUFFER_SIZE 200
+// Choose ONE to define what PSL support level will be
+//#define PSL8 1
+//#define PSL9lite 1
+#define PSL9 1
+
+// this is the size of the transimit and receive buffers in the afu_event
+// it needs to be large enough to transmit/receive the maximum size of legally concurrent events
+// for example from psl to afu this might be response, dma completion, and buffer write.
+// we'll set it at 512 for now and see if we can come up with the correct value later
+#define PSL_BUFFER_SIZE 512
+
+#ifdef PSL8
 #define PROTOCOL_PRIMARY 0
 #define PROTOCOL_SECONDARY 9908
 #define PROTOCOL_TERTIARY 1
+#endif /* PSL8 */
+#ifdef PSL9lite
+#define PROTOCOL_PRIMARY 1
+#define PROTOCOL_SECONDARY 0000
+#define PROTOCOL_TERTIARY 0
+#endif /* PSL9lite */
+#ifdef PSL9
+#define PROTOCOL_PRIMARY 2
+#define PROTOCOL_SECONDARY 0000
+#define PROTOCOL_TERTIARY 0
+#endif /* PSL9 */
+
+/* Select # of DMA interfaces, per config options in CH 17 of workbook */
+#ifdef PSL9
+#define PSL_DMA_A_SUPPORT 1
+#define PSL_DMA_B_SUPPORT 0
+#define MAX_DMA0_RD_CREDITS 8
+#define MAX_DMA0_WR_CREDITS 8
+#endif /* ifdef PSL9 config for DMA ports */
 
 /* Return codes for interface functions */
 
@@ -38,6 +68,11 @@
 				   before the preceeding
 				   command of the same type has
 				   been acknowledged */
+#ifdef PSL9
+#define PSL_DOUBLE_DMA0_REQ 2
+#define PSL_NO_DMA_PORT_CREDITS 3
+#endif
+
 #define PSL_MMIO_ACK_NOT_VALID 4	/* Read data from previos MMIO
 					   read is not available */
 #define PSL_BUFFER_READ_DATA_NOT_VALID 8	/* Read data from previous
@@ -47,6 +82,7 @@
 					   available */
 #define PSL_BAD_SOCKET 16	/* The socket connection could
 				   not be established */
+#define PSL_VERSION_ERROR 48	/* The PSL versions in use on local & remote do not match */
 #define PSL_TRANSMISSION_ERROR 64	/* There was an error sending
 					   data across the socket
 					   interface */
@@ -82,6 +118,12 @@
 #define PSL_RESPONSE_FAILED 8
 #define PSL_RESPONSE_PAGED 10
 #define PSL_RESPONSE_CONTEXT 11
+//#ifdef PSL9  /* new response codes for CAIA2 */
+#if defined  PSL9 || defined PSL9lite  /* new response codes for CAIA2 */
+#define PSL_RESPONSE_COMP_EQ 12
+#define PSL_RESPONSE_COMP_NEQ 13
+#define PSL_RESPONSE_CAS_INV 14
+#endif /*#ifdef PSL9 new response codes for CAIA2 */
 
 /* Command codes for AFU commands */
 
@@ -109,6 +151,97 @@
 #define PSL_COMMAND_LOCK         0x016B
 #define PSL_COMMAND_UNLOCK       0x017B
 #define PSL_COMMAND_RESTART      0x0001
+//not a psl9 cmd, but wasn't in 9908
+#define PSL_COMMAND_ZERO_M	 0x1260
+// add new CAIA2 commands
+//#ifdef PSL9
+#if defined  PSL9 || defined PSL9lite  /* new commands for CAIA2 */
+#define PSL_COMMAND_CAS_E_4B	 0x0180
+#define PSL_COMMAND_CAS_NE_4B	 0x0181
+#define PSL_COMMAND_CAS_U_4B	 0x0182
+#define PSL_COMMAND_CAS_E_8B	 0x0183
+#define PSL_COMMAND_CAS_NE_8B	 0x0184
+#define PSL_COMMAND_CAS_U_8B	 0x0185
+#define PSL_COMMAND_ASBNOT	 0x0103
+#endif /* ifdef PSL9 add new commands for CAIA2 */
+#ifdef PSL9 /* new DMA related commands */
+#define PSL_COMMAND_XLAT_RD_P0	 0x1F00
+#define PSL_COMMAND_XLAT_RD_P0_00	 0x1F20
+#define PSL_COMMAND_XLAT_RD_P0_01	 0x1F21
+#define PSL_COMMAND_XLAT_RD_P0_02	0x1F22
+#define PSL_COMMAND_XLAT_RD_P0_03	0x1F23
+#define PSL_COMMAND_XLAT_RD_P0_04	0x1F24
+#define PSL_COMMAND_XLAT_RD_P0_05	0x1F25
+#define PSL_COMMAND_XLAT_RD_P0_06	0x1F26
+#define PSL_COMMAND_XLAT_RD_P0_07	0x1F27
+#define PSL_COMMAND_XLAT_RD_P0_08	0x1F28
+#define PSL_COMMAND_XLAT_RD_P0_10	0x1F30
+#define PSL_COMMAND_XLAT_RD_P0_11	0x1F31
+#define PSL_COMMAND_XLAT_RD_P0_18	0x1F38
+#define PSL_COMMAND_XLAT_RD_P0_19	0x1F39
+#define PSL_COMMAND_XLAT_RD_P0_1C	0x1F3C
+#define PSL_COMMAND_XLAT_WR_P0	 0x1F01
+#define PSL_COMMAND_XLAT_WR_P0_20	0x1F40
+#define PSL_COMMAND_XLAT_WR_P0_21	0x1F41
+#define PSL_COMMAND_XLAT_WR_P0_22	0x1F42
+#define PSL_COMMAND_XLAT_WR_P0_23	0x1F43
+#define PSL_COMMAND_XLAT_WR_P0_24	0x1F44
+#define PSL_COMMAND_XLAT_WR_P0_25	0x1F45
+#define PSL_COMMAND_XLAT_WR_P0_26	0x1F46
+#define PSL_COMMAND_XLAT_WR_P0_27	0x1F47
+#define PSL_COMMAND_XLAT_WR_P0_38	0x1F58
+#define PSL_COMMAND_XLAT_RD_P1	 0x1F08
+#define PSL_COMMAND_XLAT_WR_P1	 0x1F09
+#define PSL_COMMAND_ITAG_ABRT_RD 0x1F02
+#define PSL_COMMAND_ITAG_ABRT_WR 0x1F03
+#define PSL_COMMAND_XLAT_RD_TOUCH 0x1F10
+#define PSL_COMMAND_XLAT_WR_TOUCH 0x1F11
+/* New Atomic Memory Operations   */
+#define AMO_ARMWF_ADD	 0x00
+#define AMO_ARMWF_XOR	 0x01
+#define AMO_ARMWF_OR	 0x02
+#define AMO_ARMWF_AND	 0x03
+#define AMO_ARMWF_CAS_MAX_U	 0x04
+#define AMO_ARMWF_CAS_MAX_S	 0x05
+#define AMO_ARMWF_CAS_MIN_U	 0x06
+#define AMO_ARMWF_CAS_MIN_S	 0x07
+#define AMO_ARMWF_CAS_U	 0x08
+#define AMO_ARMWF_CAS_E	 0x11
+#define AMO_ARMWF_CAS_NE	 0x10
+#define AMO_ARMWF_INC_B	 0x18
+#define AMO_ARMWF_INC_E	 0x19
+#define AMO_ARMWF_DEC_B	 0x1c
+#define AMO_ARMW_ADD	 0x20
+#define AMO_ARMW_XOR	 0x21
+#define AMO_ARMW_OR	 0x22
+#define AMO_ARMW_AND	 0x23
+#define AMO_ARMW_CAS_MAX_U	 0x24
+#define AMO_ARMW_CAS_MAX_S	 0x25
+#define AMO_ARMW_CAS_MIN_U	 0x26
+#define AMO_ARMW_CAS_MIN_S	 0x27
+#define AMO_ARMW_CAS_T	 0x38
+
+#endif /* ifdef PSL9 add new commands for CAIA2 */
+
+
+#ifdef PSL9  /* new DMA transaction type, sent status & completion status codes UPDATED to 9/14/16 spec  */
+#define DMA_DTYPE_RD_REQ	0x0
+#define DMA_DTYPE_WR_REQ_128	0x1
+#define DMA_DTYPE_WR_REQ_MORE	0x2
+#define DMA_DTYPE_ATOMIC	0x3
+
+#define DMA_SENT_UTAG_STS_RD	0x0
+#define DMA_SENT_UTAG_STS_WR	0x1
+#define DMA_SENT_UTAG_STS_FAIL	0x2
+#define DMA_SENT_UTAG_STS_FLUSH	0x3
+
+#define DMA_CPL_TYPE_RD_128	0x0
+#define DMA_CPL_TYPE_RD_PLUS	0x1
+#define DMA_CPL_TYPE_ERR	0x2
+#define DMA_CPL_TYPE_POISON_B	0x3
+#define DMA_CPL_TYPE_ATOMIC_RSP	0x4
+#endif /* new DMA type & status defs */
+
 
 /* Create one of these structures to interface to an AFU model and use the functions below to manipulate it */
 
@@ -152,6 +285,14 @@ struct AFU_EVENT {
   uint32_t cache_state;               /* cache state granted to the AFU as documented in the PSL workbook */
   uint32_t cache_position;            /* The cache position assigned by PSL */
   uint32_t response_tag_parity;       /* Odd parity for ha_rtag valid with ha_rvalid */
+  #ifdef PSL9 /* add new PSL response interface signals for CAIA2 */
+  uint32_t response_dma0_itag;        /* DMA translation tag for xlat_ *requests */
+  uint32_t response_dma0_itag_parity; /* DMA translation tag parity   */
+  #endif /* ifdef PSL9 */
+  #if defined PSL9 || PSL9lite
+  uint32_t response_extra;            /* extra response information received from xlate logic */
+  uint32_t response_r_pgsize;         /* command translated page size. values defined in CAIA2 workbook */
+  #endif /* ifdef PSL9 or PSL9lite */
   uint32_t buffer_read;               /* AFU event contains a valid buffer read request */
   uint32_t buffer_read_tag;           /* tag from command in PSL_EVENT which requested the buffer read */
   uint32_t buffer_read_tag_parity;    /* Odd parity for buffer read tag */
@@ -181,6 +322,37 @@ struct AFU_EVENT {
   uint32_t command_abort;             /* indicates that the command may be aborted */
   uint32_t command_handle;            /* Context handle (Process Element ID) */
   uint32_t aux2_change;               /* The value of one of the auxilliary signals has changed (running, job done or error, read latency) */
+//#ifdef PSL9 /* new cmd int signals for CAIA2 */
+#if defined  PSL9 || defined PSL9lite  /* new cmd int signals for CAIA2 */
+  uint32_t command_cpagesize;	      /*  Page size hint used by PSL for predicting page size during ERAT lookup & paged xlation ordering..codes documented in PSL workbook tbl 1-1 */
+#endif /* new cmd int signals  */
+#ifdef PSL9 /* new dma0 interface signals for CAIA2 UPDATED for 9/26/16 PSL9 0,97 draft spec */
+  uint32_t dma0_dvalid;     	      /* DMA request from AFU is valid */
+  uint32_t dma0_req_utag;	      /* DMA transaction request user transaction tag */
+  uint32_t dma0_req_itag;     	      /* DMA transaction request user translation identifier */
+  uint32_t dma0_req_type;	      /* DMA transaction request transaction type.  */
+  uint32_t dma0_req_size;	      /* DMA transaction request transaction size in bytes */
+  uint32_t dma0_atomic_op;	      /* Transaction request attribute - Atomic opcode */
+  uint32_t dma0_atomic_le;	      /* Transaction request attribute - Little Endian used */
+  //unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
+  uint32_t dma0_sent_utag_valid;      /* DMA request sent by PSL */
+  uint32_t dma0_sent_utag;    	      /* DMA sent request indicates the UTAG of the request sent by PSL */
+  uint32_t dma0_sent_utag_status;     /* DMA sent request indicates the status of the command that was sent by PSL. */
+  uint32_t dma0_completion_valid;     /* DMA completion received  */
+  uint32_t dma0_completion_utag;      /* DMA completion indicates the UTAG associated with the received completion data */
+  uint32_t dma0_completion_type;      /* DMA completion indicates the type of response received with the current completion */
+  uint32_t dma0_completion_size;      /* DMA completion indicates size of completion received */
+  uint32_t dma0_completion_laddr;     /* DMA completion Atomic attribute - lower addr bits of rx cmpl */
+  uint32_t dma0_completion_byte_count; /* DMA completion remaining amount of bytes required to complete originating read request
+						including bytes being transferred in the current transaction   */
+  unsigned char dma0_req_data[128];	      /* DMA data alignment is First byte first */
+  unsigned char dma0_completion_data[128];  /* DMA completion data alignment is First Byte first */
+  signed char dma0_wr_credits;	/* Used to limit # of outstanding DMA wr ops to MAX_DMA0_WR_CREDITS  */
+  signed char dma0_rd_credits;	/* Used to limit # of outstanding DMA rd ops to MAX_DMA0_RD_CREDITS  */
+  unsigned char dma0_rd_partial;;	/* Used to determine bc for DMA xfers > 128B  */
+  unsigned char dma0_wr_partial;;	/* Used to determine bc for DMA xfers > 128B  */
+#endif /* ifdef PSL9 */
+
 };
 /* *INDENT-ON* */
 

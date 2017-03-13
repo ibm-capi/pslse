@@ -41,7 +41,10 @@ private:
     void resolve_response_event (uint32_t cycle);
     void resolve_buffer_write_event ();
     void resolve_buffer_read_event ();
-
+#ifdef	PSL9
+    void resolve_dma_read_event ();
+    void resolve_dma_write_event ();
+#endif
     void set_seed ();
     void set_seed (uint32_t);
 
