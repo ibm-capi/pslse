@@ -1807,7 +1807,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 		case PSL_COMMAND_XLAT_WR_P0:
 			need_a_tag = 1;
 			while (need_a_tag == 1)  {
-				this_itag = ((rand() % 256) + 258);
+				this_itag = ((rand() % 256) + 256);
 				head = &cmd->list;
 				while (*head != NULL) {
 					if ((*head)->itag == this_itag)
