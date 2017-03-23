@@ -448,6 +448,12 @@ DmaLoadCommand::send_command (AFU_EVENT * afu_event, uint32_t new_tag,
     case PSL_COMMAND_XLAT_RD_P0_1C:
 	afu_event->dma0_atomic_op = 0x1C;
 	break;
+    case PSL_COMMAND_ITAG_ABRT_RD:
+	command_code = PSL_COMMAND_ITAG_ABRT_RD;
+	break;
+    case PSL_COMMAND_XLAT_RD_TOUCH:
+	command_code = PSL_COMMAND_XLAT_RD_TOUCH;
+	break;
     default:
 	break;
     }
@@ -668,6 +674,12 @@ DmaStoreCommand::send_command (AFU_EVENT * afu_event, uint32_t new_tag,
 	break;
     case PSL_COMMAND_XLAT_WR_P0_38:
 	afu_event->dma0_atomic_op = 0x38;
+	break;
+    case PSL_COMMAND_ITAG_ABRT_WR:
+	command_code = PSL_COMMAND_ITAG_ABRT_WR;
+	break;
+    case PSL_COMMAND_XLAT_WR_TOUCH:
+	command_code = PSL_COMMAND_XLAT_WR_TOUCH;
 	break;
     default:
 	break;
