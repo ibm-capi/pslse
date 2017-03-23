@@ -1096,6 +1096,9 @@ void handle_response(struct cmd *cmd)
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if ((client != NULL) && (event->command == PSL_COMMAND_RESTART))
 			client->flushing = FLUSH_NONE;
+		// clear the irq if we just responded to an intreq
+		if ((client != NULL) && (event->command == PSL_COMMAND_INTREQ))
+		        cmd->irq = 0;
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);
