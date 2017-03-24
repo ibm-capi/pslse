@@ -766,7 +766,8 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send interrupt to client
 	buffer[0] = PSLSE_INTERRUPT;
-	irq = htons(cmd->irq);
+	irq = htons(event->addr);  // addr holds the irq during an intreq command
+	// irq = htons(cmd->irq);  // this was the old way and would essentially convert subsequent interrupt irqs to the first one
 	memcpy(&(buffer[1]), &irq, 2);
 	event->abort = &(client->abort);
 	debug_msg("%s:INTERRUPT irq=%d", cmd->afu_name, cmd->irq);
