@@ -114,7 +114,7 @@ static int _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 		}
 		++i;
 	}
-	assert(i < EVENT_QUEUE_MAX);
+	assert(i < afu->irqs_max);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_data_storage);
@@ -151,16 +151,20 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 	irq = ntohs(irq);
 
 	// Only track a single interrupt at a time
+	// search list for CXL_EVENT_AFU_INTERRUPT that has a matching irq return 0 if found add if not
 	pthread_mutex_lock(&(afu->event_lock));
 	i = 0;
 	while (afu->events[i] != NULL) {
 		if (afu->events[i]->header.type == CXL_EVENT_AFU_INTERRUPT) {
+		  if (afu->events[i]->irq.irq == irq) {
 			pthread_mutex_unlock(&(afu->event_lock));
 			return 0;
+		  }
 		}
 		++i;
 	}
-	assert(i < EVENT_QUEUE_MAX);
+
+	assert(i < afu->irqs_max);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_afu_interrupt);
@@ -206,7 +210,8 @@ static int _handle_afu_error(struct cxl_afu_h *afu)
 		}
 		++i;
 	}
-	assert(i < EVENT_QUEUE_MAX);
+
+	assert(i < afu->irqs_max);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_afu_error);
@@ -511,7 +516,7 @@ static void *_psl_loop(void *ptr)
 {
 	struct cxl_afu_h *afu = (struct cxl_afu_h *)ptr;
 	uint8_t buffer[MAX_LINE_CHARS];
-	uint8_t size;
+	uint16_t size;
 	uint64_t addr;
 	uint16_t value;
 	uint32_t lvalue;
@@ -610,24 +615,36 @@ static void *_psl_loop(void *ptr)
 				_all_idle(afu);
 				break;
 			}
+
 			memcpy((char *)&value, (char *)&(buffer[0]), 2);
 			afu->irqs_min = (long)(value);
+
 			memcpy((char *)&value, (char *)&(buffer[2]), 2);
 			afu->irqs_max = (long)(value);
+			size = sizeof(struct cxl_event *) * afu->irqs_max;
+			afu->events = (struct cxl_event **)calloc(1, size);
+
                 	memcpy((char *)&value, (char *)&(buffer[4]), 2);
 			afu->modes_supported = (long)(value);
+
                 	memcpy((char *)&llvalue, (char *)&(buffer[6]), 8);
 			afu->mmio_len = (long)(llvalue & 0x00ffffffffffffff);
+
                 	memcpy((char *)&llvalue, (char *)&(buffer[14]), 8);
 			afu->mmio_off = (long)(llvalue);
+
                 	memcpy((char *)&llvalue, (char *)&(buffer[22]), 8);
 			afu->eb_len = (long)(llvalue);
+
                 	memcpy((char *)&value, (char *)&(buffer[30]), 2);
 			afu->cr_device = (long)ntohs(value);
+
                         memcpy((char *)&value, (char *)&(buffer[32]), 2);
 			afu->cr_vendor = (long)ntohs(value);
+
                         memcpy((char *)&lvalue, (char *)&(buffer[34]), 4);
 			afu->cr_class = ntohl(lvalue);
+
 			//no better place to put this right now
 			afu->prefault_mode = CXL_PREFAULT_MODE_NONE;
 			break;
@@ -1495,9 +1512,9 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 	// Copy event data, free and move remaining events in queue
 	memcpy(event, afu->events[0], afu->events[0]->header.size);
 	free(afu->events[0]);
-	for (i = 1; i < EVENT_QUEUE_MAX; i++)
+	for (i = 1; i < afu->irqs_max; i++)
 		afu->events[i - 1] = afu->events[i];
-	afu->events[EVENT_QUEUE_MAX - 1] = NULL;
+	afu->events[afu->irqs_max - 1] = NULL;
 	pthread_mutex_unlock(&(afu->event_lock));
 	if (read(afu->pipe[0], &type, 1) > 0)
 		return 0;
