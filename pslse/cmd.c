@@ -766,7 +766,8 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send interrupt to client
 	buffer[0] = PSLSE_INTERRUPT;
-	irq = htons(cmd->irq);
+	irq = htons(event->addr);  // addr holds the irq during an intreq command
+	// irq = htons(cmd->irq);  // this was the old way and would essentially convert subsequent interrupt irqs to the first one
 	memcpy(&(buffer[1]), &irq, 2);
 	event->abort = &(client->abort);
 	debug_msg("%s:INTERRUPT irq=%d", cmd->afu_name, cmd->irq);
@@ -1096,6 +1097,9 @@ void handle_response(struct cmd *cmd)
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if ((client != NULL) && (event->command == PSL_COMMAND_RESTART))
 			client->flushing = FLUSH_NONE;
+		// clear the irq if we just responded to an intreq
+		if ((client != NULL) && (event->command == PSL_COMMAND_INTREQ))
+		        cmd->irq = 0;
 		*head = event->_next;
 		free(event->data);
 		free(event->parity);
