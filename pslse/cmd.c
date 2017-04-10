@@ -1159,7 +1159,7 @@ void handle_dma0_read(struct cmd *cmd)
 					if (event->cpl_byte_count <= 128)// last transfer will be single cycle
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr += 256;
-					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
+					//event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x", cmd->afu_name,
 						event->cpl_byte_count, event->cpl_laddr, event->cpl_byte_count);
 				}
