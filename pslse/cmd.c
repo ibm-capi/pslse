@@ -1028,18 +1028,25 @@ void handle_dma0_read(struct cmd *cmd)
 	// Randomly select a pending dma0 read (or none)
 	event = cmd->list;
 	while (event != NULL) {
-	        if ((event->type == CMD_DMA_RD) &&
+	        /* if ((event->type == CMD_DMA_RD) &&
 		    (event->state == DMA_CPL_PARTIAL) &&
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
-		}
+		} */
+	        if ((event->type == CMD_DMA_RD) &&
+		    ((event->state == DMA_CPL_PARTIAL) || (event->state == DMA_MEM_RESP)))
+		{  debug_msg("selected pending dma read for utag=0x%x", event->utag);
+			break;
+			}
+		   
 	        if ((event->type == CMD_DMA_RD) &&
 		    (event->state != DMA_CPL_SENT) &&
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
-		}
+		}   
+
 		event = event->_next;
 	}
 
@@ -1055,14 +1062,16 @@ void handle_dma0_read(struct cmd *cmd)
 
 	if ((event->state == DMA_CPL_PARTIAL) || (event->state == DMA_MEM_RESP)) {
         	//randomly decide not to return data yet only if this isn't a multi-cycle cpl in progress
-		if ((event->state == DMA_MEM_RESP) && (!allow_resp(cmd->parms)))
-			return;
+		/*if ((event->state == DMA_MEM_RESP) && (!allow_resp(cmd->parms)))
+			return; */
+		// BAD things happen when we randomly decide not to return data and get deluged with DMA requests from client
 
 		if (event->cpl_xfers_to_go == 0) {
 			if (event->state == DMA_MEM_RESP)  {  //start of transaction
 				event->cpl_byte_count = event->dsize;
 				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 			}
+			debug_msg(" event->state = 0x%x and utag = 0x%x and cpl_byte_count=0x%x", event->state, event->utag, event->cpl_byte_count);
 			if (event->cpl_byte_count <= 128) { // Single cycle single completion flow
 				event->cpl_type = 0; //always 0 for read up to 128bytes
 				event->cpl_size = event->cpl_byte_count;
@@ -1133,7 +1142,7 @@ void handle_dma0_read(struct cmd *cmd)
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x tag=0x%02x, laddr= 0x%8x", cmd->afu_name,
+						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x utag=0x%02x, laddr= 0x%8x", cmd->afu_name,
 							   event->dsize,
 							   event->utag ,
 							   event->cpl_laddr );
@@ -1152,6 +1161,7 @@ void handle_dma0_read(struct cmd *cmd)
 					event->state = DMA_CPL_SENT;
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
+					debug_msg("%s:DMAO CPL_BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
 					}
 				else  { //dec byte count, inc addr for next transfer
 					// event->cpl_xfers_to_go should still be 1 from original setting
@@ -1159,9 +1169,9 @@ void handle_dma0_read(struct cmd *cmd)
 					if (event->cpl_byte_count <= 128)// last transfer will be single cycle
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr += 256;
-					//event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
-					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x", cmd->afu_name,
-						event->cpl_byte_count, event->cpl_laddr, event->cpl_byte_count);
+					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
+					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x and utag=0x%x", cmd->afu_name,
+						event->cpl_size, event->cpl_laddr, event->cpl_byte_count, event->utag);
 				}
 		}
 	}
@@ -2011,11 +2021,11 @@ void handle_response(struct cmd *cmd)
 	client = NULL;
 	head = &cmd->list;
 	while (*head != NULL) {
-	        debug_msg( "%s:RESPONSE examine event @ 0x%016" PRIx64 ", command=0x%x, tag=0x%08x, type=0x%02x, state=0x%02x, resp=0x%x",
+	        debug_msg( "%s:RESPONSE examine event @ 0x%016" PRIx64 ", command=0x%x, utag=0x%08x, type=0x%02x, state=0x%02x, resp=0x%x",
 			   cmd->afu_name,
 			   (*head),
 			   (*head)->command,
-			   (*head)->tag,
+			   (*head)->utag,
 			   (*head)->type,
 			   (*head)->state,
 			   (*head)->resp );
@@ -2155,13 +2165,13 @@ void handle_response(struct cmd *cmd)
 		// if this was an xlat cmd, don't want to free the event so add code to check - HMP
 	        if ( ( event->type == CMD_XLAT_RD ) ||
 		     ( event->type == CMD_XLAT_WR ) ) {
-		  debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", set state dma pending and tag to deadbeef",
+		  debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", set state dma pending and tag to deadbeef for itag=0x%x",
 			     cmd->afu_name,
-			     event );
+			     event, event->itag );
 		  event->state = DMA_PENDING;
 		  // do this to "free" the tag since AFU thinks it's free now
 		  event->tag = 0xdeadbeef;
-		  printf("DMA_PENDING set for event \n");
+		  //printf("DMA_PENDING set for event \n");
 		  cmd->credits++;
 		} else {
 #endif /* ifdef PSL9 */
