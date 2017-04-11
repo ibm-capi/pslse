@@ -655,8 +655,12 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal64(ha_jea_top, event.job_address);
 	  *ha_jeapar_top  = (event.job_address_parity) & 0x1;
 	  *ha_jval_top = 1;
+
+#ifdef DEBUG
 	  printf("%08lld: ", (long long) c_sim_time);
 	  printf("Job 0x%03x EA=0x%016llx\n", event.job_code, (long long)event.job_address);
+#endif
+
 	  cl_jval = CLOCK_EDGE_DELAY;
 	  event.job_valid = 0;
         }	
@@ -672,10 +676,14 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  *ha_mmdatapar_top = (event.mmio_wdata_parity) & 0x1;		// 2016/05/11: UMA: checking whether ensuring bval is set always to 0b0 solves the MMIO parity error which is coming up
 	  *ha_mmcfg_top = event.mmio_afudescaccess;
 	  *ha_mmval_top = 1;
+
+#ifdef DEBUG
 	  printf("%08lld: ", (long long) c_sim_time);
 	  printf("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
 		     event.mmio_read, event.mmio_double, event.mmio_address,
 		     (long long)event.mmio_wdata);
+#endif
+
 	  cl_mmio = CLOCK_EDGE_DELAY;
 	  event.mmio_valid = 0;
         }	
@@ -686,8 +694,12 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  setDpiSignal32(ha_brtag_top, event.buffer_read_tag, 8);
 	  *ha_brtagpar_top = event.buffer_read_tag_parity;
 	  *ha_brvalid_top = 1;
+
+#ifdef DEBUG
 	  printf("%08lld: ", (long long) c_sim_time);
 	  printf("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
+#endif
+
 	  cl_br = CLOCK_EDGE_DELAY;
 	  event.buffer_read = 0;
         }	
