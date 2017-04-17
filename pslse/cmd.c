@@ -1729,6 +1729,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 	struct client *client;
 	uint32_t this_itag;
 	unsigned char need_a_tag;
+	static uint32_t rtag = 1;
+	static uint32_t wtag = 258;
 
 
 	// Make sure cmd structure is valid
@@ -1794,16 +1796,25 @@ void handle_caia2_cmds(struct cmd *cmd)
 		case PSL_COMMAND_XLAT_RD_P0:
 			need_a_tag = 1;
 			while (need_a_tag == 1)  {
-				this_itag = (rand() % 256);
+				this_itag = rtag;
 				head = &cmd->list;
 				while (*head != NULL) {
 					if ((*head)->itag == this_itag)
 						break;
 					head = &((*head)->_next);
 					}
-				if (*head == NULL)   // didn't find this tag so okay to use
+				if (*head == NULL) { // didn't find this tag so okay to use
+					rtag +=1;
+					if (rtag == 256)
+						rtag = 1;  	
 					break;
-				 else debug_msg("itag already in use!! Have to choose another value");
+						}
+				 else  {
+					info_msg("Temporarily out of itags!! Command failed - PAGED");
+					event->resp = PSL_RESPONSE_PAGED;
+					event->state = MEM_DONE;
+					break;
+					}
 				}
 
 			event->itag = this_itag;
@@ -1817,16 +1828,25 @@ void handle_caia2_cmds(struct cmd *cmd)
 		case PSL_COMMAND_XLAT_WR_P0:
 			need_a_tag = 1;
 			while (need_a_tag == 1)  {
-				this_itag = ((rand() % 256) + 256);
+				this_itag = wtag;
 				head = &cmd->list;
 				while (*head != NULL) {
 					if ((*head)->itag == this_itag)
 						break;
 					head = &((*head)->_next);
 					}
-				if (*head == NULL)   // didn't find this tag so okay to use
+				if (*head == NULL)  {  // didn't find this tag so okay to use
+					wtag +=1;
+					if (wtag == 512)
+						wtag = 257;  	
 					break;
-				else debug_msg("itag already in use!! Have to choose another value");
+						}
+				else {
+					info_msg("Temporarily out of itags!! Command failed - PAGED");
+					event->resp = PSL_RESPONSE_PAGED;
+					event->state = MEM_DONE;
+					break;
+					}
 				}
 			event->itag = this_itag;
 			event->port = 0;
@@ -1888,7 +1908,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 				event->resp = PSL_RESPONSE_FAILED;
 				event->state = MEM_DONE;
 				warn_msg("WRONG TAG or STATE: failed attempt to abort write dma0_itag 0x%x", event->itag);
-				return;
+				break;
 				}
 				// will adjust credits count in psl_interface, not here
 				(*head)->state = MEM_DONE;
