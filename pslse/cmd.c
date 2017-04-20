@@ -1033,21 +1033,46 @@ void handle_dma0_read(struct cmd *cmd)
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
-		} */
+		} 
 	        if ((event->type == CMD_DMA_RD) &&
 		    ((event->state == DMA_CPL_PARTIAL) || (event->state == DMA_MEM_RESP)))
 		{  debug_msg("selected pending dma read for utag=0x%x", event->utag);
 			break;
-			}
-		   
-	        if ((event->type == CMD_DMA_RD) &&
+			} */
+		 if ((event->type == CMD_DMA_RD) && (event->bus_lock == 1))
+		{  debug_msg("selected bus locked in progress dma read for utag=0x%x", event->utag);
+			break;
+		}
+		event = event->_next;
+	}
+	if (event == NULL) {
+		event = cmd->list;
+		while (event != NULL) {
+
+		 if ((event->type == CMD_DMA_RD) && (event->state == DMA_CPL_PARTIAL))
+		{  debug_msg("selected in progress dma read for utag=0x%x", event->utag);
+			break;
+		}
+		if ((event->type == CMD_DMA_RD) && (event->state == DMA_MEM_RESP))
+		{  debug_msg("selected pending dma read for utag=0x%x", event->utag);
+			break;
+		}
+
+
+	        /*if ((event->type == CMD_DMA_RD) &&
 		    (event->state != DMA_CPL_SENT) &&
 		    ((event->client_state != CLIENT_VALID) ||
 		     !allow_reorder(cmd->parms))) {
 			break;
-		}   
+		}  */ 
+		
+		if ((event->type == CMD_DMA_RD) && (event->state == DMA_OP_REQ))
+		{  debug_msg("selected new dma read for utag=0x%x", event->utag);
+			break;
+		}
 
 		event = event->_next;
+		}
 	}
 
 	// Test for client disconnect
@@ -1130,6 +1155,7 @@ void handle_dma0_read(struct cmd *cmd)
 								line +=32;
 							}
 					event->state = DMA_CPL_PARTIAL;
+					event->bus_lock = 1;
 					}
 			} else
 			        error_msg ("ERROR: REQ FOR DMA xfer > 512B we should not be here!!!");
@@ -1159,6 +1185,7 @@ void handle_dma0_read(struct cmd *cmd)
 				if (event->cpl_byte_count == event->cpl_size) {  //this was last transfer
 					event->resp = PSL_RESPONSE_DONE;
 					event->state = DMA_CPL_SENT;
+					event->bus_lock = 0;
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
 					debug_msg("%s:DMAO CPL_BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
@@ -1607,6 +1634,8 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd)
 #endif
 		_handle_mem_read(cmd, event, fd);
 #ifdef PSL9
+	else if ((event->state == DMA_MEM_RESP) && (event->type == CMD_DMA_WR))
+		event->state = MEM_DONE;
  	// have to account for AMO fetch cmds with returned data
  	else if (event->type == CMD_DMA_RD)
 		_handle_mem_read(cmd, event, fd);
@@ -1745,6 +1774,10 @@ void handle_caia2_cmds(struct cmd *cmd)
 		if (((*head)->type == CMD_CAS_4B) || ((*head)->type == CMD_CAS_8B))
 			break;
 #ifdef PSL9
+// look for incoming DMA op requests
+		if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
+			goto dmaop_chk;
+
 	// next look for xlat read/write requests
 		if ((((*head)->type == CMD_XLAT_RD) &&
 		    ((*head)->state == DMA_ITAG_REQ)) |
@@ -1760,8 +1793,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 		  (((*head)->type == CMD_XLAT_WR_TOUCH) && ((*head)->state != MEM_DONE)))
 			break;
 	// finally look for incoming DMA op requests
-		if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
-			goto dmaop_chk;
+		//if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
+		//	goto dmaop_chk;
 #endif // ifdef PSL9 only
 		head = &((*head)->_next);
 	}
@@ -1943,7 +1976,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 	// Look for a matching itag to process immediately
 	head = &cmd->list;
 	while (*head != NULL) {
-		debug_msg ("in handle_caia2 cmds in dmaop_ck: head->type is %2x, head->itag is 0x%3x ", (*head)->type, (*head)->itag);
+		debug_msg ("in handle_caia2 cmds in dmaop_ck: head->type is %2x, head->itag is 0x%3x thisitag is 0x%x", (*head)->type, (*head)->itag, this_itag);
 		if ((((*head)->type == CMD_XLAT_RD) &&
 		    ((*head)->itag == this_itag)) |
 		 (((*head)->type == CMD_XLAT_WR) &&
@@ -1967,7 +2000,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 			warn_msg("TRANSACTION WILL BE FRAGMENTED, it crosses 4K boundary!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64,
 			(event->addr+0x1000), (event->addr +event->dsize));
 		else
-			debug_msg("TRANSACTION IS GOOD TO GO !!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64,
+			debug_msg("TRANSACTION  boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64,
 			 (event->addr+0x1000), (event->addr +event->dsize));
 			}
 		// If DMA write, pull data in and set up for subsequent handle dma_mem_write

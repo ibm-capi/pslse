@@ -113,6 +113,7 @@ struct cmd_event {
 #ifdef PSL9  //defined just for PSL9, ie DMA port related
 	uint32_t port;
 	uint32_t itag;
+	uint32_t bus_lock;
 	uint32_t utag;
 	uint32_t dsize;
 	uint32_t dtype;
@@ -186,6 +187,7 @@ void handle_response(struct cmd *cmd);
 //#ifdef PSL9
 #if defined PSL9lite || defined PSL9
 void handle_caia2_cmds(struct cmd *cmd);
+void handle_dma0_port(struct cmd *cmd);
 void handle_dma0_read(struct cmd *cmd);
 void handle_dma0_write(struct cmd *cmd);
 void handle_dma0_sent_sts(struct cmd *cmd);

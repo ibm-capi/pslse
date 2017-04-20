@@ -124,6 +124,17 @@ psl_dma0_sent_utag(struct AFU_EVENT *event,
 		 uint32_t utag,
 		 uint32_t sent_sts);
 
+int
+psl_get_dma0_port(struct AFU_EVENT *event,
+		uint32_t * utag,
+		uint32_t * itag,
+		uint32_t * type,
+		uint32_t * size,
+		uint32_t * atomic_op,
+		uint32_t * atomic_le,
+		uint8_t * dma0_req_data ); 
+
+
 #endif
 
 /* Call after an event is received from the AFU to see if previous MMIO

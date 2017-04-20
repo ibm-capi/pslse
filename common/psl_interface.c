@@ -552,6 +552,51 @@ psl_dma0_sent_utag(struct AFU_EVENT *event,
 	}
 }
 
+
+/* Call this to read dma0 data bus and associated signals */
+int
+psl_get_dma0_port(struct AFU_EVENT *event,
+		uint32_t  * utag,
+		uint32_t  * itag,
+		uint32_t  * type,
+		uint32_t  * size,
+		uint32_t  * atomic_op,
+		uint32_t * atomic_le,
+		uint8_t * dma0_req_data ) 
+{
+	if (event->dma0_dvalid == 0)
+		return 1;
+	else {
+		*utag = event->dma0_req_utag;
+		*itag = event->dma0_req_itag;
+		*type = event->dma0_req_type;
+		*size = event->dma0_req_size;
+		*atomic_op = event->dma0_atomic_op;
+		*atomic_le = event->dma0_atomic_le;
+
+		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)   
+			memcpy(dma0_req_data, event->dma0_req_data, 16);
+		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128) { 
+			if (event->dma0_req_size <= 128)  {
+				memcpy(dma0_req_data, event->dma0_req_data, event->dma0_req_size);
+			} else { //the start of a >128B write operation
+				memcpy(dma0_req_data, event->dma0_req_data, 128);
+			}
+		}
+ 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE)  { 
+			if (event->dma0_wr_partial <= 128) 
+				memcpy(dma0_req_data, event->dma0_req_data, event->dma0_wr_partial);
+			else {
+				memcpy(dma0_req_data, event->dma0_req_data, 128);
+			}
+		}
+
+		}
+		event->dma0_dvalid = 0;
+	printf ("leaving psl_get_dma0_port and setting dma0_dvalid to 0\n");
+		return PSL_SUCCESS;
+}
+	
 #endif /* ifdef PSL9 */
 
 
@@ -643,6 +688,8 @@ psl_get_command(struct AFU_EVENT *event,
 #endif
 {
 	if (!event->command_valid) {
+		if (event->dma0_dvalid)
+			printf ("NO VALID CMD BUT DMA0_DVALID with itag=0x%x and type=0x%x\n", event->dma0_req_itag, event->dma0_req_type);
 		return PSL_COMMAND_NOT_VALID;
 	} else {
 		event->command_valid = 0;
