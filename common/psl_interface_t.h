@@ -123,6 +123,7 @@
 #define PSL_RESPONSE_COMP_EQ 12
 #define PSL_RESPONSE_COMP_NEQ 13
 #define PSL_RESPONSE_CAS_INV 14
+#define PSL_RESPONSE_XLAT_NO_ITAG 15
 #endif /*#ifdef PSL9 new response codes for CAIA2 */
 
 /* Command codes for AFU commands */

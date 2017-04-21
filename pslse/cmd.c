@@ -1774,6 +1774,11 @@ void handle_caia2_cmds(struct cmd *cmd)
 		if (((*head)->type == CMD_CAS_4B) || ((*head)->type == CMD_CAS_8B))
 			break;
 #ifdef PSL9
+		// Fast track dmaop_ck? should dmaop_ck be called from psl_loop?
+	 	event = *head;
+		if (cmd->afu_event->dma0_dvalid == 1)  
+			goto dmaop_chk;
+
 // look for incoming DMA op requests
 		if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
 			goto dmaop_chk;
@@ -1843,8 +1848,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 					break;
 						}
 				 else  {
-					info_msg("Temporarily out of itags!! Command failed - PAGED");
-					event->resp = PSL_RESPONSE_PAGED;
+					info_msg("Temporarily out of itags!! Command IGNORED");
+					event->resp = PSL_RESPONSE_XLAT_NO_ITAG;
 					event->state = MEM_DONE;
 					break;
 					}
@@ -1875,8 +1880,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 					break;
 						}
 				else {
-					info_msg("Temporarily out of itags!! Command failed - PAGED");
-					event->resp = PSL_RESPONSE_PAGED;
+					info_msg("Temporarily out of itags!! Command IGNORED");
+					event->resp = PSL_RESPONSE_XLAT_NO_ITAG;
 					event->state = MEM_DONE;
 					break;
 					}
@@ -1907,10 +1912,10 @@ void handle_caia2_cmds(struct cmd *cmd)
 					break;
 				head = &((*head)->_next);
 			}
-			if (*head == NULL) {  // didn't find this tag OR didn;t find in abortable state so fail
-				event->resp = PSL_RESPONSE_FAILED;
+			if (*head == NULL) {  // didn't find this tag OR didn;t find in abortable state so ignore
+				event->resp = PSL_RESPONSE_XLAT_NO_ITAG;
 				event->state = MEM_DONE;
-				warn_msg("WRONG TAG or STATE: failed attempt to abort read dma0_itag 0x%x", event->itag);
+				info_msg("WRONG TAG or STATE: ignored attempt to abort read dma0_itag 0x%x", event->itag);
 				return;
 				}
 				// adjust credits count in psl_interface, not here
@@ -1921,7 +1926,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 				break;
 		case PSL_COMMAND_ITAG_ABRT_WR:
 			/* if tag is in reserved state, go ahead and abort */
-			/* otherwise, send back FAIL and warn msg  */
+			/* otherwise, ignore cmd, send back nothing, print info msg  */
 			this_itag = event->addr;
 			debug_msg("NOW IN PSL_COMMAND_ITAG_ABRT_WR with this_itag = 0x%x ", this_itag);
 			// Look for a matching itag to process immediately
@@ -1937,10 +1942,10 @@ void handle_caia2_cmds(struct cmd *cmd)
 					break;
 				head = &((*head)->_next);
 			}
-			if (*head == NULL) {  // didn't find this tag OR not in abortable state so fail
-				event->resp = PSL_RESPONSE_FAILED;
+			if (*head == NULL) {  // didn't find this tag OR not in abortable state so ignore
+				event->resp = PSL_RESPONSE_XLAT_NO_ITAG;
 				event->state = MEM_DONE;
-				warn_msg("WRONG TAG or STATE: failed attempt to abort write dma0_itag 0x%x", event->itag);
+				info_msg("WRONG TAG or STATE: ignore attempt to abort write dma0_itag 0x%x", event->itag);
 				break;
 				}
 				// will adjust credits count in psl_interface, not here
@@ -2095,7 +2100,7 @@ void handle_response(struct cmd *cmd)
 #ifdef PSL9
 		// if (dma write and we've sent utag sent status AND it wasn't AMO that has pending cpl resp),
 		// OR (dma write and it was AMO and we've sent cpl resp)
-		// OR (itag was aborted),  we can remove this event
+		// OR (itag was aborted) OR  we are out of itags,  we can remove this event
 		if ( ( ( (*head)->type == CMD_DMA_WR )     && ( (*head)->state == MEM_DONE ) ) ||
 		     ( ( (*head)->type == CMD_DMA_WR_AMO ) && ( (*head)->state == MEM_DONE ) ) ||
 		     ( ( (*head)->type == CMD_XLAT_WR )    && ( (*head)->state == MEM_DONE ) ) ) {
@@ -2104,7 +2109,7 @@ void handle_response(struct cmd *cmd)
 			//	cmd->dma0_wr_credits++;
 			event = *head;
 			*head = event->_next;
-			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma write related is done",
+			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma write related is done OR out of itags",
 				   cmd->afu_name, event );
 			free(event->data);
 			free(event->parity);
@@ -2119,7 +2124,7 @@ void handle_response(struct cmd *cmd)
 			//	cmd->dma0_rd_credits++;
 			event = *head;
 			*head = event->_next;
-			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma read related is CPL or DONE",
+			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma read related is CPL or DONE OR out of itags",
 				   cmd->afu_name, event );
 			free(event->data);
 			free(event->parity);

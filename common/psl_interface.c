@@ -1205,16 +1205,16 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		return 0;
 
 	// dump rbuf
-//	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-//	int i = 0;
-//	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-//	printf( "\n" ); 
+	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+	int i = 0;
+	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
 	if ((event->rbuf[0] & 0x80) != 0) {
 		event->dma0_dvalid = 1;
-//printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
+printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		event->dma0_req_type = (event->rbuf[rbc] & 0x7);
 		//printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
 		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
