@@ -648,8 +648,8 @@ static void *_psl_loop(void *ptr)
 				info_msg("Dumping command tag=0x%02x",
 					 event->tag);
 #ifdef PSL9
-				info_msg("Dumping itag=0x%02x type=0x%02x state=0x%02x",
-					event->itag, event->type, event->state);
+				info_msg("Dumping itag=0x%02x utag=0x%02x type=0x%02x state=0x%02x",
+					event->itag, event->utag, event->type, event->state);
 #endif
 				if (event->data) {
 					free(event->data);

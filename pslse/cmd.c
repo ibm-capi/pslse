@@ -2172,11 +2172,11 @@ void handle_response(struct cmd *cmd)
 					debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", drive response because xlat type state was DMA_ITAG_RET",
 						   cmd->afu_name, event );
 					goto drive_resp;
-				} else {
-					debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", skip response because xlat type state was not DMA_ITAG_RET",
-						   cmd->afu_name, (*head) );
-					return;
-				}
+				} // else {
+				//	debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", skip response because xlat type state was not DMA_ITAG_RET",
+				//		   cmd->afu_name, (*head) );
+					//return;
+				//}
 		}
 
 #endif /* ifdef PSL9 */
