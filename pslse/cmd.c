@@ -860,7 +860,7 @@ void handle_buffer_read(struct cmd *cmd)
 // Transactions up to 512B are supported.
 void handle_dma0_write(struct cmd *cmd)
 {
-	struct cmd_event **head;
+	//struct cmd_event **head;
 	struct cmd_event *event;
 	struct client *client;
 	uint64_t *addr;
@@ -871,7 +871,7 @@ void handle_dma0_write(struct cmd *cmd)
 		return;
 
 	// Send any ready write data to client immediately
-	head = &cmd->list;
+	/*head = &cmd->list;
 	while (*head != NULL) {
 		if ((((*head)->type == CMD_DMA_WR) || ((*head)->type == CMD_DMA_WR_AMO)) &&
 		    ((*head)->state == DMA_OP_REQ))
@@ -881,15 +881,27 @@ void handle_dma0_write(struct cmd *cmd)
 
 		head = &((*head)->_next);
 	}
-	event = *head;
+	event = *head; */
 
+
+	// Send any ready write data to client immediately
+	event = cmd->list;
+	while (event != NULL) {
+		if (((event->type == CMD_DMA_WR) || (event->type == CMD_DMA_WR_AMO)) &&
+		    (event->state == DMA_OP_REQ))
+			break;
+	if ((event->type == CMD_DMA_WR_AMO) && (event->state == DMA_MEM_RESP))
+ 			goto amo_wb;
+
+		event = event->_next;
+	}
 
 	// Test for client disconnect or nothing to do....
 	if ((event == NULL) || ((client = _get_client(cmd, event)) == NULL))
 		return;
-	// Check that memory request can be driven to client
+	// Check that memory request can be driven to client 
 	if (client->mem_access != NULL) {
-		printf("client->mem_access NOT NULL!!!!! \n");
+		//printf("client->mem_access NOT NULL so can't send DMA write for itag=0x%x yet!!!!! \n", event->itag);
 		return;
 	}
 	// check to make sure transaction will stay within a 4K boundary
@@ -942,7 +954,7 @@ void handle_dma0_write(struct cmd *cmd)
 	client->mem_access = (void *)event;
 	return;
 
-amo_wb: event = *head;
+amo_wb: //event = *head;
 debug_msg ("event->atomic_op = 0x%x ", event->atomic_op);
 	if ((event->atomic_op & 0x3f) < 0x20) {
 	//randomly decide not to return data yet
@@ -1000,8 +1012,8 @@ void handle_dma0_sent_sts(struct cmd *cmd)
 	event->sent_sts = 0x1;
 	if (psl_dma0_sent_utag(cmd->afu_event, event->utag, event->sent_sts)
 				      == PSL_SUCCESS) {
-		debug_msg("%s:DMA0 SENT UTAG STS, state now DMA_MEM_RESP FOR DMA_WR utag=0x%02x",
-			 cmd->afu_name, event->utag);
+		debug_msg("%s:DMA0 SENT UTAG STS, state now DMA_MEM_RESP FOR DMA_WR utag=0x%02x, itag=0x%02x",
+			 cmd->afu_name, event->utag, event->itag);
 		//state goes to MEM_DONE when Memory ACK is received back from client
 		event->state = DMA_MEM_RESP;
 
@@ -1040,21 +1052,22 @@ void handle_dma0_read(struct cmd *cmd)
 			break;
 			} */
 		 if ((event->type == CMD_DMA_RD) && (event->bus_lock == 1))
-		{  debug_msg("selected bus locked in progress dma read for utag=0x%x", event->utag);
+		{  debug_msg("selected bus locked in progress dma read for utag=0x%x and itag=0x%x", event->utag, event->itag);
 			break;
 		}
 		event = event->_next;
 	}
 	if (event == NULL) {
+		//printf("in handle_dma0_read and bus is free to use\n");
 		event = cmd->list;
 		while (event != NULL) {
 
 		 if ((event->type == CMD_DMA_RD) && (event->state == DMA_CPL_PARTIAL))
-		{  debug_msg("selected in progress dma read for utag=0x%x", event->utag);
+		{  debug_msg("selected DMA_CPL_PARTIAL dma read for utag=0x%x and itag=0x%x", event->utag, event->itag);
 			break;
 		}
 		if ((event->type == CMD_DMA_RD) && (event->state == DMA_MEM_RESP))
-		{  debug_msg("selected pending dma read for utag=0x%x", event->utag);
+		{  debug_msg("selected DMA_MEM_RESP dma read for utag=0x%x and itag=0x%x", event->utag, event->itag);
 			break;
 		}
 
@@ -1067,12 +1080,13 @@ void handle_dma0_read(struct cmd *cmd)
 		}  */ 
 		
 		if ((event->type == CMD_DMA_RD) && (event->state == DMA_OP_REQ))
-		{  debug_msg("selected new dma read for utag=0x%x", event->utag);
+		{  debug_msg("selected DMA_OP_REQ new dma read for utag=0x%x and itag=0x%x", event->utag, event->itag);
 			break;
 		}
 
 		event = event->_next;
 		}
+		//printf("in handle_dma0_read and nothing is ready ? \n");
 	}
 
 	// Test for client disconnect
@@ -1120,7 +1134,8 @@ void handle_dma0_read(struct cmd *cmd)
 							line +=32;
 						}
 					event->resp = PSL_RESPONSE_DONE;
-					event->state = DMA_CPL_SENT;
+					//event->state = DMA_CPL_SENT;
+					event->state = MEM_DONE;
 					event->cpl_xfers_to_go = 0; // Make sure this is cleared at end of xfer
 				}
 			} else	if (event->cpl_byte_count <= 512) { //Multi cycle single completion flow
@@ -1184,7 +1199,8 @@ void handle_dma0_read(struct cmd *cmd)
 				}
 				if (event->cpl_byte_count == event->cpl_size) {  //this was last transfer
 					event->resp = PSL_RESPONSE_DONE;
-					event->state = DMA_CPL_SENT;
+					//event->state = DMA_CPL_SENT;
+					event->state = MEM_DONE;
 					event->bus_lock = 0;
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
@@ -1238,7 +1254,8 @@ void handle_dma0_read(struct cmd *cmd)
 		  client->mem_access = (void *)event;
                     }
 		}
- 	}
+ 	} else
+		debug_msg("client->mem_access NOT NULL so can't init DMA0 MEMORY READ for utag=0x%x itag=0x%x", event->utag, event->itag);
 }
 
 
@@ -1473,7 +1490,7 @@ static void _handle_mem_read(struct cmd *cmd, struct cmd_event *event, int fd)
 	uint8_t data[MAX_LINE_CHARS];
 	uint64_t offset = event->addr & ~CACHELINE_MASK;
 
-	// printf ("_handle_mem_read: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
+	 //printf ("_handle_mem_read: event->type is %2x, event->state is 0x%3x \n", event->type, event->state);
 #if defined PSL9 || defined PSL9lite
 	if ((event->type == CMD_READ) ||
 		 (((event->type == CMD_CAS_4B) || (event->type == CMD_CAS_8B)) && event->state != MEM_CAS_WR)) {
@@ -1774,14 +1791,6 @@ void handle_caia2_cmds(struct cmd *cmd)
 		if (((*head)->type == CMD_CAS_4B) || ((*head)->type == CMD_CAS_8B))
 			break;
 #ifdef PSL9
-		// Fast track dmaop_ck? should dmaop_ck be called from psl_loop?
-	 	event = *head;
-		if (cmd->afu_event->dma0_dvalid == 1)  
-			goto dmaop_chk;
-
-// look for incoming DMA op requests
-		if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
-			goto dmaop_chk;
 
 	// next look for xlat read/write requests
 		if ((((*head)->type == CMD_XLAT_RD) &&
@@ -1797,9 +1806,6 @@ void handle_caia2_cmds(struct cmd *cmd)
 		if ((((*head)->type == CMD_XLAT_RD_TOUCH) && ((*head)->state != MEM_DONE)) |
 		  (((*head)->type == CMD_XLAT_WR_TOUCH) && ((*head)->state != MEM_DONE)))
 			break;
-	// finally look for incoming DMA op requests
-		//if (((*head)->state == DMA_PENDING) || ((*head)->state == DMA_PARTIAL))
-		//	goto dmaop_chk;
 #endif // ifdef PSL9 only
 		head = &((*head)->_next);
 	}
@@ -1971,9 +1977,28 @@ void handle_caia2_cmds(struct cmd *cmd)
 
 	}
 	return;
+}
+#endif /* ifdef PSL9 or PSL9lite*/
+
 #ifdef PSL9
+void handle_dma0_port(struct cmd *cmd)
+{
+	struct cmd_event **head;
+	struct cmd_event *event;
+	//struct client *client;
+	uint32_t this_itag;
+
 //here we search list of events to find one that has matching ITAG, then process
-	dmaop_chk: event = *head;
+
+	// Make sure cmd structure is valid
+	if (cmd == NULL)
+		return;
+
+	// Look for any dma0 cmds to process
+
+	head = &cmd->list;
+	event = *head;
+	//printf("in handle_dma0_port and cmd->afu_event->dma0_valid is 0x%x\n", cmd->afu_event->dma0_dvalid);
 		if (cmd->afu_event->dma0_dvalid == 1)  {
 	if (event == NULL)
 		printf ("why is event null but dma0_dvalid ??? \n");
@@ -1981,17 +2006,21 @@ void handle_caia2_cmds(struct cmd *cmd)
 	// Look for a matching itag to process immediately
 	head = &cmd->list;
 	while (*head != NULL) {
-		debug_msg ("in handle_caia2 cmds in dmaop_ck: head->type is %2x, head->itag is 0x%3x thisitag is 0x%x", (*head)->type, (*head)->itag, this_itag);
+		//debug_msg ("in handle_dma0_port: head->type is %2x, head->itag is 0x%3x thisitag is 0x%x", (*head)->type, (*head)->itag, this_itag);
 		if ((((*head)->type == CMD_XLAT_RD) &&
 		    ((*head)->itag == this_itag)) |
 		 (((*head)->type == CMD_XLAT_WR) &&
 		    ((*head)->itag == this_itag)))
+			break;
+		if (((*head)->type == CMD_DMA_WR) &&
+		    ((*head)->itag == this_itag)) 
 			break;
 		head = &((*head)->_next);
 	}
 	if (*head != NULL) {
 		event = *head;
 		//Fill in event and set up for next steps
+		debug_msg ("in handle_dma0_port : head->type is %2x, head->itag is 0x%3x thisitag is 0x%x", (*head)->type, (*head)->itag, this_itag);
 		event->itag = cmd->afu_event->dma0_req_itag;
 		event->utag = cmd->afu_event->dma0_req_utag;
 		event->dtype = cmd->afu_event->dma0_req_type;
@@ -2002,7 +2031,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 			event->type = CMD_DMA_RD;
 		// check to make sure transaction will stay within a 4K boundary
 		if ((event->addr+0x1000) <= (event->addr+(uint64_t)event->dsize))
-			warn_msg("TRANSACTION WILL BE FRAGMENTED, it crosses 4K boundary!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64,
+			info_msg("TRANSACTION WILL BE FRAGMENTED, it crosses 4K boundary!!! boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64,
 			(event->addr+0x1000), (event->addr +event->dsize));
 		else
 			debug_msg("TRANSACTION  boundary= 0x%016"PRIx64" last byte= 0x%016"PRIx64,
@@ -2011,7 +2040,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 		// If DMA write, pull data in and set up for subsequent handle dma_mem_write
 		// ALSO send over any AMO cmds that come across as dma wr
 		if ((event->dtype == DMA_DTYPE_WR_REQ_128) && (event->dsize <= 128))  {
-			debug_msg("copy to event buffer for write dma data  <= 128B type 1");
+			debug_msg("copy to event buffer for write dma data  <= 128B type 1, dsize=0x%2x",
+		event->dsize);
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_WR;
 		  	memcpy((void *)&(event->data[0]), (void *)&(cmd->afu_event->dma0_req_data), event->dsize);
@@ -2036,11 +2066,11 @@ void handle_caia2_cmds(struct cmd *cmd)
 			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x total xfered =0x%02x", cmd->afu_name,
 		  		event->itag, event->utag, event->addr, event->dtype, event->dpartial);
 			}
-		if ((event->dtype == DMA_DTYPE_WR_REQ_MORE) && ((event->dsize - event->dpartial) <= 128))  {
+		else if ((event->dtype == DMA_DTYPE_WR_REQ_MORE) && ((event->dsize - event->dpartial) <= 128))  {
 			debug_msg("FINAL copy to event buffer for write dma data  > 128B type 2");
 			event->state = DMA_OP_REQ;
 			event->type = CMD_DMA_WR;
-		  	memcpy((void *)&(event->data[event->dsize - event->dpartial]), (void *)&(cmd->afu_event->dma0_req_data),
+		  	memcpy((void *)&(event->data[event->dpartial]), (void *)&(cmd->afu_event->dma0_req_data),
 				 (event->dsize - event->dpartial));
 			event->dpartial += (event->dsize - event->dpartial);;
 			debug_msg("%s:DMA0_VALID itag=0x%02x utag=0x%02x addr=0x%016"PRIx64" type = 0x%02x total xfered =0x%02x", cmd->afu_name,
@@ -2057,15 +2087,14 @@ void handle_caia2_cmds(struct cmd *cmd)
 		  		event->itag, event->utag, event->addr, event->dtype, event->dsize);
 			}
 
-		} else {
-		error_msg("%s: DMA REQUEST RECEIVED WITH UNKNOWN/INVALID ITAG = 0x%3x", cmd->afu_name, this_itag); }
+		} else 
+		info_msg("%s: DMA REQUEST RECEIVED WITH UNKNOWN/INVALID ITAG = 0x%3x", cmd->afu_name, this_itag); 
 	cmd->afu_event->dma0_dvalid = 0;
 	}
-#endif // ifdef PSL9 only
 //printf("cmd->afu_event->dma0_dvalid is 0x%2x \n", cmd->afu_event->dma0_dvalid);
    	return;
 }
-#endif /* ifdef PSL9 or PSL9lite*/
+#endif /* ifdef PSL9 only */
 
 // Send a randomly selected pending response back to AFU
 void handle_response(struct cmd *cmd)
@@ -2116,7 +2145,8 @@ void handle_response(struct cmd *cmd)
 			free(event);
 		        //printf("in handle_response and finally freeing original xlat/dma write event \n");
 			return;
-		} else if ( ( ( (*head)->type == CMD_DMA_RD )  && ( (*head)->state == DMA_CPL_SENT ) ) ||
+		} 
+		if ( ( ( (*head)->type == CMD_DMA_RD )  && ( (*head)->state == MEM_DONE ) ) ||
 			    ( ( (*head)->type == CMD_XLAT_RD ) && ( (*head)->state == MEM_DONE ) ) ) {
 		        // if dma read and we've send completion data OR itag aborted , we can remove this event
 			//  update dma0_rd_credits IF CMD_DMA_RD
@@ -2124,8 +2154,8 @@ void handle_response(struct cmd *cmd)
 			//	cmd->dma0_rd_credits++;
 			event = *head;
 			*head = event->_next;
-			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma read related is CPL or DONE OR out of itags",
-				   cmd->afu_name, event );
+			debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event and skip response because dma read related is CPL or DONE OR out of itags, itag=0x%x, utag=0x%x",
+				   cmd->afu_name, event, event->itag, event->utag );
 			free(event->data);
 			free(event->parity);
 			free(event);

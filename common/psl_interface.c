@@ -284,7 +284,7 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 #ifdef PSL9
 	event->dma0_wr_credits = MAX_DMA0_WR_CREDITS;
 	event->dma0_rd_credits = MAX_DMA0_RD_CREDITS;
-        printf("psl_serv_afu_event: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
+        //printf("psl_serv_afu_event: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
 #endif 
 	struct sockaddr_in ssadr, csadr;
 	unsigned int csalen = sizeof(csadr);
@@ -511,7 +511,7 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		event->dma0_completion_size = cpl_size;
 		event->dma0_completion_laddr = cpl_laddr;
 		event->dma0_completion_byte_count = cpl_byte_count;
-		printf(" IN PSL_DMA0_CPL_BUS_WRITE and cpl_laddr is ox%3x and cpl_byte_count is 0x%3x\n", cpl_laddr, cpl_byte_count);
+		//printf(" IN PSL_DMA0_CPL_BUS_WRITE and cpl_laddr is ox%3x and cpl_byte_count is 0x%3x\n", cpl_laddr, cpl_byte_count);
 		// is this a multi cycle transaction? check cpl_byte_count
 		if (cpl_byte_count > 128)   {
 			if ((384 < dsize) && (dsize <= 512) && (cpl_size == cpl_byte_count))  { // our second multi cycle completion pass
@@ -593,7 +593,7 @@ psl_get_dma0_port(struct AFU_EVENT *event,
 
 		}
 		event->dma0_dvalid = 0;
-	printf ("leaving psl_get_dma0_port and setting dma0_dvalid to 0\n");
+	//printf ("leaving psl_get_dma0_port and setting dma0_dvalid to 0\n");
 		return PSL_SUCCESS;
 }
 	
@@ -688,8 +688,8 @@ psl_get_command(struct AFU_EVENT *event,
 #endif
 {
 	if (!event->command_valid) {
-		if (event->dma0_dvalid)
-			printf ("NO VALID CMD BUT DMA0_DVALID with itag=0x%x and type=0x%x\n", event->dma0_req_itag, event->dma0_req_type);
+		//if (event->dma0_dvalid)
+			//printf ("NO VALID CMD BUT DMA0_DVALID with itag=0x%x and type=0x%x\n", event->dma0_req_itag, event->dma0_req_type);
 		return PSL_COMMAND_NOT_VALID;
 	} else {
 		event->command_valid = 0;
@@ -730,11 +730,11 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		// printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		//upper 4 bits in second byte always 0 to indicate this transaction is dma0_completion
 		// NOTE - read transactions can never be greater than 128bytes per cycle
-		printf("event->dma0_completion_size is 0x%03x \n", event->dma0_completion_size);
-		printf("event->dma0_completion_type is 0x%03x \n", event->dma0_completion_type);
-		printf("event->dma0_completion_utag is 0x%03x \n", event->dma0_completion_utag);
-		printf("event->dma0_completion_laddr is 0x%03x \n", event->dma0_completion_laddr);
-		printf("event->dma0_completion_byte_count is 0x%03x \n", event->dma0_completion_byte_count);
+		//printf("event->dma0_completion_size is 0x%03x \n", event->dma0_completion_size);
+		//printf("event->dma0_completion_type is 0x%03x \n", event->dma0_completion_type);
+		//printf("event->dma0_completion_utag is 0x%03x \n", event->dma0_completion_utag);
+		//printf("event->dma0_completion_laddr is 0x%03x \n", event->dma0_completion_laddr);
+		//printf("event->dma0_completion_byte_count is 0x%03x \n", event->dma0_completion_byte_count);
 		event->tbuf[bp++] = (event->dma0_completion_size & 0xFF);
 		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
 		event->tbuf[bp++] = ((event->dma0_completion_utag >> 8) & 0x03);
@@ -1214,7 +1214,7 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 #ifdef PSL9
 	if ((event->rbuf[0] & 0x80) != 0) {
 		event->dma0_dvalid = 1;
-printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
+//printf("event->dma0_dvalid is 1  and rbc is 0x%2x \n", rbc);
 		event->dma0_req_type = (event->rbuf[rbc] & 0x7);
 		//printf("event->rbuf[0] is 0x%2x type is 0x%2x \n", event->rbuf[rbc-1], event->dma0_req_type);
 		//printf("event->rbuf[%x] is 0x%2x  \n", rbc, event->rbuf[rbc]);
@@ -1475,10 +1475,10 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 
 	rbc = 1;
 #ifdef PSL9
-printf("PSL_GET_PSL_EVENTS event->rbuf[0] is 0x%2x and event->rbuf[1] is 0x%2x \n", event->rbuf[0], event->rbuf[1]);
+//printf("PSL_GET_PSL_EVENTS event->rbuf[0] is 0x%2x and event->rbuf[1] is 0x%2x \n", event->rbuf[0], event->rbuf[1]);
 	if (((event->rbuf[0] & 0x80) == 0x80) && ((event->rbuf[1] & 0xF0) != 0xF0)) {
 		event->dma0_completion_valid = 1;
-printf("PSL_GET_PSL_EVENTS setting event->dma0_completion_valid to 1 \n");
+//printf("PSL_GET_PSL_EVENTS setting event->dma0_completion_valid to 1 \n");
 		event->dma0_completion_size = event->rbuf[rbc++];
 		event->dma0_completion_size = ( ( event->dma0_completion_size & 0xF ) << 8 ) | event->rbuf[rbc++];
 		event->dma0_completion_type = ((event->rbuf[rbc] >> 4 ) & 0x07);
@@ -1493,11 +1493,11 @@ printf("PSL_GET_PSL_EVENTS setting event->dma0_completion_valid to 1 \n");
 		//event->dma0_completion_laddr = ((event->rbuf[rbc++] << 4) | event->dma0_completion_laddr);
 		event->dma0_completion_byte_count = (( (bytes_to_read & 0x0f) <<8) | event->dma0_completion_byte_count );
 		//event->dma0_completion_byte_count = ((event->rbuf[rbc] << 8) | event->dma0_completion_byte_count);
-		printf("event->dma0_completion_size = 0x%3x \n", event->dma0_completion_size);
-		printf("event->dma0_completion_type = 0x%3x \n", event->dma0_completion_type);
-		printf("event->dma0_completion_utag = 0x%3x \n", event->dma0_completion_utag);
-		printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
-		printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
+		//printf("event->dma0_completion_size = 0x%3x \n", event->dma0_completion_size);
+		//printf("event->dma0_completion_type = 0x%3x \n", event->dma0_completion_type);
+		//printf("event->dma0_completion_utag = 0x%3x \n", event->dma0_completion_utag);
+		//printf("event->dma0_completion_laddr = 0x%3x \n", event->dma0_completion_laddr);
+		//printf("event->dma0_completion_byte_count = 0x%3x \n", event->dma0_completion_byte_count);
 		if (event->dma0_completion_size > 128) {
 			if (event->dma0_completion_type == 0)
 				bytes_to_read = 128;
@@ -1761,12 +1761,12 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 
 {
 	//check to be sure rd & wr credits are available, otherwise reject
-	if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
-		printf("AFU IS OUT OF DMA RD CREDITS !!!!!! \n"); 
-		return PSL_NO_DMA_PORT_CREDITS; }
-	if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
-		printf("AFU IS OUT OF DMA WR CREDITS !!!!!! \n"); 
-		return PSL_NO_DMA_PORT_CREDITS; }
+	//if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
+	//	printf("AFU IS OUT OF DMA RD CREDITS !!!!!! \n"); 
+	//	return PSL_NO_DMA_PORT_CREDITS; }
+	//if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
+	//	printf("AFU IS OUT OF DMA WR CREDITS !!!!!! \n"); 
+	//	return PSL_NO_DMA_PORT_CREDITS; }
 	if  (event->dma0_dvalid) {
 		printf("ALREADY A DMA CMD PENDING  !!!!!! \n");
 		return PSL_DOUBLE_DMA0_REQ;
@@ -1779,26 +1779,27 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		event->dma0_req_size = size;			
 		event->dma0_atomic_op = atomic_op;
 		event->dma0_atomic_le = atomic_le;
-	// TODO testing
 		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_128) { 
 			event->dma0_req_size = size;
 			if (size <= 128)  {
 				memcpy(event->dma0_req_data, dma_wr_data, size);
+				event->dma0_wr_credits--;
 			} else { //the start of a >128B write operation
 				event->dma0_wr_partial = size - 128;
 				memcpy(event->dma0_req_data, dma_wr_data, 128);
 			}
-			event->dma0_wr_credits--;
+		//	event->dma0_wr_credits--;
 		}
  		if (event->dma0_req_type == DMA_DTYPE_WR_REQ_MORE)  { 
-			if (event->dma0_wr_partial <= 128) 
+			if (event->dma0_wr_partial <= 128) {
 				memcpy(event->dma0_req_data, dma_wr_data, event->dma0_wr_partial);
-			else {
+				event->dma0_wr_credits--;
+			} else {
 				memcpy(event->dma0_req_data, dma_wr_data, 128);
 				event->dma0_wr_partial -= 128;
 			}
-			event->dma0_wr_credits--;
 		}
+		//	event->dma0_wr_credits--;
 		if (event->dma0_req_type == DMA_DTYPE_ATOMIC)  {  
 			memcpy(event->dma0_req_data, dma_wr_data, 16);
 			event->dma0_wr_credits--;
@@ -1828,7 +1829,7 @@ afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
 	        // printf("THERE ISN'T ANY VALID BUFFER READ DATA- dma0_completion_valid != 1 \n");
 		return PSL_BUFFER_READ_DATA_NOT_VALID;
 	} else { 
-		printf("VALID CPL DATA TO READ \n");
+		//printf("VALID CPL DATA TO READ \n");
 		event->dma0_completion_valid = 0;
 		utag = event->dma0_completion_utag;
 		cpl_type = event->dma0_completion_type;

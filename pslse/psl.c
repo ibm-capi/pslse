@@ -443,6 +443,7 @@ static void _handle_afu(struct psl *psl)
 		handle_caia2_cmds(psl->cmd);
 #endif /* ifdef PSL9 or PSL9lite */
 #ifdef PSL9
+		handle_dma0_port(psl->cmd);
 		handle_dma0_write(psl->cmd);
 		handle_dma0_sent_sts(psl->cmd);
 		handle_dma0_read(psl->cmd);
@@ -505,6 +506,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 			if (client->mem_access != NULL)
 				handle_mem_return(psl->cmd, cmd, client->fd);
 			client->mem_access = NULL;
+			//printf("PSL LOOP SETTING mem_access back to NULL\n");
 			break;
 		case PSLSE_MMIO_MAP:
 			handle_mmio_map(psl->mmio, client);
@@ -645,6 +647,10 @@ static void *_psl_loop(void *ptr)
 				}
 				info_msg("Dumping command tag=0x%02x",
 					 event->tag);
+#ifdef PSL9
+				info_msg("Dumping itag=0x%02x type=0x%02x state=0x%02x",
+					event->itag, event->type, event->state);
+#endif
 				if (event->data) {
 					free(event->data);
 				}
