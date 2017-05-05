@@ -890,12 +890,12 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	}
 
 	// dump tbuf
-	if ( bp > 1 ) {
-	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
-	  int j;
-	  for ( j = 0; j < bp; j++ ) printf( "%02x", event->tbuf[j] );
-	  printf( "\n" );
-	}
+//	if ( bp > 1 ) {
+//	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
+//	  int j;
+//	  for ( j = 0; j < bp; j++ ) printf( "%02x", event->tbuf[j] );
+//	  printf( "\n" );
+//	}
 
 	bl = bp;
 	bp = 0;
@@ -1205,10 +1205,10 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		return 0;
 
 	// dump rbuf
-	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-	int i = 0;
-	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-	printf( "\n" ); 
+//	printf( "lgt: psl_get_afu_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+//	int i = 0;
+//	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+//	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
@@ -1468,10 +1468,10 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		return 0;
 	
 	// dump rbuf
-	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-	int i;
-	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-	printf( "\n" ); 
+//	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+//	int i;
+//	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+//	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
@@ -1505,13 +1505,13 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				bytes_to_read = event->dma0_completion_size - 128;
 		}  else // cpl_byte_count < = 128 so just single cycle
 			bytes_to_read = event->dma0_completion_size;
-		printf("bytes to read (after adustment) = 0x%3x \n", bytes_to_read);
-		printf("data is 0x");
+		//printf("bytes to read (after adustment) = 0x%3x \n", bytes_to_read);
+		//printf("data is 0x");
 		for (bc = 0; bc < bytes_to_read; bc++) {
 			event->dma0_completion_data[bc] = event->rbuf[rbc++];
-			printf("%02x", event->dma0_completion_data[bc]);
+			//printf("%02x", event->dma0_completion_data[bc]);
 		}
-		printf("/n");
+		//printf("/n");
 	}else {
 		event->dma0_completion_valid = 0;
 	}
