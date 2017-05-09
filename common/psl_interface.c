@@ -826,7 +826,7 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->mmio_valid = 0;
 	}
 	if (event->response_valid != 0) {
-	        //printf( "lgt: psl_signal_afu_model: response: tag=0x%02x, tag parity=0x%02x, code=0x%02x \n", 
+	      //  printf( "lgt: psl_signal_afu_model: response: tag=0x%02x, tag parity=0x%02x, code=0x%02x \n", 
 		//	event->response_tag, 
 		//	event->response_tag_parity, 
 		//	event->response_code);
@@ -842,6 +842,8 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 #ifdef PSL9
 		event->tbuf[bp++] = (((event->response_dma0_itag & 0x100) >> 8) | (event->response_dma0_itag_parity  << 4));
 		event->tbuf[bp++] = event->response_dma0_itag & 0xFF;
+	       // printf( "lgt: psl_signal_afu_model: response: itag=0x%02x,tag=0x%02x \n", 
+		//	event->response_dma0_itag, event->response_tag); 
 	// eventually may need to add another char for response_ext too
 	// for now, we always return the default value for pagesize, set by pslse.parms
 		event->tbuf[bp++] = (event->response_r_pgsize & 0x0F);

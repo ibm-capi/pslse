@@ -977,7 +977,7 @@ debug_msg ("event->atomic_op = 0x%x ", event->atomic_op);
 			//see if this fixes the core dumps
 			//event->state = MEM_DONE;
 			} else
-				printf ("looks like we didn't have success writing cpl data? \n");
+				info_msg ("looks like we didn't have success writing cpl data? ");
 		}
 		return;
 
@@ -2029,12 +2029,12 @@ void handle_dma0_port(struct cmd *cmd)
 	//printf("in handle_dma0_port and cmd->afu_event->dma0_valid is 0x%x\n", cmd->afu_event->dma0_dvalid);
 		if (cmd->afu_event->dma0_dvalid == 1)  {
 	if (event == NULL)
-		printf ("why is event null but dma0_dvalid ??? \n");
+		info_msg ("why is event null but dma0_dvalid ??? ");
 	this_itag = cmd->afu_event->dma0_req_itag;
 	// Look for a matching itag to process immediately
 	head = &cmd->list;
 	while (*head != NULL) {
-		//debug_msg ("in handle_dma0_port: head->type is %2x, head->itag is 0x%3x thisitag is 0x%x", (*head)->type, (*head)->itag, this_itag);
+		debug_msg ("in handle_dma0_port: head->type is %2x, head->itag is 0x%x thisitag is 0x%x", (*head)->type, (*head)->itag, this_itag);
 		if ((((*head)->type == CMD_XLAT_RD) &&
 		    ((*head)->itag == this_itag)) |
 		 (((*head)->type == CMD_XLAT_WR) &&
