@@ -502,7 +502,9 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		 uint32_t cpl_laddr,
 		 uint32_t cpl_byte_count, uint8_t * write_data)
 {
-	if ((event->dma0_completion_valid) || (event->dma0_sent_utag_valid)) {
+	//if ((event->dma0_completion_valid) || (event->dma0_sent_utag_valid)) {
+	if (event->dma0_completion_valid)  {
+	printf("IN DMA0_CPL_BUS_WRITE AND DOUBLE CMD!!!\n");
 		return PSL_DOUBLE_COMMAND;
 	} else {
 		event->dma0_completion_valid = 1;
@@ -726,9 +728,9 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->tbuf[0] = event->tbuf[0] | 0x80;
 		// printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
 		// need to have size as second/third byte for RX side to easily access for rbc
-		event->tbuf[bp++] = ((event->dma0_completion_size) >> 8) & 0x0F;
+		event->tbuf[bp++] = ((event->dma0_completion_size) >> 8) | 0x30;
 		// printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
-		//upper 4 bits in second byte always 0 to indicate this transaction is dma0_completion
+		//upper 4 bits in second byte are b0011 to indicate this transaction is dma0_completion
 		// NOTE - read transactions can never be greater than 128bytes per cycle
 		//printf("event->dma0_completion_size is 0x%03x \n", event->dma0_completion_size);
 		//printf("event->dma0_completion_type is 0x%03x \n", event->dma0_completion_type);
@@ -766,10 +768,11 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->tbuf[0] = event->tbuf[0] | 0x80;
 		//printf("event->tbuf[0] is 0x%2x \n", event->tbuf[0]);
 		event->tbuf[bp++] = (event->dma0_sent_utag_status  & 0x03 );
+		// make sure that upper 4 bits of tbuf[1]  are b1100, as this transaction is dma0_sent_utag
+		event->tbuf[1] = (event->tbuf[1]  | 0xC0 );
 		//printf("event->dma0_sent_utag_status is 0x%2x  \n", event->dma0_sent_utag_status);
 		//printf("event->dma0_sent_utag is 0x%2x  \n", event->dma0_sent_utag);
-		// make sure that upper 4 bits are always 1, as this transaction is dma0_sent_utag
-		event->tbuf[bp-1] = event->tbuf[bp-1] | 0xF0;
+		//event->tbuf[bp-1] = event->tbuf[bp-1] | 0xC0;
 		//printf("event->tbuf[1] is 0x%2x  \n", event->tbuf[1]);
 		//printf("event->tbuf[bp] is 0x%2x and bp is 0x%2x \n", event->tbuf[bp], bp);
 		event->tbuf[bp++] = ((event->dma0_sent_utag >> 8) & 0x03);
@@ -1412,10 +1415,11 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				return -1;
 			event->rbp += bc;
 			// sent_utag_status bc is 3, dma read cpl can be up to 139
-			if ((event->rbuf[1] & 0xF0) != 0)
+			if ((event->rbuf[1] & 0xC0) != 0)
 				rbc += 3;  
+			//printf("PSL_GET_PSL_EVENTS and event->rbuf[1] is 0x%x and rbc= 0x%x \n", event->rbuf[1], rbc);
 			// have to look at third & fourth byte if this is completion data
-			else {
+			if ((event->rbuf[1] & 0x30) != 0)  {
 				if ((bc = recv(event->sockfd, event->rbuf + event->rbp, 1, 0)) == -1) {
 					if (errno == EWOULDBLOCK) {
 						return 0;
@@ -1478,7 +1482,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	rbc = 1;
 #ifdef PSL9
 //printf("PSL_GET_PSL_EVENTS event->rbuf[0] is 0x%2x and event->rbuf[1] is 0x%2x \n", event->rbuf[0], event->rbuf[1]);
-	if (((event->rbuf[0] & 0x80) == 0x80) && ((event->rbuf[1] & 0xF0) != 0xF0)) {
+	if (((event->rbuf[0] & 0x80) == 0x80) && ((event->rbuf[1] & 0x30) == 0x30)) {
 		event->dma0_completion_valid = 1;
 //printf("PSL_GET_PSL_EVENTS setting event->dma0_completion_valid to 1 \n");
 		event->dma0_completion_size = event->rbuf[rbc++];
@@ -1517,7 +1521,7 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 	}else {
 		event->dma0_completion_valid = 0;
 	}
-	if (((event->rbuf[0] & 0x80) == 0x80) && ((event->rbuf[1] & 0xF0) == 0xF0)) {
+	if (((event->rbuf[0] & 0x80) == 0x80) && ((event->rbuf[1] & 0xC0) == 0xC0)) {
 		event->dma0_sent_utag_valid = 1;
 		//printf("PSL_GET_PSL _EVENTS setting event->dma0_sent_utag_valid to 1 \n");
 		event->dma0_sent_utag_status = (event->rbuf[rbc++]  & 0x03);
