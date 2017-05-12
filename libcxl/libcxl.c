@@ -266,7 +266,8 @@ static void _handle_write(struct cxl_afu_h *afu, uint64_t addr, uint16_t size,
 			perror("DSI Failure");
 			return;
 		}
-		DPRINTF("WRITE to invalid addr @ 0x%016" PRIx64 "\n", addr);
+		//DPRINTF("WRITE to invalid addr @ 0x%016" PRIx64 "\n", addr);
+		info_msg("ERROR: WRITE to invalid addr @ 0x%016" PRIx64 "\n", addr);
 		buffer = PSLSE_MEM_FAILURE;
 		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
 			afu->opened = 0;
@@ -294,7 +295,8 @@ static void _handle_touch(struct cxl_afu_h *afu, uint64_t addr, uint8_t size)
 			perror("DSI Failure");
 			return;
 		}
-		DPRINTF("TOUCH of invalid addr @ 0x%016" PRIx64 "\n", addr);
+		//DPRINTF("TOUCH of invalid addr @ 0x%016" PRIx64 "\n", addr);
+		info_msg("ERROR: TOUCH of invalid addr @ 0x%016" PRIx64 "\n", addr);
 		buffer = (uint8_t) PSLSE_MEM_FAILURE;
 		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
 			afu->opened = 0;
@@ -366,7 +368,13 @@ static void _handle_DMO_OPs(struct cxl_afu_h *afu, uint8_t op_size, uint64_t add
 			perror("DSI Failure");
 			return;
 		}
-		DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
+		//DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
+		info_msg("ERROR: READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
+		buffer = (uint8_t) PSLSE_MEM_FAILURE;
+		if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+			afu->opened = 0;
+			afu->attached = 0;
+		}	
 		return;
 	}
 	// select op_1 & op_2 based on op_size & addr [60:61]
