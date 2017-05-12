@@ -236,7 +236,8 @@ static void _handle_read(struct cxl_afu_h *afu, uint64_t addr, uint16_t size)
 			perror("DSI Failure");
 			return;
 		}
-		DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
+		//DPRINTF("READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
+		info_msg(" ERROR: READ from invalid addr @ 0x%016" PRIx64 "\n", addr);
 		buffer[0] = (uint8_t) PSLSE_MEM_FAILURE;
 		if (put_bytes_silent(afu->fd, 1, buffer) != 1) {
 			afu->opened = 0;
