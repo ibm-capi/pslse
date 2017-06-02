@@ -350,8 +350,8 @@ struct AFU_EVENT {
   unsigned char dma0_completion_data[128];  /* DMA completion data alignment is First Byte first */
   signed char dma0_wr_credits;	/* Used to limit # of outstanding DMA wr ops to MAX_DMA0_WR_CREDITS  */
   signed char dma0_rd_credits;	/* Used to limit # of outstanding DMA rd ops to MAX_DMA0_RD_CREDITS  */
-  unsigned char dma0_rd_partial;;	/* Used to determine bc for DMA xfers > 128B  */
-  unsigned char dma0_wr_partial;;	/* Used to determine bc for DMA xfers > 128B  */
+  uint32_t dma0_rd_partial;;	/* Used to determine bc for DMA xfers > 128B  */
+  uint32_t dma0_wr_partial;;	/* Used to determine bc for DMA xfers > 128B  */
 #endif /* ifdef PSL9 */
 
 };
