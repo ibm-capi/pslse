@@ -850,6 +850,8 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	// eventually may need to add another char for response_ext too
 	// for now, we always return the default value for pagesize, set by pslse.parms
 		event->tbuf[bp++] = (event->response_r_pgsize & 0x0F);
+		event->response_dma0_itag = 0;
+		event->response_dma0_itag_parity = 0;
 #endif
 		event->response_valid = 0;
 	}
@@ -895,12 +897,12 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	}
 
 	// dump tbuf
-//	if ( bp > 1 ) {
-//	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
-//	  int j;
-//	  for ( j = 0; j < bp; j++ ) printf( "%02x", event->tbuf[j] );
-//	  printf( "\n" );
-//	}
+	if ( bp > 1 ) {
+	  printf( "lgt: psl_signal_afu_model: tbuf length:0x%02x tbuf: 0x", bp ); 
+	  int j;
+	  for ( j = 0; j < bp; j++ ) printf( "%02x", event->tbuf[j] );
+	  printf( "\n" );
+	}
 
 	bl = bp;
 	bp = 0;
@@ -1476,10 +1478,10 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 		return 0;
 	
 	// dump rbuf
-//	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
-//	int i;
-//	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
-//	printf( "\n" ); 
+	printf( "lgt: psl_get_psl_events: rbuf length:0x%02x rbuf: 0x", rbc ); 
+	int i;
+	for ( i = 0; i < rbc; i++ ) printf( "%02x", event->rbuf[i] );
+	printf( "\n" ); 
 
 	rbc = 1;
 #ifdef PSL9
