@@ -351,7 +351,7 @@ static void _add_caia2(struct cmd *cmd, uint32_t handle, uint32_t tag,
 			state = DMA_ITAG_REQ;
 			break;
 		default:
-			warn_msg("Unsupported command 0x%04x", cmd);
+			warn_msg("add_caia2: Unsupported command 0x%04x", cmd);
 			break;
 
 	}
@@ -462,6 +462,12 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 		// Cacheline lock
 	case PSL_COMMAND_LOCK:
+#ifdef PSL9 
+		warn_msg("parse_cmd:LOCK Unsupported command in CAPI2.0 cmd_opcode= 0x%04x", cmd);
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		break;
+#endif
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		cmd->locked = 1;
 		cmd->lock_addr = addr & CACHELINE_MASK;
@@ -469,6 +475,12 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 		// Memory Reads
 	case PSL_COMMAND_READ_CL_LCK:
+#ifdef PSL9 
+		warn_msg("parse_cmd: READ_CL_LCK Unsupported command in CAPI2.0 cmd_opcode= 0x%04x", cmd);
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		break;
+#endif
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		_update_pending_resps(cmd, PSL_RESPONSE_NLOCK);
 		cmd->locked = 1;
@@ -484,10 +496,22 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 		// Cacheline unlock
 	case PSL_COMMAND_UNLOCK:
+#ifdef PSL9 
+		warn_msg("parse_cmd:UNLOCK Unsupported command in CAPI2.0 cmd_opcode= 0x%04x", cmd);
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		break;
+#endif
 		_add_unlock(cmd, handle, tag, command, abort);
 		break;
 		// Memory Writes
 	case PSL_COMMAND_WRITE_UNLOCK:
+#ifdef PSL9 
+		warn_msg("parse_cmd:WRITE_UNLOCK Unsupported command in CAPI2.0 cmd_opcode= 0x%04x", cmd);
+		_add_other(cmd, handle, tag, command, abort,
+			   PSL_RESPONSE_FAILED);
+		break;
+#endif
 		unlock = 1;
 	case PSL_COMMAND_WRITE_C:	/*fall through */
 		if (!unlock)
@@ -542,7 +566,7 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 #endif /* ifdef PSL9 */
 	default:
-		warn_msg("Unsupported command 0x%04x", cmd);
+		warn_msg("parse_cmd: Unsupported command 0x%04x", cmd);
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FAILED);
 		break;
@@ -1128,7 +1152,7 @@ void handle_dma0_read(struct cmd *cmd)
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);
 							for (byte = line; byte < line+32; byte++) {
-								DPRINTF("%02x", event->data[byte+event->cpl_laddr]);
+								DPRINTF("%02x", event->data[byte]);
 							}
 							DPRINTF("\n");
 							line +=32;
@@ -1160,10 +1184,13 @@ void handle_dma0_read(struct cmd *cmd)
 								   event->utag ,
 							           event->cpl_laddr );
 							int line = 0;
+							uint16_t line_offset = 0 ;
+							if (event->cpl_byte_count == event->cpl_size)
+								line_offset = 0x100;
 							for (quadrant = 0; quadrant < 4; quadrant++) {
 								DPRINTF("DEBUG: Q%d 0x", quadrant);
 								for (byte = line; byte < line+32; byte++) {
-									DPRINTF("%02x", event->data[byte]);
+									DPRINTF("%02x", event->data[byte + line_offset]);
 								}
 								DPRINTF("\n");
 								line +=32;
@@ -1203,7 +1230,7 @@ void handle_dma0_read(struct cmd *cmd)
 					event->bus_lock = 0;
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
-					debug_msg("%s:DMAO CPL_BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
+					debug_msg("%s:DMAO CPL BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
 					}
 				else  { //dec byte count, inc addr for next transfer
 					// event->cpl_xfers_to_go should still be 1 from original setting
@@ -1695,11 +1722,11 @@ void _handle_op1_op2_load(struct cmd *cmd, struct cmd_event *event)
 {
 
 	memcpy((char *)&event->cas_op1, (char *)event->data, sizeof(uint64_t));
-	printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op1);
+	//printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op1);
 	//event->cas_op1 = ntohll (event->cas_op1);
 	//printf("op1 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op1);
 	memcpy((char *)&event->cas_op2, (char *)event->data+8, sizeof(uint64_t));
-	printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op2);
+	//printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op2);
 	//event->cas_op2 = ntohll (event->cas_op2);
 	//printf("op2 bytes 1-8 are 0x%016" PRIx64 " \n", event->cas_op2);
 
@@ -1883,7 +1910,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 			//printf("in handle_caia2 for xlat_rd, address is 0x%016"PRIX64 "\n", event->addr);
 			cmd->afu_event->response_dma0_itag = event->itag;
 			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
-			info_msg("dma0_itag for read is 0x%x", event->itag);
+			info_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for read is 0x%x", 
+				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
 			break;
 		case PSL_COMMAND_XLAT_WR_P0:
@@ -1924,7 +1952,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 			//printf("in handle_caia2 for xlat_wr, address is 0x%016"PRIX64 "\n", event->addr);
 			cmd->afu_event->response_dma0_itag = event->itag;
 			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
-			info_msg("dma0_itag for write is 0x%x", event->itag);
+			info_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for write is 0x%x",
+				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
 			break;
 		case PSL_COMMAND_ITAG_ABRT_RD:
@@ -2000,7 +2029,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 			break;
 #endif // ifdef PSL9 only
 		default:
-			warn_msg("Unsupported command 0x%04x", cmd);
+			warn_msg("handle_caia2_cmd: Unsupported command 0x%04x", cmd);
 			break;
 
 	}

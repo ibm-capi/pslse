@@ -1169,22 +1169,24 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 					rbc += event->dma0_req_size;
 					pbc = event->dma0_req_size;
 					event->dma0_wr_partial = 0;
-				} else 
+				} else  {
 					rbc += 128;
 					pbc = 128;
 					event->dma0_wr_partial = event->dma0_req_size - 128;;
 					// initalize  event->dma0_wr_partial to show remaining bytes
+					}
 				}
 				if ((event->rbuf[1] & 0x07) == DMA_DTYPE_WR_REQ_MORE) {
  					if (event->dma0_wr_partial <= 128) { //TODO testing
 					rbc += event->dma0_wr_partial;
 					pbc = event->dma0_wr_partial;
 					event->dma0_wr_partial = 0;
-				} else 
+				} else  {
 					rbc += 128;
 					pbc = 128;
 					event->dma0_wr_partial -= 128;
 					// decrement event->dma0_wr_partial here
+					}
 				}
 				
 
