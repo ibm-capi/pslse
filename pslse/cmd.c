@@ -652,7 +652,7 @@ void handle_cmd(struct cmd *cmd, uint32_t parity_enabled, uint32_t latency)
 	}
 	// Check credits and parse
 	if (!cmd->credits) {
-		info_msg("AFU issued command without any credits");
+		//info_msg("AFU issued command without any credits");
 		warn_msg("AFU issued command without any credits");
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FAILED);
@@ -1001,7 +1001,7 @@ debug_msg ("event->atomic_op = 0x%x ", event->atomic_op);
 			//see if this fixes the core dumps
 			//event->state = MEM_DONE;
 			} else
-				info_msg ("looks like we didn't have success writing cpl data? ");
+				debug_msg ("looks like we didn't have success writing cpl data? ");
 		}
 		return;
 
@@ -1910,7 +1910,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 			//printf("in handle_caia2 for xlat_rd, address is 0x%016"PRIX64 "\n", event->addr);
 			cmd->afu_event->response_dma0_itag = event->itag;
 			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
-			info_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for read is 0x%x", 
+			debug_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for read is 0x%x", 
 				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
 			break;
@@ -1952,7 +1952,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 			//printf("in handle_caia2 for xlat_wr, address is 0x%016"PRIX64 "\n", event->addr);
 			cmd->afu_event->response_dma0_itag = event->itag;
 			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
-			info_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for write is 0x%x",
+			debug_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for write is 0x%x",
 				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
 			break;
@@ -1985,7 +1985,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 				(*head)->state = MEM_DONE;
 				event->resp = PSL_RESPONSE_DONE;
 				event->state = MEM_DONE;
-				info_msg("dma0_itag  0x%x for read aborted", this_itag);
+				debug_msg("dma0_itag  0x%x for read aborted", this_itag);
 				break;
 		case PSL_COMMAND_ITAG_ABRT_WR:
 			/* if tag is in reserved state, go ahead and abort */
@@ -2015,17 +2015,17 @@ void handle_caia2_cmds(struct cmd *cmd)
 				(*head)->state = MEM_DONE;
 		   		event->resp = PSL_RESPONSE_DONE;
 				event->state = MEM_DONE;
-				info_msg("dma0_itag  0x%x for write aborted", this_itag);
+				debug_msg("dma0_itag  0x%x for write aborted", this_itag);
 				break;
 		case PSL_COMMAND_XLAT_RD_TOUCH:
 		   	event->resp = PSL_RESPONSE_DONE;
 			event->state = MEM_DONE;
-			info_msg("XLAT_RD_TOUCH command doesn't return itag");
+			debug_msg("XLAT_RD_TOUCH command doesn't return itag");
 			break;
 		case PSL_COMMAND_XLAT_WR_TOUCH:
 		   	event->resp = PSL_RESPONSE_DONE;
 			event->state = MEM_DONE;
-			info_msg("XLAT_WR_TOUCH command doesn't return itag ");
+			debug_msg("XLAT_WR_TOUCH command doesn't return itag ");
 			break;
 #endif // ifdef PSL9 only
 		default:
@@ -2058,7 +2058,7 @@ void handle_dma0_port(struct cmd *cmd)
 	//printf("in handle_dma0_port and cmd->afu_event->dma0_valid is 0x%x\n", cmd->afu_event->dma0_dvalid);
 		if (cmd->afu_event->dma0_dvalid == 1)  {
 	if (event == NULL)
-		info_msg ("why is event null but dma0_dvalid ??? ");
+		debug_msg ("why is event null but dma0_dvalid ??? ");
 	this_itag = cmd->afu_event->dma0_req_itag;
 	// Look for a matching itag to process immediately
 	head = &cmd->list;
