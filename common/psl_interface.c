@@ -850,8 +850,8 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	// eventually may need to add another char for response_ext too
 	// for now, we always return the default value for pagesize, set by pslse.parms
 		event->tbuf[bp++] = (event->response_r_pgsize & 0x0F);
-		event->response_dma0_itag = 0;
-		event->response_dma0_itag_parity = 0;
+	//	event->response_dma0_itag = 0;
+	//	event->response_dma0_itag_parity = 0;
 #endif
 		event->response_valid = 0;
 	}
