@@ -850,8 +850,8 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 	// eventually may need to add another char for response_ext too
 	// for now, we always return the default value for pagesize, set by pslse.parms
 		event->tbuf[bp++] = (event->response_r_pgsize & 0x0F);
-	//	event->response_dma0_itag = 0;
-	//	event->response_dma0_itag_parity = 0;
+		event->response_dma0_itag = 0;
+		event->response_dma0_itag_parity = 0;
 #endif
 		event->response_valid = 0;
 	}
@@ -963,7 +963,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 				event->dma0_wr_partial = 0;   
 			} else {
 				bc = 128;
-				//event->dma0_wr_partial = event->dma0_req_size -128;
+				event->dma0_wr_partial -= 128;
 			}
 			for (i = 0; i < bc; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
@@ -976,7 +976,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 				bc = event->dma0_wr_partial;
 			else {
 			   bc = 128;
-			   //event->dma0_wr_partial -= 128;
+			   event->dma0_wr_partial -= 128;
 			}
 			for (i = 0; i < bc; i++) {
 				event->tbuf[bp++] = event->dma0_req_data[i];
@@ -1080,6 +1080,7 @@ static int psl_signal_psl_model(struct AFU_EVENT *event)
 	while (bp < bl) {
 		bc = send(event->sockfd, event->tbuf + bp, bl - bp, 0);
 		if (bc < 0) {
+			printf ("PSL TRANSMISSION ERROR! bc =0x%x bp= 0x%x \n", bc, bp);
 			return PSL_TRANSMISSION_ERROR; }
 		bp += bc;
 	}
@@ -1204,11 +1205,13 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 		if (errno == EWOULDBLOCK) {
 			return 0;
 		} else {
+			printf("BAILING OUT OF PSL_GET_AFU_EVENTS with errno=0x%x \n", errno);
 			return -1;
 		}
 	}
 	if (bc == 0)
-		return -1;
+		{ printf("BAILING OUT OF PSL_GET_AFU_EVENTS with bc=0 \n");
+		return -1; }
 	event->rbp += bc;
 	if (event->rbp < rbc)
 		return 0;
@@ -1374,10 +1377,12 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				return 0;
 			} else {
 				return -1;
+				printf("ERROR RETURN 1 \n");
 			}
 		}
 		if (bc == 0)
-			return -1;
+			{ printf("ERROR RETURN 2 \n");
+			return -2; }
 		event->rbp += bc;
 	}
 	if (event->rbp != 0) {
@@ -1784,8 +1789,9 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		event->dma0_req_utag = utag;
 		event->dma0_req_itag = itag;
 		event->dma0_req_type = type;			
-		if (size > 512)
+		if (size > 512) {
 			printf("MAX DMA PAYLOAD OF 512B EXCEEDED!!! \n");
+			return -512; }
 		event->dma0_req_size = size;			
 		event->dma0_atomic_op = atomic_op;
 		event->dma0_atomic_le = atomic_le;
@@ -1795,7 +1801,9 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 				memcpy(event->dma0_req_data, dma_wr_data, size);
 				event->dma0_wr_credits--;
 			} else { //the start of a >128B write operation
-				event->dma0_wr_partial = size - 128;
+				 //event->dma0_wr_partial gets decremented by psl_signal_psl_model
+				 // when data finally gets loaded into xmit buffer
+				//event->dma0_wr_partial = size - 128;
 				memcpy(event->dma0_req_data, dma_wr_data, 128);
 			}
 		//	event->dma0_wr_credits--;
@@ -1806,7 +1814,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 				event->dma0_wr_credits--;
 			} else {
 				memcpy(event->dma0_req_data, dma_wr_data, 128);
-				event->dma0_wr_partial -= 128;
+				//event->dma0_wr_partial -= 128;
 			}
 		}
 		//	event->dma0_wr_credits--;
