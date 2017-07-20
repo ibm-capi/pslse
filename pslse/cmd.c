@@ -2145,7 +2145,7 @@ void handle_dma0_port(struct cmd *cmd)
 			}
 
 		} else 
-		info_msg("%s: DMA REQUEST RECEIVED WITH UNKNOWN/INVALID ITAG = 0x%3x", cmd->afu_name, this_itag); 
+		error_msg("%s: DMA REQUEST RECEIVED WITH UNKNOWN/INVALID ITAG = 0x%x and UTAG= 0x%x" , cmd->afu_name, this_itag, cmd->afu_event->dma0_req_utag); 
 	cmd->afu_event->dma0_dvalid = 0;
 	}
 //printf("cmd->afu_event->dma0_dvalid is 0x%2x \n", cmd->afu_event->dma0_dvalid);
