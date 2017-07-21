@@ -1803,7 +1803,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 			} else { //the start of a >128B write operation
 				 //event->dma0_wr_partial gets decremented by psl_signal_psl_model
 				 // when data finally gets loaded into xmit buffer
-				//event->dma0_wr_partial = size - 128;
+				event->dma0_wr_partial = size;
 				memcpy(event->dma0_req_data, dma_wr_data, 128);
 			}
 		//	event->dma0_wr_credits--;
