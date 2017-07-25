@@ -4,6 +4,7 @@ include Makefile.vars
 include Makefile.rules
 
 OBJS = libcxl.o debug.o utils.o
+LDLIBS = -pthread
 
 all: libcxl.so libcxl.a
 
@@ -17,7 +18,7 @@ endif
 libcxl.o: $(COMMON_DIR)/misc/cxl.h
 
 libcxl.so: $(OBJS)
-	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o $@, $@) -Wl,--version-script symver.map
+	$(call Q,CC, $(CC) $(CFLAGS) -shared $^ -o $@ $(LDLIBS), $@) -Wl,--version-script symver.map
 
 libcxl.a: $(OBJS)
 	$(call Q,AR, $(AR) rcs $@ $^, $@)
