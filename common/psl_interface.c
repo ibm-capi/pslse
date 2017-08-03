@@ -419,7 +419,8 @@ psl_response(struct AFU_EVENT *event,
 	     uint32_t tag,
 	     uint32_t response_code,
 #if defined PSL9 || defined PSL9lite
-	     int credits, uint32_t cache_state, uint32_t cache_position, uint32_t pagesize, uint32_t resp_extra)
+	     int credits, uint32_t cache_state, uint32_t cache_position, 
+	     uint32_t itag, uint32_t pagesize, uint32_t resp_extra)
 #else
 	     int credits, uint32_t cache_state, uint32_t cache_position)
 #endif
@@ -436,6 +437,8 @@ psl_response(struct AFU_EVENT *event,
 		event->cache_state = cache_state;
 		event->cache_position = cache_position;
 #if defined PSL9 || defined PSL9lite
+		event->response_dma0_itag = itag;
+		event->response_dma0_itag_parity = genoddParitybitperbytes(itag);
 		event->response_r_pgsize = pagesize;
 		event->response_extra = resp_extra;
 #endif

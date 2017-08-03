@@ -1908,8 +1908,6 @@ void handle_caia2_cmds(struct cmd *cmd)
 			event->itag = this_itag;
 			event->port = 0;
 			//printf("in handle_caia2 for xlat_rd, address is 0x%016"PRIX64 "\n", event->addr);
-			cmd->afu_event->response_dma0_itag = event->itag;
-			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
 			debug_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for read is 0x%x", 
 				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
@@ -1950,8 +1948,6 @@ void handle_caia2_cmds(struct cmd *cmd)
 			event->itag = this_itag;
 			event->port = 0;
 			//printf("in handle_caia2 for xlat_wr, address is 0x%016"PRIX64 "\n", event->addr);
-			cmd->afu_event->response_dma0_itag = event->itag;
-			cmd->afu_event->response_dma0_itag_parity = generate_parity(event->itag, ODD_PARITY);
 			debug_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for write is 0x%x",
 				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
@@ -2294,7 +2290,7 @@ void handle_response(struct cmd *cmd)
 		}
 	}
 #if defined  PSL9 || defined PSL9lite
-	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0, cmd->pagesize, event->resp_extra);
+	rc = psl_response(cmd->afu_event, event->tag, event->resp, 1, 0, 0,event->itag, cmd->pagesize, event->resp_extra);
 	debug_msg("returning pagesize value of 0x%x and resp_extra = 0x%x" , cmd->pagesize, event->resp_extra);
 #else
 	rc = psl_response( cmd->afu_event, event->tag, event->resp, 1, 0, 0 );
