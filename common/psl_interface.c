@@ -1380,12 +1380,10 @@ int psl_get_psl_events(struct AFU_EVENT *event)
 				return 0;
 			} else {
 				return -1;
-				printf("ERROR RETURN 1 \n");
 			}
 		}
 		if (bc == 0)
-			{ printf("ERROR RETURN 2 \n");
-			return -2; }
+			return -2;
 		event->rbp += bc;
 	}
 	if (event->rbp != 0) {
