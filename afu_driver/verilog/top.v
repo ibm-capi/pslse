@@ -339,63 +339,125 @@ module top (
   assign ha_jeapar    = ha_jeapar_top;
 
   always @ ( ha_pclock ) begin
+    // Create a temporary copy of all host-to-accelerator signals. The call to
+    // `psl_bfm` modifies these values, which will then be scheduled onto the
+    // next simulation cycle. Not doing so will create a race condition between
+    // the ha_*_top signals and all processes sensitive to `ha_pclock`.
+    automatic logic          ha_jval_top_tmp      = ha_jval_top;
+    automatic logic [0:7]    ha_jcom_top_tmp      = ha_jcom_top;
+    automatic logic          ha_jcompar_top_tmp   = ha_jcompar_top;
+    automatic logic [0:63]   ha_jea_top_tmp       = ha_jea_top;
+    automatic logic          ha_jeapar_top_tmp    = ha_jeapar_top;
+    automatic logic          ha_mmval_top_tmp     = ha_mmval_top;
+    automatic logic          ha_mmcfg_top_tmp     = ha_mmcfg_top;
+    automatic logic          ha_mmrnw_top_tmp     = ha_mmrnw_top;
+    automatic logic          ha_mmdw_top_tmp      = ha_mmdw_top;
+    automatic logic [0:23]   ha_mmad_top_tmp      = ha_mmad_top;
+    automatic logic          ha_mmadpar_top_tmp   = ha_mmadpar_top;
+    automatic logic [0:63]   ha_mmdata_top_tmp    = ha_mmdata_top;
+    automatic logic          ha_mmdatapar_top_tmp = ha_mmdatapar_top;
+    automatic logic [0:7]    ha_croom_top_tmp     = ha_croom_top;
+    automatic logic          ha_brvalid_top_tmp   = ha_brvalid_top;
+    automatic logic [0:7]    ha_brtag_top_tmp     = ha_brtag_top;
+    automatic logic          ha_brtagpar_top_tmp  = ha_brtagpar_top;
+    automatic logic          ha_bwvalid_top_tmp   = ha_bwvalid_top;
+    automatic logic [0:7]    ha_bwtag_top_tmp     = ha_bwtag_top;
+    automatic logic          ha_bwtagpar_top_tmp  = ha_bwtagpar_top;
+    automatic logic [0:1023] ha_bwdata_top_tmp    = ha_bwdata_top;
+    automatic logic [0:15]   ha_bwpar_top_tmp     = ha_bwpar_top;
+    automatic logic          ha_rvalid_top_tmp    = ha_rvalid_top;
+    automatic logic [0:7]    ha_rtag_top_tmp      = ha_rtag_top;
+    automatic logic          ha_rtagpar_top_tmp   = ha_rtagpar_top;
+    automatic logic [0:7]    ha_response_top_tmp  = ha_response_top;
+    automatic logic [0:8]    ha_rcredits_top_tmp  = ha_rcredits_top;
+
     simulationTime = $time;
     set_simulation_time(simulationTime);
 //    $display("%d : Calling to C ", simulationTime);
-    psl_bfm( ha_pclock, 
-             ha_jval_top, 
-             ha_jcom_top, 
-             ha_jcompar_top, 
-             ha_jea_top,
-	     ha_jeapar_top, 
-             ah_jrunning_top,  
-             ah_jdone_top,
-	     ah_jcack_top, 
-             ah_jerror_top, 
-             ah_brlat_top,  
-             ah_jyield,
-	     ah_tbreq_top, 
-             ah_paren_top, 
-             ha_mmval_top,
-             ha_mmcfg_top, 
-             ha_mmrnw_top, 
-             ha_mmdw_top,
-             ha_mmad_top, 
-             ha_mmadpar_top, 
-             ha_mmdata_top, 
-             ha_mmdatapar_top,
-             ah_mmack_top, 
-             ah_mmdata_top, 
-             ah_mmdatapar_top,
-             ha_croom_top,
-             ah_cvalid_top, 
-             ah_ctag_top, 
-             ah_ctagpar_top, 
-             ah_com_top, 
-             ah_compar_top, 
-             ah_cabt_top, 
-             ah_cea_top, 
-             ah_ceapar_top, 
-             ah_cch_top, 
-             ah_csize_top, 
-             ha_brvalid_top, 
-             ha_brtag_top, 
-             ha_brtagpar_top, 
-             ah_brdata_top, 
-             ah_brpar_top, 
-             ah_brvalid_top, 
-             ah_brtag_top,
-             ha_bwvalid_top, 
-             ha_bwtag_top, 		// 8 bits
-             ha_bwtagpar_top,
-             ha_bwdata_top, 		// 1024 bits
-             ha_bwpar_top,	// 16 bits
-             ha_rvalid_top, 
-             ha_rtag_top, 		// 8 bits
-             ha_rtagpar_top,
-             ha_response_top, 		// 8 bits
-             ha_rcredits_top		// 9 bits
-             );
+    psl_bfm(
+      ha_pclock,
+      ha_jval_top_tmp,
+      ha_jcom_top_tmp,
+      ha_jcompar_top_tmp,
+      ha_jea_top_tmp,
+      ha_jeapar_top_tmp,
+      ah_jrunning_top,
+      ah_jdone_top,
+      ah_jcack_top,
+      ah_jerror_top,
+      ah_brlat_top,
+      ah_jyield,
+      ah_tbreq_top,
+      ah_paren_top,
+      ha_mmval_top_tmp,
+      ha_mmcfg_top_tmp,
+      ha_mmrnw_top_tmp,
+      ha_mmdw_top_tmp,
+      ha_mmad_top_tmp,
+      ha_mmadpar_top_tmp,
+      ha_mmdata_top_tmp,
+      ha_mmdatapar_top_tmp,
+      ah_mmack_top,
+      ah_mmdata_top,
+      ah_mmdatapar_top,
+      ha_croom_top_tmp,
+      ah_cvalid_top,
+      ah_ctag_top,
+      ah_ctagpar_top,
+      ah_com_top,
+      ah_compar_top,
+      ah_cabt_top,
+      ah_cea_top,
+      ah_ceapar_top,
+      ah_cch_top,
+      ah_csize_top,
+      ha_brvalid_top_tmp,
+      ha_brtag_top_tmp,
+      ha_brtagpar_top_tmp,
+      ah_brdata_top,
+      ah_brpar_top,
+      ah_brvalid_top,
+      ah_brtag_top,
+      ha_bwvalid_top_tmp,
+      ha_bwtag_top_tmp,
+      ha_bwtagpar_top_tmp,
+      ha_bwdata_top_tmp,
+      ha_bwpar_top_tmp,
+      ha_rvalid_top_tmp,
+      ha_rtag_top_tmp,
+      ha_rtagpar_top_tmp,
+      ha_response_top_tmp,
+      ha_rcredits_top_tmp
+    );
+
+    // Schedule the changes made by `psl_bfm` on the next simulation cycle.
+    ha_jval_top      <= ha_jval_top_tmp;
+    ha_jcom_top      <= ha_jcom_top_tmp;
+    ha_jcompar_top   <= ha_jcompar_top_tmp;
+    ha_jea_top       <= ha_jea_top_tmp;
+    ha_jeapar_top    <= ha_jeapar_top_tmp;
+    ha_mmval_top     <= ha_mmval_top_tmp;
+    ha_mmcfg_top     <= ha_mmcfg_top_tmp;
+    ha_mmrnw_top     <= ha_mmrnw_top_tmp;
+    ha_mmdw_top      <= ha_mmdw_top_tmp;
+    ha_mmad_top      <= ha_mmad_top_tmp;
+    ha_mmadpar_top   <= ha_mmadpar_top_tmp;
+    ha_mmdata_top    <= ha_mmdata_top_tmp;
+    ha_mmdatapar_top <= ha_mmdatapar_top_tmp;
+    ha_croom_top     <= ha_croom_top_tmp;
+    ha_brvalid_top   <= ha_brvalid_top_tmp;
+    ha_brtag_top     <= ha_brtag_top_tmp;
+    ha_brtagpar_top  <= ha_brtagpar_top_tmp;
+    ha_bwvalid_top   <= ha_bwvalid_top_tmp;
+    ha_bwtag_top     <= ha_bwtag_top_tmp;
+    ha_bwtagpar_top  <= ha_bwtagpar_top_tmp;
+    ha_bwdata_top    <= ha_bwdata_top_tmp;
+    ha_bwpar_top     <= ha_bwpar_top_tmp;
+    ha_rvalid_top    <= ha_rvalid_top_tmp;
+    ha_rtag_top      <= ha_rtag_top_tmp;
+    ha_rtagpar_top   <= ha_rtagpar_top_tmp;
+    ha_response_top  <= ha_response_top_tmp;
+    ha_rcredits_top  <= ha_rcredits_top_tmp;
   end
 
   always @ (negedge ha_pclock) begin
