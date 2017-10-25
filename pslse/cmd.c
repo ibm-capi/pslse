@@ -520,7 +520,11 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_WRITE_MS:	/*fall through */
 	case PSL_COMMAND_WRITE_NA:	/*fall through */
 	case PSL_COMMAND_WRITE_INJ:	/*fall through */
+#if defined PSL9lite || defined PSL9
+		if ((latency < 0 ) || (latency > 2))
+#else
 		if (!(latency % 2) || (latency > 3))
+#endif
 			error_msg("Write with invalid br_lat=%d", latency);
 		_add_write(cmd, handle, tag, command, abort, addr, size,
 			   unlock);
