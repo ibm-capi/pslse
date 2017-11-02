@@ -124,7 +124,7 @@ static void _debug_send_32_32(FILE * fp, DBG_HEADER header, uint32_t value0,
 		value0 = htonl(value0);
 		memcpy(buffer + offset, (char *)&value0, sizeof(value0));
 		offset += sizeof(value0);
-		value0 = htonl(value1);
+		value1 = htonl(value1);
 		memcpy(buffer + offset, (char *)&value1, sizeof(value1));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
