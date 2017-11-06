@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -553,6 +553,16 @@ int main(int argc, char **argv)
 	// Report version
 	info_msg("PSLSE version %d.%03d compiled @ %s %s", PSLSE_VERSION_MAJOR,
 		 PSLSE_VERSION_MINOR, __DATE__, __TIME__);
+#ifdef PSL9
+	info_msg("PSLSE version supports PSL9 \n");
+#endif /* ifdef PSL9 */
+#ifdef PSL9lite
+	info_msg("PSLSE version supports PSL9lite \n");
+#endif /* ifdef PSL9lite */
+#ifdef PSL8
+	info_msg("PSLSE version supports only PSL8 \n");
+#endif /* #ifdef PSL8 */
+
 	debug_send_version(fp, PSLSE_VERSION_MAJOR, PSLSE_VERSION_MINOR);
 
 	// Parse parameters file

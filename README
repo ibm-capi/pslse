@@ -2,18 +2,26 @@
 | Power Service Layer Simulation Engine |
 +---------------------------------------+
 
-This repository contains code for simulation and testing of a customer designed Accelerated Functional Unit (AFU) and it's accompanying application by
+This repository contains code for simulation and testing of a customer designed 
+Accelerated Functional Unit (AFU) and it's accompanying application by
 simulating the connection to the Power Service Layer (PSL) as part of IBM's
-CAPI interconnect on Power8 systems.  The "libcxl" directory contains a
-simulation only version of the libcxl library functions for hardware provided
-at https://github.com/ibm-capi/libcxl.  That code is an abstraction layer that
-interfaces with kernel level "cxl" code for communicating with an AFU in real
-hardware.  The libcxl code server two purposes.  First, it provides a simple
-programming interface for accessing AFU devices.  Second, if code is written
-using this abstraction layer then the same code can be compiled with the
-alternate version of libcxl.c and libcxl.h found on this repository for
-co-simulation of the AFU on most industry standard Verilog simulators.
+CAPI interconnect on Power8 and Power9 systems.  
 
+The "libcxl" directory contains a simulation only version of the libcxl library 
+functions for hardware provided at https://github.com/ibm-capi/libcxl.  That 
+code is an abstraction layer that interfaces with kernel level "cxl" code for 
+communicating with an AFU in real hardware.  The libcxl code server two purposes.  
+First, it provides a simple programming interface for accessing AFU devices.  
+Second, if code is written using this abstraction layer then the same code can 
+be compiled with the alternate version of libcxl.c and libcxl.h found on this 
+repository for co-simulation of the AFU on most industry standard Verilog 
+simulators.
+
+The "pslse" directory contains the code that models much of the cxl kernel and 
+Power System hardware behavior and communicates with the users accelerator 
+design running in a third party event simulator.  The hardware interface and 
+functionality varies between Power8 and Power9, so there are #defines in 
+common/psl_interface_t.h to control which system is being modeled.
 
 
 *** DIRECTORIES ***

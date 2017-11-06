@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,7 +89,9 @@ static void _attach(struct psl *psl, struct client *client)
 	// interestingly, I can always save it
 	// add to client type.
 	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
-	client->wed = ntohll(wed);
+	// wed came over in be format
+	// since we are modeling the psl register here, we should leave it be
+	client->wed = wed; // ntohll(wed);
 
 	// Send start to AFU
 	// only add PSL_JOB_START for dedicated and master clients.
@@ -373,8 +375,13 @@ int _handle_aux2(struct psl *psl, uint32_t * parity, uint32_t * latency,
 		dbg_aux2 |= read_latency & DBG_AUX2_LAT_MASK;
 		if (job_done && job_running)
 			error_msg("_handle_aux2: ah_jdone & ah_jrunning asserted together");
+#if defined PSL9lite || defined PSL9
+		if ((read_latency != 0) && (read_latency != 1) && (read_latency != 2))
+			warn_msg("_handle_aux2: ah_brlat must be either 0, 1 or 2");
+#else
 		if ((read_latency != 1) && (read_latency != 3))
 			warn_msg("_handle_aux2: ah_brlat must be either 1 or 3");
+#endif 
 		*parity = par_enable;
 		*latency = read_latency;
 
@@ -400,6 +407,7 @@ static void _handle_afu(struct psl *psl)
 
 	reset_done = _handle_aux2(psl, &(psl->parity_enabled),
 				 &(psl->latency), &error);
+//printf("after reset_done in handle_afu \n");
 	if (error) {
 	  if (dedicated_mode_support(psl->mmio)) {
 		client = psl->client[0];
@@ -431,6 +439,16 @@ static void _handle_afu(struct psl *psl)
 	if (psl->cmd != NULL) {
 		if (reset_done)
 			psl->cmd->credits = psl->cmd->parms->credits;
+#if defined PSL9lite || defined PSL9
+		handle_caia2_cmds(psl->cmd);
+#endif /* ifdef PSL9 or PSL9lite */
+#ifdef PSL9
+		handle_dma0_port(psl->cmd);
+		handle_dma0_write(psl->cmd);
+		handle_dma0_sent_sts(psl->cmd);
+		handle_dma0_read(psl->cmd);
+#endif /* ifdef PSL9 */
+
 		handle_response(psl->cmd);
 		handle_buffer_write(psl->cmd);
 		handle_buffer_read(psl->cmd);
@@ -439,6 +457,7 @@ static void _handle_afu(struct psl *psl)
 		handle_touch(psl->cmd);
 		handle_cmd(psl->cmd, psl->parity_enabled, psl->latency);
 		handle_interrupt(psl->cmd);
+
 	}
 }
 
@@ -487,6 +506,7 @@ static void _handle_client(struct psl *psl, struct client *client)
 			if (client->mem_access != NULL)
 				handle_mem_return(psl->cmd, cmd, client->fd);
 			client->mem_access = NULL;
+			debug_msg("PSL LOOP SETTING mem_access back to NULL");
 			break;
 		case PSLSE_MMIO_MAP:
 			handle_mmio_map(psl->mmio, client);
@@ -531,19 +551,23 @@ static void *_psl_loop(void *ptr)
 		// not be presented to an idle AFU to keep simulation
 		// waveforms from getting huge with no activity cycles.
 		if (psl->state != PSLSE_IDLE) {
+		  // if we have clients or we are in the reset state, refresh idle_cycles 
+		  // so that the afu clock will not be allowed to stop to save afu event simulator cycles
+		  if ((psl->attached_clients > 0) || (psl->state == PSLSE_RESET)) {
 			psl->idle_cycles = PSL_IDLE_CYCLES;
 			if (stopped)
 				info_msg("Clocking %s", psl->name);
 			fflush(stdout);
 			stopped = 0;
+		  }
 		}
-
 		if (psl->idle_cycles) {
 			// Clock AFU
+//printf("before psl_signal_afu_model in psl_loop \n");
 			psl_signal_afu_model(psl->afu_event);
 			// Check for events from AFU
 			events = psl_get_afu_events(psl->afu_event);
-
+//printf("after psl_get_afu_events, events is 0x%3x \n", events);
 			// Error on socket
 			if (events < 0) {
 				warn_msg("Lost connection with AFU");
@@ -622,6 +646,10 @@ static void *_psl_loop(void *ptr)
 				}
 				info_msg("Dumping command tag=0x%02x",
 					 event->tag);
+#ifdef PSL9
+				info_msg("Dumping itag=0x%02x utag=0x%02x type=0x%02x state=0x%02x",
+					event->itag, event->utag, event->type, event->state);
+#endif
 				if (event->data) {
 					free(event->data);
 				}

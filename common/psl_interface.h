@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,7 +69,13 @@ int psl_mmio_write(struct AFU_EVENT *event,
 int psl_response(struct AFU_EVENT *event,
 		 uint32_t tag,
 		 uint32_t response_code,
+#if defined PSL9 || defined PSL9lite
+//		 uint32_t response_extra, uint32_t response_r_pgsize,
+		 int credits, uint32_t cache_state, uint32_t cache_position, 
+		 uint32_t itag, uint32_t pagesize, uint32_t resp_extra);
+#else
 		 int credits, uint32_t cache_state, uint32_t cache_position);
+#endif
 
 /* Call this to read a buffer.  Length must be either 64 or 128 which is the
  * transfer size in bytes. For 64B transfers, only the first half of the array
@@ -77,6 +83,16 @@ int psl_response(struct AFU_EVENT *event,
 
 int psl_buffer_read(struct AFU_EVENT *event,
 		    uint32_t tag, uint64_t address, uint32_t length);
+
+#ifdef PSL9
+/* Call this to read the DMA 0 bus buffer to get the write data and DMA operation specific data. 
+ * Length must be 128 which is the transfer size in bytes. DMA operation specific data is utag, itag,
+ * type and size in bytes. (only size supported now is 128)   */
+
+int psl_dma0_data_buffer_read(struct AFU_EVENT *event,
+		    uint32_t tag, uint64_t address, uint32_t length);
+
+#endif
 
 /* Call this to write a buffer, write_data is a 32 element array of 32-bit
  * values, write_parity is a 4 element array of 32-bit values.  Length must be
@@ -88,6 +104,39 @@ int psl_buffer_write(struct AFU_EVENT *event,
 		     uint64_t address,
 		     uint32_t length,
 		     uint8_t * write_data, uint8_t * write_parity);
+
+#ifdef PSL9
+/* Call this to write the DMA0 read completion buffer, write_data is a 32 element array of 32-bit
+ * values.  Size must be 128 at least initially, which is transfer size in bytes  */
+
+int psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
+		     uint32_t utag,
+		     uint32_t dsize,
+		     uint32_t cpl_type,
+		     uint32_t cpl_size,
+	 	     uint32_t cpl_laddr,
+		     uint32_t cpl_byte_count,
+		     uint8_t * write_data);
+
+/* Call this to write a dma port utag sent back on the DMA bus. */
+
+int
+psl_dma0_sent_utag(struct AFU_EVENT *event,
+		 uint32_t utag,
+		 uint32_t sent_sts);
+
+int
+psl_get_dma0_port(struct AFU_EVENT *event,
+		uint32_t * utag,
+		uint32_t * itag,
+		uint32_t * type,
+		uint32_t * size,
+		uint32_t * atomic_op,
+		uint32_t * atomic_le,
+		uint8_t * dma0_req_data ); 
+
+
+#endif
 
 /* Call after an event is received from the AFU to see if previous MMIO
  * operation has been acknowledged and extract read MMIO data if available. */
@@ -114,7 +163,11 @@ int psl_get_command(struct AFU_EVENT *event,
 		    uint32_t * tag_parity,
 		    uint64_t * address,
 		    uint64_t * address_parity,
+#if defined PSL9 || defined PSL9lite
+		    uint32_t * size, uint32_t * abort, uint32_t * handle, uint32_t * cpagesize);
+#else
 		    uint32_t * size, uint32_t * abort, uint32_t * handle);
+#endif
 
 /* Call this periodically to send events and clocking synchronization to AFU */
 
@@ -153,7 +206,11 @@ int psl_afu_command(struct AFU_EVENT *event,
 		    uint32_t code_parity,
 		    uint64_t address,
 		    uint64_t address_parity,
+#if defined PSL9 || defined PSL9lite
+		    uint32_t size, uint32_t abort, uint32_t pad, uint32_t cpagesize);
+#else
 		    uint32_t size, uint32_t abort, uint32_t pad);
+#endif
 
 /* Call this on the AFU side to build an MMIO acknowledge. Read data is used
  * only for MMIO reads, ignored otherwise */
@@ -191,4 +248,33 @@ int psl_get_aux2_change(struct AFU_EVENT *event,
 			uint32_t * job_yield,
 			uint32_t * tb_request,
 			uint32_t * par_enable, uint32_t * read_latency);
+
+#ifdef PSL9
+/* Call this on AFU side to send a DM0 request to PSL */
+
+int psl_afu_dma0_req(struct AFU_EVENT *event,
+		uint32_t utag,
+		uint32_t itag,
+		uint32_t type,
+		uint32_t size,
+		uint32_t atomic_op,
+		uint32_t atomic_le,
+		unsigned char dma_wr_data[128] );
+
+int
+afu_get_dma0_cpl_bus_data(struct AFU_EVENT *event,
+		 uint32_t utag,
+		 uint32_t cpl_type,
+		 uint32_t cpl_size, 
+		 uint32_t laddr,
+		 uint32_t byte_count, uint8_t * dma_rd_data);
+
+int
+afu_get_dma0_sent_utag(struct AFU_EVENT *event,
+		 uint32_t utag,
+		 uint32_t sent_sts);
+
+
+#endif /* ifdef PSL9 */
+
 #endif

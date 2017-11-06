@@ -57,7 +57,7 @@ private:
 
     /* private function to be called at the end of a command to update machine
      * settings in case the config space was changed */
-    void read_machine_config ();
+    void read_machine_config (AFU_EVENT* afu_event);
 
     void record_command (bool error_state, uint16_t cycle);
     void record_response (bool error_state, uint16_t cycle, uint8_t response_code);
@@ -77,6 +77,9 @@ private:
     uint8_t get_buffer_read_parity ()const;
 
 public:
+#ifdef	PSL9
+    uint32_t atomic_op;
+#endif
     Machine (uint16_t context);
 
     /* configures the machine when AFU receives an MMIO write, only modifies
@@ -124,6 +127,11 @@ public:
 
     /* resets the machine, clears the config space and cache line */
     void reset ();
+
+#ifdef	PSL9
+    void process_dma_read(AFU_EVENT *);
+    void process_dma_write(AFU_EVENT *);
+#endif
 
     ~Machine ();
 };

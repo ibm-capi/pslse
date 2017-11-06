@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,15 @@
 #define _PARMS_H_
 
 #include <stdio.h>
+#include "../common/psl_interface.h"
 
 struct parms {
 	unsigned int timeout;
 	unsigned int credits;
 	unsigned int seed;
+#if defined PSL9 || defined PSL9lite
+	unsigned int pagesize;
+#endif
 	unsigned int resp_percent;
 	unsigned int paged_percent;
 	unsigned int reorder_percent;
