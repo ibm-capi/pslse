@@ -415,6 +415,23 @@ void debug_cmd_update(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
 			       resp);
 }
 
+#if defined PSL9 
+void debug_cmd_caia2(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t type)
+{
+	_debug_send_id_8_16_16(fp, DBG_HEADER_CMD_CAIA2, id, tag, context,
+			       type);
+}
+
+void debug_cmd_dma0(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t type)
+{
+	_debug_send_id_8_16_16(fp, DBG_HEADER_CMD_DMA0, id, tag, context,
+			       type);
+}
+
+#endif
+
 void debug_cmd_client(FILE * fp, uint8_t id, uint8_t tag, uint16_t context)
 {
 	_debug_send_id_8_16(fp, DBG_HEADER_CMD_CLIENT_REQ, id, tag, context);

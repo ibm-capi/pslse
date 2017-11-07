@@ -1873,6 +1873,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 			} else if (event->state == MEM_RECEIVED) {
 				//printf("HANDLE_CAIA2_CMDS calling handle cas op \n");
 				_handle_cas_op(cmd, event);}
+				debug_cmd_caia2(cmd->dbg_fp, cmd->dbg_id, event->tag,
+			 		event->context, 0x1);
 			break;
 #ifdef PSL9
 		case PSL_COMMAND_XLAT_RD_P0:
@@ -1915,6 +1917,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 			debug_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for read is 0x%x", 
 				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
+			debug_cmd_caia2(cmd->dbg_fp, cmd->dbg_id, event->tag,
+			 	event->context, 0x2);
 			break;
 		case PSL_COMMAND_XLAT_WR_P0:
 			need_a_tag = 1;
@@ -1955,6 +1959,8 @@ void handle_caia2_cmds(struct cmd *cmd)
 			debug_msg("handle_caia2_cmd: for tag=0x%x dma0_itag for write is 0x%x",
 				event->tag, event->itag);
 			event->state = DMA_ITAG_RET;
+			debug_cmd_caia2(cmd->dbg_fp, cmd->dbg_id, event->tag,
+			 	event->context, 0x3);
 			break;
 		case PSL_COMMAND_ITAG_ABRT_RD:
 			/* if tag is in reserved state, go ahead and abort */
@@ -2144,6 +2150,8 @@ void handle_dma0_port(struct cmd *cmd)
 		  		event->itag, event->utag, event->addr, event->dtype, event->dsize);
 			}
 
+		debug_cmd_dma0(cmd->dbg_fp, cmd->dbg_id, event->tag,
+			 	event->context, event->type);
 		} else 
 		error_msg("%s: DMA REQUEST RECEIVED WITH UNKNOWN/INVALID ITAG = 0x%x and UTAG= 0x%x" , cmd->afu_name, this_itag, cmd->afu_event->dma0_req_utag); 
 	cmd->afu_event->dma0_dvalid = 0;
