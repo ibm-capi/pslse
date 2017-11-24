@@ -27,7 +27,7 @@
 #include <unistd.h>
 
 // Choose ONE to define what PSL support level will be
-#define PSL8 1
+//#define PSL8 1
 //#define PSL9lite 1
 // #define PSL9 1
 
