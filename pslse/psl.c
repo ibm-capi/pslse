@@ -91,7 +91,11 @@ static void _attach(struct psl *psl, struct client *client)
 	memcpy((char *)&wed, (char *)buffer, sizeof(uint64_t));
 	// wed came over in be format
 	// since we are modeling the psl register here, we should leave it be
+#if defined PSL9lite || defined PSL9
 	client->wed = wed; // ntohll(wed);
+#else
+	client->wed = ntohll(wed);
+#endif 
 
 	// Send start to AFU
 	// only add PSL_JOB_START for dedicated and master clients.
