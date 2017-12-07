@@ -44,7 +44,7 @@ static uint32_t genoddParitybitperbytes(uint64_t data)
 	return oddparity;
 }
 
-static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
+/*static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
 			       uint32_t secondary, uint32_t tertiary)
 {
 		printf("PSL_SOCKET:\tEntering set_protocol_level.\n");
@@ -60,7 +60,7 @@ static void set_protocol_level(struct AFU_EVENT *event, uint32_t primary,
 	event->proto_primary = primary;
 	event->proto_secondary = secondary;
 	event->proto_tertiary = tertiary;
-}
+} */
 
 static int establish_protocol(struct AFU_EVENT *event)
 {
@@ -720,8 +720,11 @@ psl_get_command(struct AFU_EVENT *event,
 
 int psl_signal_afu_model(struct AFU_EVENT *event)
 {
-        int i, bc, bl, bytes_to_xfer;
+        int i, bc, bl;
 	int bp = 1;
+#ifdef PSL9
+	int bytes_to_xfer;
+#endif
 	if (event->clock != 0)
 		return PSL_TRANSMISSION_ERROR;
 	event->clock = 1;
@@ -1372,8 +1375,11 @@ int psl_get_afu_events(struct AFU_EVENT *event)
 
 int psl_get_psl_events(struct AFU_EVENT *event)
 {
-        int bc, bytes_to_read;
+        int bc;
 	uint32_t rbc = 1;
+#ifdef PSL9
+	int bytes_to_read;
+#endif
 	if (event->rbp == 0) {
 		if ((bc = recv(event->sockfd, event->rbuf, 1, 0)) == -1) {
 			if (errno == EWOULDBLOCK) {

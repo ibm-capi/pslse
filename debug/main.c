@@ -354,6 +354,56 @@ static int _parse_cmd_update(FILE * fp, DBG_HEADER header)
 	return 0;
 }
 
+#if defined PSL9
+static int _parse_cmd_caia2(FILE * fp, DBG_HEADER header)
+{
+	uint16_t context, type;
+	uint8_t id, tag;
+	char *name;
+
+	if (debug_get_8(fp, &id) < 1)
+		return -1;
+	if (debug_get_8(fp, &tag) < 1)
+		return -1;
+	if (debug_get_16(fp, &context) < 1)
+		return -1;
+	if (debug_get_16(fp, &type) < 1)
+		return -1;
+	name = _afu_name(id);
+
+	printf("%s,%d:CMD: handle CAIA2 tag=0x%02x type=0x%02x\n", name, context,
+	       tag, type);
+	free(name);
+
+	return 0;
+}
+
+static int _parse_cmd_dma0(FILE * fp, DBG_HEADER header)
+{
+	uint16_t context, type;
+	uint8_t id, tag;
+	char *name;
+
+	if (debug_get_8(fp, &id) < 1)
+		return -1;
+	if (debug_get_8(fp, &tag) < 1)
+		return -1;
+	if (debug_get_16(fp, &context) < 1)
+		return -1;
+	if (debug_get_16(fp, &type) < 1)
+		return -1;
+	name = _afu_name(id);
+
+	printf("%s,%d:CMD: handle DMA0 tag=0x%02x type=0x%02x\n", name, context,
+	       tag, type);
+	free(name);
+
+	return 0;
+}
+
+
+#endif
+
 static int _parse_cmd_client(FILE * fp, DBG_HEADER header)
 {
 	uint16_t context;
@@ -591,6 +641,17 @@ static int _parse_socket(FILE * fp, DBG_HEADER header, int silent)
 	case PSLSE_AFU_ERROR:
 		printf("AFU ERROR");
 		break;
+#ifdef PSL9
+	case PSLSE_DMA0_RD:
+		printf("DMA0 READ");
+		break;
+	case PSLSE_DMA0_WR:
+		printf("DMA0 WRITE");
+		break;
+	case PSLSE_DMA0_WR_AMO:
+		printf("DMA0 WRITE ATOMIC");
+		break;
+#endif
 	default:
 		printf("Unknown:0x%02x", type);
 	}
@@ -668,6 +729,16 @@ int main(int argc, char **argv)
 			if (_parse_cmd_update(fp, header) < 0)
 				return -1;
 			break;
+#ifdef PSL9
+		case DBG_HEADER_CMD_CAIA2:
+			if (_parse_cmd_caia2(fp, header) < 0)
+				return -1;
+			break;
+		case DBG_HEADER_CMD_DMA0:
+			if (_parse_cmd_dma0(fp, header) < 0)
+				return -1;
+			break;
+#endif
 		case DBG_HEADER_CMD_CLIENT_ACK:
 		case DBG_HEADER_CMD_CLIENT_REQ:
 			if (_parse_cmd_client(fp, header) < 0)

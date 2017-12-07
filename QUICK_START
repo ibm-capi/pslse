@@ -51,7 +51,8 @@ SETUP:
 	the libcxl path at runtime.  Alternatively, you can compile with
 	libcxl.a.  When using libcxl.a you don't need to set any environment
 	variables but you do need to recompile your application any time that
-	libcxl is recompiled.
+	libcxl is recompiled. for example, ensure that your LD_LIBRARY_PATH env
+	variable has these paths in it - $PSLSE_INSTALL_DIR/libcxl:$PSLSE_INSTALL_DIR/afu_driver/src
 
 6) Use sample_app/app.c as an example to start coding your application with
 	libcxl calls using the functions in libcxl.h.
