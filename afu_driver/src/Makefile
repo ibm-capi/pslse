@@ -4,6 +4,9 @@ include Makefile.vars
 include Makefile.rules
 
 OBJS = afu_driver.o psl_interface.o
+myString := "afu_driver"
+echoString :=  $$LD_LIBRARY_PATH
+empty := $(findstring($(myString), $(echoString)))
 
 # if VPI_USER_H_DIR is not set, try to default it to the Cadence install dir path
 ifndef VPI_USER_H_DIR
@@ -24,7 +27,13 @@ ifndef VPI_USER_H_DIR
   $(error Must set VPI_USER_H_DIR to point to include path for the simulator)
 endif
 
-all: veriuser.sl libdpi.so
+all: veriuser.sl libdpi.so \
+	set_env
+
+set_env:
+	$(ifneq($(myString), $(empty)))
+		@echo "ALERT!! set the env variable LD_LIBRARY_PATH as mentioned in the QUICK_START guide"
+	$(endif)
 
 veriuser.sl libdpi.so : afu_driver.o psl_interface.o
 	$(call Q,CC, $(CC) $(LINK_FLAGS) -o $@ $^, $@)

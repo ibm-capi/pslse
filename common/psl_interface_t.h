@@ -29,7 +29,7 @@
 // Choose ONE to define what PSL support level will be
 //#define PSL8 1
 //#define PSL9lite 1
-#define PSL9 1
+// #define PSL9 1
 
 // this is the size of the transimit and receive buffers in the afu_event
 // it needs to be large enough to transmit/receive the maximum size of legally concurrent events
