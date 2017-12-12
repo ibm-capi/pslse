@@ -29,7 +29,6 @@ LIBCXL_1 {
 		cxl_errinfo_size;
 		cxl_errinfor_read;
 
-		cxl_event_pending;
 		cxl_pending_event;
 		cxl_read_event;
 		cxl_read_expected_event;
