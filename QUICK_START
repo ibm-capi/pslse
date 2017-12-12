@@ -1,5 +1,16 @@
 PSLSE Quick Start Guide
 
+Environment Variable Setting:
+
+This code checkout would run well for PSL8 based AFU verification as well as for PSL9 based verification
+Ensure that the following environment variable setting is done based on the usage
+	for PSL8 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
+	export PSL8=1
+	for PSL9 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
+	export PSL9=1
+
+	CAUTION:	if we have both PSL8 and PSL9 environment variables set on a window, we will end up with undesired results.
+
 SETUP:
 
 1) Use "make" to build the code in afu_driver/src.  You will have to first set
@@ -15,11 +26,18 @@ SETUP:
 	- the Makefile ensures that the appropriate env variable "VPI_USER_H_DIR" is set
 
 2) Use top.v in afu_driver/verilog as a top level wrapper around your AFU
-	Verilog.  Build a model as required for your simulator.
+	Verilog.  Build a model as required for your simulator.  You may need to set flags
+	or options to allow SystemVerilog keywords as top.v include references to
+	C code that uses SystemVerilog DPI functionality.
+	NOTE: when compiling the top.v, ensure that proper "define" is passed on, based on the usage
+	ie, for PSL8 based AFU verification "-define PSL8" must be provided to the compiler
+	for PSL9 based AFU verification "-define PSL9" must be provided.
 
-3) Use "make" to compile the code in the directory pslse.  This creates a
-	stand-alone executable that mimics the behavior of PSL/CAPP and the
-	kernel code that supports it.
+3) Use "make" to compile the code in the directory pslse. You will have to first
+        set the appropriate #define in common/psl_interface_t.h to select the PSL
+        version you want to work with; be sure to do a "make clean" before your make. 
+	This creates a stand-alone executable that mimics the behavior of 
+	PSL/CAPP and the kernel code that supports it.
 
 4) Use "make" to compile the code in the directory libcxl.  This creates both
 	libcxl.a archive library version of libcxl as well as libcxl.so shared
@@ -33,7 +51,8 @@ SETUP:
 	the libcxl path at runtime.  Alternatively, you can compile with
 	libcxl.a.  When using libcxl.a you don't need to set any environment
 	variables but you do need to recompile your application any time that
-	libcxl is recompiled.
+	libcxl is recompiled. for example, ensure that your LD_LIBRARY_PATH env
+	variable has these paths in it - $PSLSE_INSTALL_DIR/libcxl:$PSLSE_INSTALL_DIR/afu_driver/src
 
 6) Use sample_app/app.c as an example to start coding your application with
 	libcxl calls using the functions in libcxl.h.
@@ -44,9 +63,11 @@ SETUP:
 RUNNING:
 
 1) Start your simulator with the model that uses top.v as it's top level and
-   uses the afu_driver/src code for VPI functions.  You should get a message in
-   the simulator output similiar to this: "AFU Server is waiting for connection
-   on machine.domain.com:32768"
+   uses the afu_driver/src code for DPI functions.  Most simulators use LD_LIBRARY_PATH
+   to find the afu_driver/src compiled code and DPI libraries.  Check with your simulator
+   for complete details.  Allow your simulator to advance time and you should eventually 
+   get a message in the simulator output similiar to this: 
+   "AFU Server is waiting for connection on machine.domain.com:32768"
 
 2) Edit pslse/shim_host.dat to point an AFU at your simulator.  For example:
      afu0.0,machine.domain.com:32768
@@ -62,9 +83,11 @@ RUNNING:
      SHIM_HOST_DAT: specifies path to the `shim_host.dat` file.
      PSLSE_PARMS: specifies path to the `pslse.parms` file.
 
-5) Start pslse with ./pslse in pslse directory.  You will see a message from
-   pslse with a hostname and port similiar to this:
+5) Start pslse with ./pslse in pslse directory.  If time is advancing in the simulator,
+   pslse will connect to the simulator and you will see a message from pslse with a 
+   hostname and port similiar to this:
      "INFO : Started PSLSE server, listening on machine.domain.com:16384"
+   indicating it is ready for a host application to run and connect to pslse.
 
 6) In the directory where you will run your application code create the file
    pslse_server.dat and put the host:port provided by pslse in it.  For

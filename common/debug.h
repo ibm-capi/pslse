@@ -17,6 +17,8 @@
 #ifndef _DEBUG_H_
 #define _DEBUG_H_
 
+/* TEMPORARY */
+#include  "../common/psl_interface_t.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -47,6 +49,10 @@ typedef uint8_t DBG_HEADER;
 #define DBG_HEADER_CMD_RESPONSE    	0x16
 #define DBG_HEADER_PE_ADD		0x18
 #define DBG_HEADER_PE_SEND		0x19
+#if defined PSL9 || PSL9lite
+#define DBG_HEADER_CMD_CAIA2		0x30
+#define DBG_HEADER_CMD_DMA0			0x31
+#endif
 
 #define DBG_AUX2_DONE			0x80
 #define DBG_AUX2_RUNNING		0x40
@@ -80,6 +86,13 @@ void debug_cmd_add(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
 		   uint16_t command);
 void debug_cmd_update(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
 		      uint16_t resp);
+#if defined PSL9
+void debug_cmd_caia2(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t type);
+
+void debug_cmd_dma0(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t type);
+#endif
 void debug_cmd_client(FILE * fp, uint8_t id, uint8_t tag, uint16_t context);
 void debug_cmd_return(FILE * fp, uint8_t id, uint8_t tag, uint16_t context);
 void debug_cmd_buffer_write(FILE * fp, uint8_t id, uint8_t tag);

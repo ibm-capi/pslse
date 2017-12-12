@@ -23,7 +23,13 @@ bool TagManager::request_tag (uint32_t * new_tag)
     } while (tags_in_use.find (*new_tag) != tags_in_use.end ());
 
     tags_in_use.insert (*new_tag);
+
+//    debug_msg("TagManager::request_tag: insert new_tag = %d", *new_tag);
+
     --num_credits;
+
+//    for(std::set<uint32_t>::iterator it=tags_in_use.begin(); it != tags_in_use.end(); ++it)
+//	debug_msg("TagManager::request_tag: %d", *it);
 
     return true;
 }
@@ -31,6 +37,7 @@ bool TagManager::request_tag (uint32_t * new_tag)
 void
 TagManager::release_tag (uint32_t tag)
 {
+//    debug_msg ("=====>TagManager::release_tag: %d", tag);
     release_tag (tag, 1);
 }
 
@@ -50,9 +57,15 @@ TagManager::release_tag (uint32_t tag, int returned_credits)
 
 bool TagManager::is_in_use (uint32_t tag)
 {
-
-    if (tags_in_use.find (tag) == tags_in_use.end ())
+    for (std::set<uint32_t>::iterator it=tags_in_use.begin(); it != tags_in_use.end(); it++) {
+	debug_msg ("TagManager::is_in_use: tags_in_use = %d", *it);
+    }
+    
+//    debug_msg("TagManager::is_in_use: tag = %d ", tag);
+    if (tags_in_use.find (tag) == tags_in_use.end ()) {
+	debug_msg ("TagManager::is_in_use: tag = %d return false", tag);
         return false;
+    }
 
     return true;
 }

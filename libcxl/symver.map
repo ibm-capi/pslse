@@ -11,6 +11,17 @@ LIBCXL_1 {
 		cxl_afu_open_h;
 		cxl_afu_free;
 		cxl_afu_opened;
+
+		cxl_work_alloc;
+		cxl_work_free;
+		cxl_work_get_amr;
+		cxl_work_get_num_irqs;
+		cxl_work_get_wed;
+		cxl_work_set_amr;
+		cxl_work_set_num_irqs;
+		cxl_work_set_wed;
+
+		cxl_afu_attach_work;
 		cxl_afu_attach_full;
 		cxl_afu_attach;
 		cxl_afu_get_process_element;
@@ -22,8 +33,19 @@ LIBCXL_1 {
 		cxl_get_cr_vendor;
 		cxl_get_cr_class;
 		cxl_get_irqs_max;
+		cxl_set_irqs_max;
 		cxl_get_irqs_min;
+		cxl_get_mmio_size;
+		cxl_get_mode;
+		cxl_set_mode;
+		cxl_get_modes_supported;
+		cxl_get_prefault_mode;
+		cxl_set_prefault_mode;
+		cxl_get_pp_mmio_len;
+		cxl_get_pp_mmio_off;
+		cxl_get_base_image;
 		cxl_get_caia_version;
+		cxl_get_image_loaded;
 		cxl_get_psl_revision;
 
 		cxl_errinfo_size;

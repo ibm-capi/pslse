@@ -15,6 +15,7 @@ using std::vector;
 #define CONTEXT_SIZE 0x400
 #define CONTEXT_MASK (CONTEXT_SIZE - 1)
 
+
 AFU::AFU (int port, string filename, bool parity, bool jerror):
     descriptor (filename),
     context_to_mc ()
@@ -38,7 +39,7 @@ AFU::AFU (int port, string filename, bool parity, bool jerror):
     set_seed ();
 
     state = IDLE;
-
+    debug_msg("AFU: state = IDLE");
     reset ();
 }
 
@@ -70,13 +71,14 @@ AFU::start ()
         if (afu_event.job_done)
             afu_event.job_done = 0;
 
-        // process event
+        // process job event
         if (afu_event.job_valid == 1) {
             debug_msg ("AFU: Received control event");
             resolve_control_event ();
             afu_event.job_valid = 0;
         }
 
+	// process response event
         if (afu_event.response_valid == 1) {
             if (state != RUNNING && state != WAITING_FOR_LAST_RESPONSES
                     && state != RESET) {
@@ -88,6 +90,7 @@ AFU::start ()
             afu_event.response_valid = 0;
         }
 
+	// process mmio event
         if (afu_event.mmio_valid == 1) {
             if (afu_event.mmio_double && (afu_event.mmio_address & 0x1))
                 error_msg ("AFU: mmio double access on non-even address");
@@ -111,6 +114,7 @@ AFU::start ()
             afu_event.mmio_valid = 0;
         }
 
+	// process buffer write event
         if (afu_event.buffer_write == 1) {
             if (state != RUNNING && state != WAITING_FOR_LAST_RESPONSES
                     && state != RESET) {
@@ -122,6 +126,7 @@ AFU::start ()
             afu_event.buffer_write = 0;
         }
 
+	// process buffer read event
         if (afu_event.buffer_read == 1) {
             if (state != RUNNING && state != WAITING_FOR_LAST_RESPONSES
                     && state != RESET) {
@@ -138,6 +143,38 @@ AFU::start ()
             resolve_aux1_event ();
             afu_event.aux1_change = 0;
         }
+	
+	#ifdef	PSL9
+	// process DMA read event
+	if ( (afu_event.dma0_completion_valid == 1 && afu_event.dma0_sent_utag_status == 0x1 && afu_event.dma0_req_type == 0x3) ||
+	     (afu_event.dma0_completion_valid == 1 && afu_event.dma0_sent_utag_status == 0x0) ) {
+		debug_msg("AFU: process DMA read event");
+		debug_msg("AFU: call resolve_dma_read_event");
+		resolve_dma_read_event();
+		afu_event.dma0_dvalid = 0;
+		afu_event.dma0_sent_utag_valid = 0;
+		afu_event.dma0_completion_valid = 0;
+	}
+	
+	// process DMA write event
+	if(afu_event.dma0_sent_utag_status) {
+	    debug_msg("AFU: dma0_req_type = %d", afu_event.dma0_req_type);
+	    debug_msg("AFU: dma0_sent_utag_status = %d", afu_event.dma0_sent_utag_status);
+	}
+	if(afu_event.dma0_req_type == 1 && afu_event.dma0_sent_utag_status == 0x1) {
+		debug_msg("AFU: process DMA write event");
+		debug_msg("AFU: calling resolve_dma_write_event");
+		resolve_dma_write_event();
+		afu_event.dma0_dvalid = 0;
+		afu_event.dma0_sent_utag_valid = 0;
+	}
+	if(afu_event.dma0_sent_utag_valid) {
+	    if(afu_get_dma0_sent_utag(&afu_event, afu_event.dma0_req_utag,
+	       afu_event.dma0_sent_utag_status) != PSL_SUCCESS)
+		printf("AFU: Failed dma0_sent_utag_status\n");
+	}
+		
+	#endif
 
         // generate commands
         if (state == RUNNING) {
@@ -147,10 +184,10 @@ AFU::start ()
                 do {
                     if (highest_priority_mc == context_to_mc.end ())
                         highest_priority_mc = context_to_mc.begin ();
-
+		    //debug_msg("AFU: call MachineController->send_command");
                     if (highest_priority_mc->
                             second->send_command (&afu_event, cycle)) {
-                        debug_msg ("AFU: context %d sent command",
+                        debug_msg ("AFU: RUNNING complete send_command with context %d",
                                    highest_priority_mc->first);
                         ++highest_priority_mc;
                         break;
@@ -162,6 +199,7 @@ AFU::start ()
         else if (state == RESET) {
             if (reset_delay == 0) {
                 state = READY;
+		debug_msg("AFU: state = READY");
                 reset ();
                 debug_msg ("AFU: sending job_done after reset");
 
@@ -203,6 +241,7 @@ AFU::start ()
                     error_msg ("AFU: asserting done failed");
                 }
                 state = IDLE;
+		debug_msg("AFU: state = IDLE");
             }
         }
     }
@@ -282,13 +321,15 @@ AFU::resolve_control_event ()
                     context_to_mc.begin (); it != context_to_mc.end (); ++it)
             it->second->disable_all_machines ();
         state = RESET;
+	debug_msg("AFU: state = RESET");
         reset_delay = 1000;
     }
     else if (afu_event.job_code == PSL_JOB_START) {
-        debug_msg ("AFU: start signal recieved in state %d", state);
+        debug_msg ("AFU: start signal received in state %d", state);
         if (state != READY)
             error_msg ("AFU: start signal detected outside of READY state");
         global_configs[1] = afu_event.job_address;
+	debug_msg("AFU::resolve_control_event: job_address = 0x%x", afu_event.job_address);
 
         // Check for jea parity
         if (afu_event.parity_enable && (afu_event.job_address_parity !=
@@ -307,6 +348,7 @@ AFU::resolve_control_event ()
             error_msg ("AFU: failed to assert job_error");
            }
 	state = IDLE;
+	debug_msg("AFU: state = IDLE");
 	debug_msg ("AFU: AFU REPORTING ERROR ");
         }
 	else {
@@ -440,6 +482,7 @@ AFU::resolve_mmio_event ()
                 break;
             case 0x2:
                 data = global_configs[1];
+		debug_msg("AFU::resolve_mmio_event: global_configs[1] = 0x%x", data);
                 break;
             default:
                 data = 0xFFFFFFFFFFFFFFFFLL;
@@ -508,6 +551,7 @@ AFU::resolve_mmio_event ()
                 }
 
                 state = WAITING_FOR_LAST_RESPONSES;
+		debug_msg("AFU: state = WAITING_FOR_LAST_RESPONSES");
                 debug_msg ("AFU: preparing to shut down machines");
                 break;
             case 0x04:
@@ -525,10 +569,12 @@ AFU::resolve_mmio_event ()
 
             if (context_to_mc.find ((afu_event.mmio_address -
                                      GLOBAL_CONFIG_OFFSET) / CONTEXT_SIZE) !=
-                    context_to_mc.end ())
+                    context_to_mc.end ()) {
                 mc = context_to_mc[(afu_event.mmio_address -
                                     GLOBAL_CONFIG_OFFSET) / CONTEXT_SIZE];
-
+		debug_msg("AFU::resolve_mmio_event: key = %d mc = 0x%x",
+		(afu_event.mmio_address - GLOBAL_CONFIG_OFFSET)/CONTEXT_SIZE, mc);
+	    }
             if (mc != NULL)
                 mc->change_machine_config (afu_event.mmio_address &
                                            CONTEXT_MASK, afu_event.mmio_wdata,
@@ -590,6 +636,49 @@ AFU::resolve_buffer_read_event ()
         }
     }
 }
+
+#ifdef	PSL9
+void
+AFU::resolve_dma_read_event()
+{
+    debug_msg("AFU::resolve_dma_read_event");
+/*    if (!TagManager::is_in_use(afu_event.dma0_sent_utag)) {
+	debug_msg("AFU::resolve_dma_read_event: dma0_sent_utag = %d", afu_event.dma0_sent_utag);
+	debug_msg("AFU::resolve_dma_read_event: dma0_req_utag = %d", afu_event.dma0_req_utag);
+	debug_msg("AFU::resolve_dma_read_event: buffer_read_tag = %d", afu_event.buffer_read_tag);
+	error_msg("AFU:resovle_dma_read_event: received tag not in use");
+    }
+*/
+    for (std::map < uint16_t, MachineController *>::iterator it = 
+	context_to_mc.begin(); it != context_to_mc.end(); ++it) {
+	    debug_msg("AFU::resolve_dma_read_event context_to_mc %d  0x%x", it->first, it->second);
+	if (it->second->has_tag(afu_event.dma0_sent_utag)) {
+	    it->second->process_dma_read (&afu_event);
+	    debug_msg ("AFU::resolve_dma_read -> process_dma_read");
+	    break;
+	}
+    }
+}
+
+void
+AFU::resolve_dma_write_event()
+{
+    debug_msg("AFU::resolve_dma_write_event");
+    if(!TagManager::is_in_use(afu_event.dma0_sent_utag))
+	error_msg("AFU::resolve_dma_write_event: received tag not in use");
+    
+    for(std::map < uint16_t, MachineController *>::iterator it = 
+	context_to_mc.begin(); it != context_to_mc.end(); ++it) {
+	    debug_msg("AFU::resolve_dma_write_event context_to_mc %d  0x%x", it->first, it->second);
+	if(it->second->has_tag(afu_event.dma0_sent_utag)) {
+	    it->second->process_dma_write (&afu_event);
+	    debug_msg ("AFU::resolve_dma_write_event -> MachineController::process_dma_write");
+	    break;
+	}
+    }
+
+}
+#endif
 
 void
 AFU::set_seed ()

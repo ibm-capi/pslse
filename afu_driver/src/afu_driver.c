@@ -32,6 +32,13 @@ struct resp_event {
 	uint32_t tag;
 	uint32_t tagpar;
 	uint32_t code;
+#ifdef PSL9
+	uint32_t cache_pos;
+	uint32_t cache_state ;
+	uint32_t dma0_itag_par ;
+	uint32_t dma0_itag ;
+	uint32_t dma0_page_size ;
+#endif
 	int32_t credits;
 	struct resp_event *__next;
 };
@@ -41,21 +48,11 @@ struct resp_event {
 static unsigned int bw_delay;
 static struct AFU_EVENT event;
 static struct resp_event *resp_list;
-#ifdef OLD_PLI_CODE
-static vpiHandle pclock;
-static vpiHandle jval, jcom, jcompar, jea, jeapar, jrunning, jdone, jcack,
-    jerror, latency, jyield, timebase_req, parity_enabled;
-static vpiHandle mmval, mmcfg, mmrnw, mmdw, mmad, mmadpar, mmwdata, mmwdatapar,
-    mmack, mmrdata, mmrdatapar;
-static vpiHandle croom, cvalid, ctag, ctagpar, ccom, ccompar, cabt, cea,
-    ceapar, cch, csize;
-static vpiHandle brval, brtag, brtagpar, brdata, brpar, brvalid_out, brtag_out,
-    brlat;
-static vpiHandle bwval, bwtag, bwtagpar, bwdata, bwpar;
-static vpiHandle rval, rtag, rtagpar, resp, rcredits;
-#endif
 
 static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
+#ifdef PSL9
+static int cl_cplval, cl_sntval;
+#endif
 // Added New
         int c_ha_jval;
         int c_ha_jcom;
@@ -93,6 +90,30 @@ static int cl_jval, cl_mmio, cl_br, cl_bw, cl_rval;
 	uint64_t c_sim_time ;
         int      c_sim_error ;
 
+#ifdef PSL9
+        uint32_t c_ah_cpagesize;
+// New PSL9 DMA0 port
+	uint32_t c_d0h_dvalid;
+	uint32_t c_d0h_req_utag;
+	uint32_t c_d0h_req_itag;
+	uint32_t c_d0h_dtype;
+	uint32_t c_d0h_dsize;
+	uint8_t  c_d0h_ddata[CACHELINE_BYTES];
+	uint32_t c_d0h_datomic_op;
+	uint32_t c_d0h_datomic_le;
+	uint32_t c_dma0_initiated;
+
+// New PSL9 DMA1 port
+	uint32_t c_d1h_dvalid;
+	uint32_t c_d1h_req_utag;
+	uint32_t c_d1h_req_itag;
+	uint32_t c_d1h_dtype;
+	uint32_t c_d1h_dsize;
+	uint8_t  c_d1h_ddata[CACHELINE_BYTES];
+	uint32_t c_d1h_datomic_op;
+	uint32_t c_d1h_datomic_le;
+	uint32_t c_dma1_initiated;
+#endif
 // Function declaration
 
 static int getMy64Bit(const svLogicVecVal *my64bSignal, uint64_t *conv64bit);
@@ -107,40 +128,7 @@ static void psl(void);
 */
 // VPI abstraction functions
 
-#ifdef OLD_PLI_CODE
-static long long get_time()
-{
-	s_vpi_time time;
-	time.type = vpiSimTime;
-	vpi_get_time(NULL, &time);
-	uint64_t long_time;
-	long_time = time.high;
-	long_time <<= 32;
-	long_time += time.low;
-	return (long long)long_time;
-}
 
-static void set_signal32(vpiHandle signal, uint32_t data)
-{
-	s_vpi_value value;
-	value.format = vpiIntVal;
-	value.value.integer = data;
-	vpi_put_value(signal, &value, NULL, vpiNoDelay);
-}
-#endif
-/*
-static void set_signal64(vpiHandle signal, uint64_t data)
-{
-	s_vpi_value value;
-	value.format = vpiVectorVal;
-	value.value.vector = (s_vpi_vecval *) calloc(2, sizeof(s_vpi_vecval));
-	value.value.vector[1].aval = (int)(data >> 32);
-	value.value.vector[1].bval = 0;
-	value.value.vector[0].aval = (int)(data & 0xffffffff);
-	value.value.vector[0].bval = 0;
-	vpi_put_value(signal, &value, NULL, vpiNoDelay);
-}
-*/
 static void setDpiSignal64(svLogicVecVal *my64bSignal, uint64_t data)
 {
 	(my64bSignal+1)->aval = (uint32_t)(data >> 32);
@@ -148,104 +136,7 @@ static void setDpiSignal64(svLogicVecVal *my64bSignal, uint64_t data)
 	(my64bSignal)->aval = (uint32_t)(data & 0xffffffff);
 	(my64bSignal)->bval = 0x0;
 }
-
 /*
-static void set_signal_long(vpiHandle signal, uint8_t * data)
-{
-	s_vpi_value value;
-	value.format = vpiVectorVal;
-	unsigned size = vpi_get(vpiSize, signal);
-	unsigned words = (size + 31) / 32;
-	value.value.vector =
-	    (s_vpi_vecval *) calloc(words, sizeof(s_vpi_vecval));
-	int i, j;
-	uint32_t datum;
-	for (i = 0; i < words; i++) {
-		datum = 0;
-		for (j = 0; j < 4; j++) {
-			datum <<= 8;
-			datum += data[i * 4 + j];
-		}
-		value.value.vector[words - (i + 1)].aval = datum;
-	}
-	vpi_put_value(signal, &value, NULL, vpiNoDelay);
-}
-
-static void get_signal32(vpiHandle signal, uint32_t * data)
-{
-	s_vpi_value value;
-	value.format = vpiIntVal;
-	vpi_get_value(signal, &value);
-	*data = value.value.integer;
-}
-
-static void get_signal64(vpiHandle signal, uint64_t * data)
-{
-	s_vpi_value value;
-	value.format = vpiVectorVal;
-	vpi_get_value(signal, &value);
-	*data = (uint64_t) value.value.vector[1].aval;
-	*data <<= 32;
-	*data |=
-	    ((uint64_t) value.value.vector[0].aval) & ((uint64_t) 0xffffffffll);
-}
-static void get_signal_long(vpiHandle signal, uint8_t * data)
-{
-	s_vpi_value value;
-	value.format = vpiVectorVal;
-	unsigned size = vpi_get(vpiSize, signal);
-	unsigned words = (size + 31) / 32;
-	value.value.vector =
-	    (s_vpi_vecval *) calloc(words, sizeof(s_vpi_vecval));
-	vpi_get_value(signal, &value);
-	int i;
-	for (i = 0; i < words; i++) {
-		int word = value.value.vector[words - (i + 1)].aval;
-		int8_t *byte = (int8_t *) & word;
-		int j;
-		for (j = 0; j < 4; j++) {
-			data[(i + 1) * 4 - (j + 1)] = byte[j];
-		}
-	}
-}
-*/
-//static vpiHandle set_callback_delay(void *func, int delay)
-//{
-//  s_vpi_time time;
-//  time.type = vpiSimTime;
-//  time.high = 0;
-//  time.low = delay;
-//  s_cb_data cb;
-//  cb.reason = cbAfterDelay;
-//  cb.cb_rtn = func;
-//  cb.obj = 0;
-//  cb.time = &time;
-//  cb.value = 0;
-//  cb.index = 0;
-//  cb.user_data = 0;
-//  return vpi_register_cb(&cb);
-//}
-
-#ifdef OLD_PLI_CODE
-static vpiHandle set_callback_signal(void *func, vpiHandle signal)
-{
-	s_vpi_time time;
-	time.type = vpiSimTime;
-	time.high = 0;
-	time.low = 0;
-	s_vpi_value value;
-	value.format = vpiIntVal;
-	s_cb_data cb;
-	cb.reason = cbValueChange;
-	cb.cb_rtn = func;
-	cb.obj = signal;
-	cb.time = &time;
-	cb.value = &value;
-	cb.index = 0;
-	cb.user_data = 0;
-	return vpi_register_cb(&cb);
-}
-#endif
 static vpiHandle set_callback_event(void *func, int event)
 {
 	s_cb_data cb;
@@ -258,7 +149,7 @@ static vpiHandle set_callback_event(void *func, int event)
 	cb.user_data = 0;
 	return vpi_register_cb(&cb);
 }
-
+*/
 // Helper functions
 
 void set_simulation_time(const svLogicVecVal *simulationTime)
@@ -283,27 +174,6 @@ static void error_message(const char *str)
 	fflush(stderr);
 }
 
-/*
-static int dpi_info_message(char *format)
-{
-	printf("%08lld: ", (long long) c_sim_time);
-	printf(format);
-	return 0;
-}
-*/
-#ifdef OLD_PLI_CODE
-static int info_message(char *format, ...)
-{
-	va_list args;
-	int ret;
-
-//	printf("%08lld: ", get_time());
-	va_start(args, format);
-	ret = vprintf(format, args);
-	va_end(args);
-	return ret;
-}
-#endif
 
 // PSL functions
 
@@ -315,6 +185,13 @@ static void add_response()
 	new_resp->tagpar = event.response_tag_parity;
 	new_resp->code = event.response_code;
 	new_resp->credits = event.credits;
+#ifdef PSL9
+	new_resp->cache_pos = event.cache_position;
+	new_resp->cache_state = event.cache_state;
+	new_resp->dma0_itag_par = event.response_dma0_itag_parity;
+	new_resp->dma0_itag = event.response_dma0_itag;
+	new_resp->dma0_page_size = event.response_r_pgsize;
+#endif
 	new_resp->__next = NULL;
 
 	event.response_valid = 0;
@@ -346,168 +223,6 @@ static int test_change(uint32_t previous, uint32_t current, const char *sig)
 
 	return 0;
 }
-/*
-PLI_INT32 aux2()
-{
-	uint64_t error;
-	uint32_t done, running, llcmd_ack, yield, tbreq, paren, lat;
-	int change = 0;
-
-	get_signal32(jdone, &done);
-	get_signal64(jerror, &error);
-	get_signal32(jrunning, &running);
-	get_signal32(jcack, &llcmd_ack);
-	get_signal32(jyield, &yield);
-	get_signal32(timebase_req, &tbreq);
-	get_signal32(parity_enabled, &paren);
-	get_signal32(latency, &lat);
-
-	change = test_change(event.job_done, done, "jdone");
-	if (change && error)
-		info_message("jerror=0x%016llx\n", (long long)error);
-	change += test_change(event.job_running, running, "jrunning");
-	change += test_change(event.job_cack_llcmd, llcmd_ack, "jcack");
-	change += test_change(event.job_yield, yield, "jyield");
-	change += test_change(event.timebase_request, tbreq, "jtbreq");
-	change += test_change(event.parity_enable, paren, "paren");
-	change += test_change(event.buffer_read_latency, lat, "brlat");
-
-	if (change)
-		psl_afu_aux2_change(&event, running, done, llcmd_ack, error,
-				    yield, tbreq, paren, lat);
-
-	return 0;
-}
-void mmio()
-{
-	uint64_t data, datapar;
-	uint32_t ack;
-
-	get_signal32(mmack, &ack);
-
-	if (!ack)
-		return;
-
-	get_signal64(mmrdata, &data);
-	get_signal64(mmrdatapar, &datapar);
-	psl_afu_mmio_ack(&event, data, datapar);
-
-#ifdef DEBUG
-	printf("\n");
-	info_message("MMIO Ack data=0x%016llx\n", data);
-#endif				
-}
-
-static void command()
-{
-	uint64_t addr, addrpar;
-	uint32_t valid, tag, tagpar, com, compar, abt, size, handle;
-
-	get_signal32(cvalid, &valid);
-	if (!valid)
-		return;
-
-	get_signal32(ctag, &tag);
-	get_signal32(ctagpar, &tagpar);
-	get_signal32(ccom, &com);
-	get_signal32(ccompar, &compar);
-	get_signal32(cabt, &abt);
-	get_signal64(cea, &addr);
-	get_signal64(ceapar, &addrpar);
-	get_signal32(csize, &size);
-	get_signal32(cch, &handle);
-	psl_afu_command(&event, tag, tagpar, com, compar, addr, addrpar, size,
-			abt, handle);
-
-#ifdef DEBUG
-	info_message
-	    ("Command tag=0x%02x com=%03x ea=0x%016llx size=%d abt=%x\n", tag,
-	     com, addr, size, abt);
-#endif				
-
-	return;
-}
-*/
-/*
-void buffer_read()
-{
-	uint32_t tag, valid, parity;
-	uint16_t parity16;
-	uint8_t data[CACHELINE_BYTES];
-
-	get_signal32(brvalid_out, &valid);
-
-	if (!valid)
-		return;
-
-	get_signal32(brtag_out, &tag);
-	get_signal_long(brdata, data);
-	get_signal32(brpar, &parity);
-	parity16 = (uint16_t) parity;
-	parity16 = htons(parity16);
-	psl_afu_read_buffer_data(&event, CACHELINE_BYTES, data,
-				 (uint8_t *) & parity16);
-
-#ifdef DEBUG
-	info_message("Buffer read data tag=0x%02x", tag);
-	unsigned i;
-	for (i = 0; i < CACHELINE_BYTES; i++) {
-		if (!(i % 32))
-			printf("\n  0x");
-		printf("%02x", event.buffer_rdata[i]);
-	}
-	printf("\n");
-#endif				
-}
-*/
-// Clean up on clock edges
-
-PLI_INT32 clock_edge()
-{
-/*
-	uint32_t clock;
-//	get_signal32(pclock, &clock);
-
-	if (!clock) {
-//		aux2();
-//		mmio();
-//		buffer_read();
-		return 0;
-	}
-
-//	psl();
-//	command();
-	if (cl_jval) {
-		--cl_jval;
-		if (!cl_jval)
-			set_signal32(jval, 0);
-	}
-	if (cl_mmio) {
-		--cl_mmio;
-		if (!cl_mmio)
-			set_signal32(mmval, 0);
-	}
-
-	if (cl_br) {
-		--cl_br;
-		if (!cl_br)
-			set_signal32(brval, 0);
-	}
-
-	if (cl_bw) {
-		--cl_bw;
-		if (!cl_bw)
-			set_signal32(bwval, 0);
-	}
-
-	if (cl_rval) {
-		--cl_rval;
-		if (!cl_rval)
-			set_signal32(rval, 0);
-	}
-*/
-	return 0;
-}
 
 void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
                    svLogic       *ha_jval_top, 
@@ -520,7 +235,9 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	     const svLogic       ah_jcack_top, 
              svLogicVecVal       *ah_jerror_top, 	// 64 bits
              svLogicVecVal       *ah_brlat_top,  	// 4 bits
+#ifdef PSL8
              const svLogic       ah_jyield,
+#endif             
 	     const svLogic       ah_tbreq_top,  
              const svLogic       ah_paren_top, 
              svLogic             *ha_mmval_top,
@@ -545,6 +262,9 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
              const svLogic       ah_ceapar_top, 
              const svLogicVecVal *ah_cch_top, 		// 16 bits
              const svLogicVecVal *ah_csize_top, 		//12 bits
+#ifdef PSL9
+             const svLogicVecVal *ah_cpagesize_top, 		//4 bits	: TODO - processing of this o/p
+#endif             
              svLogic             *ha_brvalid_top,
              svLogicVecVal       *ha_brtag_top, 		// 8 bits
                    svLogic       *ha_brtagpar_top, 
@@ -560,8 +280,57 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
              svLogic             *ha_rvalid_top, 
              svLogicVecVal       *ha_rtag_top, 		// 8 bits
              svLogic             *ha_rtagpar_top,				
+#ifdef PSL9
+             svLogicVecVal       *ha_rditag_top, 		// 9 bits	: TODO - processing of this port
+             svLogic             *ha_rditagpar_top,		// : TODO - processing of this port
+#endif             
              svLogicVecVal       *ha_response_top, 		// 8 bits
+#ifdef PSL9
+             svLogicVecVal       *ha_response_ext_top, 		// 8 bits	: TODO - processing of this port
+             svLogicVecVal       *ha_rpagesize_top, 		// 4 bits	: TODO - processing of this port
+             svLogicVecVal       *ha_rcachestate_top, 		// 2 bits	: PSL9 interface has defined it as unused
+             svLogicVecVal       *ha_rcachepos_top, 		// 13 bits	: PSL9 interface has defined it as unused
+             svLogicVecVal       *ha_rcredits_top,		// 9 bits	; to be driven to a constant value of 9'h1
+	     const svLogic	 d0h_dvalid_top,		// PSL9 DMA interface
+	     const svLogicVecVal *d0h_req_utag_top,		// 10 bits
+	     const svLogicVecVal *d0h_req_itag_top,		// 9 bits
+	     const svLogicVecVal *d0h_dtype_top,		// 3 bits
+	     const svLogicVecVal *d0h_dsize_top,		// 10 bits
+	     const svLogicVecVal *d0h_ddata_top,		// 1024 bits
+	     const svLogicVecVal *d0h_datomic_op_top,		// 6 bits
+	     const svLogic	 d0h_datomic_le_top,
+	           svLogic       *hd0_sent_utag_valid_top,  
+	           svLogicVecVal *hd0_sent_utag_top,  
+	           svLogicVecVal *hd0_sent_utag_sts_top,  
+	           svLogic       *hd0_cpl_valid_top,  
+	           svLogicVecVal *hd0_cpl_utag_top,  
+	           svLogicVecVal *hd0_cpl_type_top,  
+	           svLogicVecVal *hd0_cpl_size_top,  
+	           svLogicVecVal *hd0_cpl_laddr_top,  
+	           svLogicVecVal *hd0_cpl_byte_count_top,  
+	           svLogicVecVal *hd0_cpl_data_top,  
+	     const svLogic	 d1h_dvalid_top,		// TODO: all the following ports are to be processed
+	     const svLogicVecVal *d1h_req_utag_top,		// 10 bits
+	     const svLogicVecVal *d1h_req_itag_top,		// 9 bits
+	     const svLogicVecVal *d1h_dtype_top,		// 3 bits
+	     const svLogicVecVal *d1h_dsize_top,		// 10 bits
+	     const svLogicVecVal *d1h_ddata_top,		// 1024 bits
+	     const svLogicVecVal *d1h_datomic_op_top,		// 6 bits
+	     const svLogic	 d1h_datomic_le_top,
+	           svLogic       *hd1_sent_utag_valid_top,  
+	           svLogicVecVal *hd1_sent_utag_top,  
+	           svLogicVecVal *hd1_sent_utag_sts_top,  
+	           svLogic       *hd1_cpl_valid_top,  
+	           svLogicVecVal *hd1_cpl_utag_top,  
+	           svLogicVecVal *hd1_cpl_type_top,  
+	           svLogicVecVal *hd1_cpl_size_top,  
+	           svLogicVecVal *hd1_cpl_laddr_top,  
+	           svLogicVecVal *hd1_cpl_byte_count_top,  
+	           svLogicVecVal *hd1_cpl_data_top
+#endif             
+#ifdef PSL8
              svLogicVecVal       *ha_rcredits_top		// 9 bits
+#endif             
              )
 {
 	int change = 0;
@@ -574,14 +343,23 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
           invalidVal = getMy64Bit(ah_jerror_top, &c_ah_jerror);
 //          if(invalidVal)
 //		printf("jerror has either X or Z value =0x%016llx\n", (long long)c_ah_jerror);
-          c_ah_brlat     = ah_brlat_top->aval & 0x3;	// 4 bits	// FIXME: warning says the valid values are only 1 & 3, therefore changing the mask to 0x3
-          invalidVal     = ah_brlat_top->bval & 0x3;	
+          c_ah_brlat     = ah_brlat_top->aval & 0xF;	// 4 bits	// 4 bit value: Values of 0, 1, 2 are valid. Values from 3-15 are invalid
+          invalidVal     = ah_brlat_top->bval & 0xF;	
           if(invalidVal)
           {
 	    printf("%08lld: ", (long long) c_sim_time);
 	    printf("ah_brlat_top has either X or Z value =0x%08llx\n", (long long)c_ah_brlat);
           }
+          else if(c_ah_brlat > 2)
+          {
+	    printf("%08lld: ", (long long) c_sim_time);
+	    printf(" WARNING!! ah_brlat has a value other than what is supported on CAIA2. Current value=0x%02llx\n", (long long)c_ah_brlat);
+          }
+#ifdef PSL8
           c_ah_jyield    = (ah_jyield & 0x2) ? 0 : (ah_jyield & 0x1);
+#else
+          c_ah_jyield    = 0;
+#endif             
           c_ah_tbreq     = (ah_tbreq_top & 0x2) ? 0 : (ah_tbreq_top & 0x1);
           c_ah_paren     = (ah_paren_top & 0x2) ? 0 : (ah_paren_top & 0x1);
   	  change = test_change(event.job_done, c_ah_jdone, "jdone");
@@ -592,7 +370,9 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
           }
 	  change += test_change(event.job_running, c_ah_jrunning, "jrunning");
 	  change += test_change(event.job_cack_llcmd, c_ah_jcack, "jcack");
+#ifdef PSL8
 	  change += test_change(event.job_yield, c_ah_jyield, "jyield");
+#endif             
 	  change += test_change(event.timebase_request, c_ah_tbreq, "jtbreq");
 	  change += test_change(event.parity_enable, c_ah_paren, "paren");
 	  change += test_change(event.buffer_read_latency, c_ah_brlat, "brlat");
@@ -642,6 +422,38 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 				 (uint8_t *) & parity16);
 	// Replication of buffer_read method - ends
 	  }
+#ifdef PSL9
+	// PSL9 handling of DMA port0
+           afu_get_dma0_cpl_bus_data(&event, event.dma0_completion_utag, event.dma0_completion_type, event.dma0_completion_size, event.dma0_completion_laddr, event.dma0_completion_byte_count, event.dma0_completion_data);
+           afu_get_dma0_sent_utag(&event, event.dma0_completion_utag, event.dma0_sent_utag_status);
+	   c_d0h_dvalid = (d0h_dvalid_top & 0x2) ? 0 : (d0h_dvalid_top & 0x1);
+	   if(c_d0h_dvalid == sv_1)
+	   {
+	     c_d0h_req_utag	= (d0h_req_utag_top->aval) 	& 0x3FF;	// 10 bits;
+	     c_d0h_req_itag	= (d0h_req_itag_top->aval) 	& 0x1FF;	// 9 bits;
+	     c_d0h_dtype	= (d0h_dtype_top->aval) 	& 0x7;		// 3 bits;
+	     c_d0h_dsize	= (d0h_dsize_top->aval) 	& 0x3FF;	// 10 bits;
+             getMyCacheLine(d0h_ddata_top, c_d0h_ddata);
+	     c_d0h_datomic_op	= (d0h_datomic_op_top->aval) 	& 0x3FF;	// 10 bits;
+	     c_d0h_datomic_le	= (d0h_datomic_le_top & 0x2) ? 0 : (d0h_datomic_le_top & 0x1);
+	     psl_afu_dma0_req(&event, c_d0h_req_utag, c_d0h_req_itag, c_d0h_dtype, c_d0h_dsize, c_d0h_datomic_op, c_d0h_datomic_le, c_d0h_ddata);
+	   }
+	// PSL9 handling of DMA port1	// TODO: change the functions to PORT1 functions
+           afu_get_dma0_cpl_bus_data(&event, event.dma0_completion_utag, event.dma0_completion_type, event.dma0_completion_size, event.dma0_completion_laddr, event.dma0_completion_byte_count, event.dma0_completion_data);
+           afu_get_dma0_sent_utag(&event, event.dma0_completion_utag, event.dma0_sent_utag_status);
+	   c_d1h_dvalid = (d1h_dvalid_top & 0x2) ? 0 : (d1h_dvalid_top & 0x1);
+	   if(c_d1h_dvalid == sv_1)
+	   {
+	     c_d1h_req_utag	= (d1h_req_utag_top->aval) 	& 0x3FF;	// 10 bits;
+	     c_d1h_req_itag	= (d1h_req_itag_top->aval) 	& 0x1FF;	// 9 bits;
+	     c_d1h_dtype	= (d1h_dtype_top->aval) 	& 0x7;		// 3 bits;
+	     c_d1h_dsize	= (d1h_dsize_top->aval) 	& 0x3FF;	// 10 bits;
+             getMyCacheLine(d1h_ddata_top, c_d1h_ddata);
+	     c_d1h_datomic_op	= (d1h_datomic_op_top->aval) 	& 0x3FF;	// 10 bits;
+	     c_d1h_datomic_le	= (d1h_datomic_le_top & 0x2) ? 0 : (d1h_datomic_le_top & 0x1);
+	     psl_afu_dma0_req(&event, c_d1h_req_utag, c_d1h_req_itag, c_d1h_dtype, c_d1h_dsize, c_d1h_datomic_op, c_d1h_datomic_le, c_d1h_ddata);
+           }
+#endif
 	} else {
 	  //psl();	// the psl() function from PLI is going to be split into several subsidiary functions
  	  c_sim_error = 0;
@@ -686,7 +498,7 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 
 	  cl_mmio = CLOCK_EDGE_DELAY;
 	  event.mmio_valid = 0;
-        }	
+        }
 	// Buffer read
 	if (event.buffer_read)
 	{
@@ -697,12 +509,18 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 
 #ifdef DEBUG
 	  printf("%08lld: ", (long long) c_sim_time);
-	  printf("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
+	  printf("Buffer Read tag=0x%02x, tag parity=0x%02x\n", event.buffer_read_tag, event.buffer_read_tag_parity);
 #endif
-
 	  cl_br = CLOCK_EDGE_DELAY;
 	  event.buffer_read = 0;
-        }	
+        }
+#ifdef PSL9
+        else if(!cl_br)
+	{	// TODO: check whether this is really causing any issues
+	  setDpiSignal32(ha_brtag_top, 0, 8);
+	  *ha_brtagpar_top = 0;
+        }
+#endif
 	// Buffer write
 	if (event.buffer_write)
 	{
@@ -723,19 +541,43 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  cl_bw = CLOCK_EDGE_DELAY;
 	  event.buffer_write = 0;
 	}
+#ifdef PSL9
+        else if(!cl_bw)
+	{	// TODO: check whether this is really causing any issues
+	  setMyCacheLine(ha_bwdata_top, c_ah_brdata);
+	  setDpiSignal32(ha_bwpar_top, 0, 16);
+        }
+#endif
 	if (bw_delay > 0)
 		--bw_delay;
+	// ------Driving some blank value as of now
 	if (resp_list && !(bw_delay % 2))
         {
 	// Replicating	set_response() function
 	  setDpiSignal32(ha_rtag_top, resp_list->tag, 8);
 	  *ha_rtagpar_top = resp_list->tagpar;
 	  setDpiSignal32(ha_response_top, resp_list->code, 8);
-	  setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
+	// TODO: we can check whether the ha_rcredits are always driven to 9'h1
+#ifdef PSL8
+          setDpiSignal32(ha_rcredits_top, resp_list->credits, 9);
+#else
+	  setDpiSignal32(ha_rcredits_top, 0x001, 9);
+	// TODO: add code to handle ha_response_ext_top, ha_rpagesize_top, ha_rcachestate_top, ha_rcachepos_top
+	  setDpiSignal32(ha_rditag_top, resp_list->dma0_itag, 9);
+	  *ha_rditagpar_top = (resp_list->dma0_itag_par) & 0x1;
+	  setDpiSignal32(ha_rpagesize_top, resp_list->dma0_page_size, 4);
+  	  setDpiSignal32(ha_rcachestate_top, resp_list->cache_state,  2);
+	  setDpiSignal32(ha_rcachepos_top,   resp_list->cache_pos, 13);
+#endif
 	  *ha_rvalid_top = 1;
 	  printf("%08lld: ", (long long) c_sim_time);
+#ifdef PSL8
 	  printf("Response tag=0x%02x code=0x%02x credits=%d\n",
 		     resp_list->tag, resp_list->code, resp_list->credits);
+#else
+	  printf("Response tag=0x%02x  tag_parity=%x code=0x%02x itag=%02x page_size=%d state=%d position=%03x\n",
+		     resp_list->tag, resp_list->tagpar, resp_list->code, resp_list->dma0_itag, resp_list->dma0_page_size, resp_list->cache_state, resp_list->cache_pos);
+#endif
 	  struct resp_event *tmp;
 	  tmp = resp_list;
 	  resp_list = resp_list->__next;
@@ -772,14 +614,46 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    c_ah_cabt    = (ah_cabt_top->aval) & 0x7;		// 3 bits
 	    c_ah_cch     = (ah_cch_top->aval) & 0xFFFF;		// 16 bits
 	    c_ha_croom   = (ha_croom_top->aval) & 0xFF;		// 8 bits
+#ifdef PSL9
+	    c_ah_cpagesize     = (ah_cpagesize_top->aval) & 0xF;		// 4 bits
+#endif
 		// FIXME: Need to check how to handle Croom on the event structure
 	    printf("%08lld: ", (long long) c_sim_time);
 	    printf("Command Valid: ccom=0x%x\n", c_ah_ccom);
   	    event.room   = c_ha_croom;
+#ifdef PSL8
   	    psl_afu_command(&event, c_ah_ctag, c_ah_ctagpar, c_ah_ccom, c_ah_ccompar, c_ah_cea, c_ah_ceapar, c_ah_csize,
 	 		   c_ah_cabt, c_ah_cch);
+#else
+  	    psl_afu_command(&event, c_ah_ctag, c_ah_ctagpar, c_ah_ccom, c_ah_ccompar, c_ah_cea, c_ah_ceapar, c_ah_csize,
+	 		   c_ah_cabt, c_ah_cch, c_ah_cpagesize);
+#endif
 	  }
-	  // Replication of acceleartor command interface ends
+	  // Replication of acceleartor command interface end
+#ifndef PSL8
+	  // NEW PSL9 function ------------------ DMA0 port CMPL handling -------------
+	  if(event.dma0_completion_valid)			// must be corresponding to the assertion of HDx_CPL_VALID by PSL
+	  {
+	    setDpiSignal32(hd0_cpl_utag_top, event.dma0_completion_utag, 10);
+	    setDpiSignal32(hd0_cpl_type_top, event.dma0_completion_type,  3);
+	    setDpiSignal32(hd0_cpl_size_top, event.dma0_completion_size, 12);
+	    setMyCacheLine(hd0_cpl_data_top, event.dma0_completion_data);
+	    setDpiSignal32(hd0_cpl_laddr_top, 	  event.dma0_completion_laddr, 	10);
+	    setDpiSignal32(hd0_cpl_byte_count_top, 	  event.dma0_completion_byte_count, 	10);
+	    printf("%08lld: ", (long long) c_sim_time);
+	    printf("Completion Valid: utag=0x%x\n", event.dma0_completion_utag);
+	    *hd0_cpl_valid_top = 1;
+//	    c_dma0_initiated = 0;
+	    cl_cplval = CLOCK_EDGE_DELAY;
+	  }
+	  if(event.dma0_sent_utag_valid)			// must be corresponding to the assertion of HDx_SENT_UTAG_VALID by PSL
+	  {
+	    setDpiSignal32(hd0_sent_utag_top, 	  event.dma0_sent_utag, 	10);
+	    setDpiSignal32(hd0_sent_utag_sts_top, event.dma0_sent_utag_status,   2);
+	    *hd0_sent_utag_valid_top = 1;
+	    cl_sntval = CLOCK_EDGE_DELAY;
+	  }
+#endif
 	  // Copying over the rest of the assignments from the clock_edge function
 	  if (cl_jval) {
 	  	--cl_jval;
@@ -806,6 +680,18 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	  	if (!cl_rval)
 	  		*ha_rvalid_top = 0;
 	  }
+#ifndef PSL8
+	  if (cl_cplval) {
+	  	--cl_cplval;
+	  	if (!cl_cplval)
+	  		*hd0_cpl_valid_top = 0;
+	  }
+	  if (cl_sntval) {
+	  	--cl_sntval;
+	  	if (!cl_sntval)
+	  		*hd0_sent_utag_valid_top = 0;
+	  }
+#endif
 	  return;
         }
 }
@@ -875,319 +761,16 @@ void setDpiSignal32(svLogicVecVal *my32bSignal, uint32_t inData, int size)
   my32bSignal->aval = inData & myMask;
   my32bSignal->bval = 0x0;
 }
-#ifdef OLD_PLI_CODE
-// kept here for reference
-PLI_INT32 register_clock()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	pclock = vpi_scan(argsiter);
-	set_callback_signal(clock_edge, pclock);
-
-	return 0;
-}
-
-PLI_INT32 register_control()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	jval = vpi_scan(argsiter);
-	jcom = vpi_scan(argsiter);
-	jcompar = vpi_scan(argsiter);
-	jea = vpi_scan(argsiter);
-	jeapar = vpi_scan(argsiter);
-	jrunning = vpi_scan(argsiter);
-	jdone = vpi_scan(argsiter);
-	jcack = vpi_scan(argsiter);
-	jerror = vpi_scan(argsiter);
-	latency = vpi_scan(argsiter);
-	jyield = vpi_scan(argsiter);
-	timebase_req = vpi_scan(argsiter);
-	parity_enabled = vpi_scan(argsiter);
-	cl_jval = 0;
-
-	set_signal32(jval, 0);
-
-	return 0;
-}
-
-PLI_INT32 register_mmio()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	mmval = vpi_scan(argsiter);
-	mmcfg = vpi_scan(argsiter);
-	mmrnw = vpi_scan(argsiter);
-	mmdw = vpi_scan(argsiter);
-	mmad = vpi_scan(argsiter);
-	mmadpar = vpi_scan(argsiter);
-	mmwdata = vpi_scan(argsiter);
-	mmwdatapar = vpi_scan(argsiter);
-	mmack = vpi_scan(argsiter);
-	mmrdata = vpi_scan(argsiter);
-	mmrdatapar = vpi_scan(argsiter);
-	cl_mmio = 0;
-
-	set_signal32(mmval, 0);
-
-	return 0;
-}
-
-PLI_INT32 register_command()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	croom = vpi_scan(argsiter);
-	cvalid = vpi_scan(argsiter);
-	ctag = vpi_scan(argsiter);
-	ctagpar = vpi_scan(argsiter);
-	ccom = vpi_scan(argsiter);
-	ccompar = vpi_scan(argsiter);
-	cabt = vpi_scan(argsiter);
-	cea = vpi_scan(argsiter);
-	ceapar = vpi_scan(argsiter);
-	cch = vpi_scan(argsiter);
-	csize = vpi_scan(argsiter);
-
-	set_signal32(croom, event.room);
-
-	return 0;
-}
-
-PLI_INT32 register_rd_buffer()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	brval = vpi_scan(argsiter);
-	brtag = vpi_scan(argsiter);
-	brtagpar = vpi_scan(argsiter);
-	brdata = vpi_scan(argsiter);
-	brpar = vpi_scan(argsiter);
-	brvalid_out = vpi_scan(argsiter);
-	brtag_out = vpi_scan(argsiter);
-	brlat = vpi_scan(argsiter);
-	cl_br = 0;
-
-	set_signal32(brval, 0);
-
-	return 0;
-}
-
-PLI_INT32 register_wr_buffer()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	bwval = vpi_scan(argsiter);
-	bwtag = vpi_scan(argsiter);
-	bwtagpar = vpi_scan(argsiter);
-	bwdata = vpi_scan(argsiter);
-	bwpar = vpi_scan(argsiter);
-	cl_bw = 0;
-
-	set_signal32(bwval, 0);
-
-	return 0;
-}
-
-PLI_INT32 register_response()
-{
-	vpiHandle systfref, argsiter;
-	systfref = vpi_handle(vpiSysTfCall, NULL);
-	argsiter = vpi_iterate(vpiArgument, systfref);
-
-	rval = vpi_scan(argsiter);
-	rtag = vpi_scan(argsiter);
-	rtagpar = vpi_scan(argsiter);
-	resp = vpi_scan(argsiter);
-	rcredits = vpi_scan(argsiter);
-	cl_rval = 0;
-
-	set_signal32(rval, 0);
-
-	return 0;
-}
-
-PLI_INT32 clear_rval()
-{
-	set_signal32(rval, 0);
-	return 0;
-}
-#endif
 
 // AFU abstraction functions
-/*
-static void set_job()
-{
-	set_signal32(jcom, event.job_code);
-	set_signal32(jcompar, event.job_code_parity);
-	set_signal64(jea, event.job_address);
-	set_signal32(jeapar, event.job_address_parity);
-	set_signal32(jval, 1);
-
-#ifdef DEBUG
-	info_message("Job 0x%03x EA=0x%016llx\n", event.job_code,
-		     event.job_address);
-#endif				
-
-	cl_jval = CLOCK_EDGE_DELAY;
-
-	event.job_valid = 0;
-}
-static void set_mmio()
-{
-	set_signal32(mmrnw, event.mmio_read);
-	set_signal32(mmdw, event.mmio_double);
-	set_signal64(mmad, event.mmio_address);
-	set_signal64(mmadpar, event.mmio_address_parity);
-	set_signal64(mmwdata, event.mmio_wdata);
-	set_signal64(mmwdatapar, event.mmio_wdata_parity);
-	set_signal32(mmcfg, event.mmio_afudescaccess);
-	set_signal32(mmval, 1);
-
-#ifdef DEBUG
-	info_message("MMIO rnw=%d dw=%d addr=0x%08x data=0x%016llx\n",
-		     event.mmio_read, event.mmio_double, event.mmio_address,
-		     event.mmio_wdata);
-#endif				
-
-	cl_mmio = CLOCK_EDGE_DELAY;
-
-	event.mmio_valid = 0;
-}
-
-static void set_buffer_read()
-{
-	set_signal32(brtag, event.buffer_read_tag);
-	set_signal32(brtagpar, event.buffer_read_tag_parity);
-	set_signal32(brval, 1);
-
-#ifdef DEBUG
-	info_message("Buffer Read tag=0x%02x\n", event.buffer_read_tag);
-#endif				
-
-	cl_br = CLOCK_EDGE_DELAY;
-
-	event.buffer_read = 0;
-}
-
-static void set_buffer_write()
-{
-	bw_delay += 2;
-	uint32_t parity;
-	parity = (uint32_t) event.buffer_wparity[0];
-	parity <<= 8;
-	parity += (uint32_t) event.buffer_wparity[1];
-
-	set_signal32(bwtag, event.buffer_write_tag);
-	set_signal32(bwtagpar, event.buffer_write_tag_parity);
-	set_signal_long(bwdata, event.buffer_wdata);
-	set_signal32(bwpar, parity);
-	set_signal32(bwval, 1);
-
-#ifdef DEBUG
-	info_message("Buffer Write tag=0x%02x\n", event.buffer_write_tag);
-#endif				
-
-	cl_bw = CLOCK_EDGE_DELAY;
-
-	event.buffer_write = 0;
-}
-
-static void set_response()
-{
-	set_signal32(rtag, resp_list->tag);
-	set_signal32(rtagpar, resp_list->tagpar);
-	set_signal32(resp, resp_list->code);
-	set_signal32(rcredits, resp_list->credits);
-	set_signal32(rval, 1);
-
-#ifdef DEBUG
-	info_message("Response tag=0x%02x code=0x%02x credits=%d\n",
-		     resp_list->tag, resp_list->code, resp_list->credits);
-#endif				
-
-	struct resp_event *tmp;
-	tmp = resp_list;
-	resp_list = resp_list->__next;
-	free(tmp);
-
-	cl_rval = CLOCK_EDGE_DELAY;
-}
-*/
 
 // AFU functions
 /*
-static void psl()
-{
-	// Wait for clock edge from PSL
-	fd_set watchset;
-	FD_ZERO(&watchset);
-	FD_SET(event.sockfd, &watchset);
-	select(event.sockfd + 1, &watchset, NULL, NULL, NULL);
-	int rc = psl_get_psl_events(&event);
-	// No clock edge
-	while (!rc) {
-		select(event.sockfd + 1, &watchset, NULL, NULL, NULL);
-		rc = psl_get_psl_events(&event);
-	}
-	// Error case
-	if (rc < 0) {
-		info_message("Socket closed: Ending Simulation.");
-#ifdef FINISH
-		vpi_control(vpiFinish, 1);
-#else
-		vpi_control(vpiStop, 1);
-#endif
-	}
-	// Job
-	if (event.job_valid)
-		set_job();
-
-	// MMIO
-	if (event.mmio_valid)
-		set_mmio();
-
-	// Buffer read
-	if (event.buffer_read)
-		set_buffer_read();
-
-	// Buffer write
-	if (event.buffer_write)
-		set_buffer_write();
-	if (bw_delay > 0)
-		--bw_delay;
-	if (resp_list && !(bw_delay % 2))
-		set_response();
-
-	// Response
-	if (event.response_valid)
-		add_response();
-
-	// Croom
-	if (event.aux1_change) {
-		set_signal32(croom, event.room);
-		event.aux1_change = 0;
-	}
-}
-*/
 PLI_INT32 afu_close()
 {
 	psl_close_afu_event(&event);
 	return 0;
 }
-
 PLI_INT32 afu_init()
 {
 	int port = 32768;
@@ -1200,7 +783,7 @@ PLI_INT32 afu_init()
 	set_callback_event(afu_close, cbEndOfSimulation);
 	return 0;
 }
-
+*/
 static void psl_control(void)
 {
 	// Wait for clock edge from PSL
@@ -1219,121 +802,27 @@ static void psl_control(void)
 	  printf("%08lld: ", (long long) c_sim_time);
 	  printf("Socket closed: Ending Simulation.");
 	  c_sim_error = 1;
-#ifdef OLD_PLI_CODE
-#ifdef FINISH
-		vpi_control(vpiFinish, 1);
-#else
-		vpi_control(vpiStop, 1);
-#endif
-#endif
 	}
 }
 
 void psl_bfm_init()
 {
-	int port = 32768;
-	while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
-		if (port == 65535) {
-			error_message("Unable to find open port!");
-		}
-		++port;
-	}
-	// set_callback_event(afu_close, cbEndOfSimulation);
-	return;
+  int port = 32768;
+//  c_dma0_initiated = 0;
+  while (psl_serv_afu_event(&event, port) != PSL_SUCCESS) {
+    if (psl_serv_afu_event(&event, port) == PSL_VERSION_ERROR) {
+      printf("%08lld: ", (long long) c_sim_time);
+      printf("Socket closed: Ending Simulation.");
+      c_sim_error = 1;
+    }
+    if (port == 65535) {
+      error_message("Unable to find open port!");
+    }
+    ++port;
+  }
+  // set_callback_event(afu_close, cbEndOfSimulation);
+//  psl_close_afu_event(&event);
+  return;
 }
 
-// Register VLI functions
 
-void registerAfuInitSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$afu_init";
-	task_data_p->calltf = afu_init;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-#ifdef OLD_PLI_CODE
-void registerRegClockSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_clock";
-	task_data_p->calltf = register_clock;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void registerRegControlSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_control";
-	task_data_p->calltf = register_control;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void registerRegMmioSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_mmio";
-	task_data_p->calltf = register_mmio;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void registerRegCommandSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_command";
-	task_data_p->calltf = register_command;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void registerRegRdBufferSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_rd_buffer";
-	task_data_p->calltf = register_rd_buffer;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void registerRegWrBufferSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_wr_buffer";
-	task_data_p->calltf = register_wr_buffer;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void registerRegResponseSystfs()
-{
-	s_vpi_systf_data task_data_s;
-	p_vpi_systf_data task_data_p = &task_data_s;
-	task_data_p->type = vpiSysTask;
-	task_data_p->tfname = "$register_response";
-	task_data_p->calltf = register_response;
-	task_data_p->compiletf = 0;
-	vpi_register_systf(task_data_p);
-}
-
-void (*vlog_startup_routines[]) () = {
-	registerAfuInitSystfs, registerRegClockSystfs, registerRegControlSystfs, registerRegMmioSystfs, registerRegCommandSystfs, registerRegRdBufferSystfs, registerRegWrBufferSystfs, registerRegResponseSystfs, 0	// last entry must be 0
-};
-#endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "psl_interface_t.h"
 
 #ifdef DEBUG
 #define DPRINTF(...) printf(__VA_ARGS__)
@@ -35,8 +36,15 @@
 #define CACHELINE_BYTES 128
 #define PSL_IDLE_CYCLES 20
 
+#ifdef PSL8
 #define PSLSE_VERSION_MAJOR	0x01
 #define PSLSE_VERSION_MINOR	0x02
+#endif /* ifdef PSL8 */
+
+#if defined PSL9lite || defined PSL9
+#define PSLSE_VERSION_MAJOR	0x02
+#define PSLSE_VERSION_MINOR	0x00
+#endif /* ifdef PSL9 */
 
 #define PSLSE_CONNECT		0x01
 #define PSLSE_QUERY		0x02
@@ -60,6 +68,18 @@
 #define PSLSE_AFU_ERROR		0x14
 #define PSLSE_MMIO_EBREAD	0x15
 #define PSLSE_VSEC_INFO		0x16
+#ifdef PSL9
+#define PSLSE_DMA0_RD		0x21
+#define PSLSE_DMA0_WR		0x22
+#define PSLSE_DMA0_WR_AMO	0x23
+#define MAX_INT32 0x7fffffffU
+#define MIN_INT32 0x80000000U
+#define MAX_UINT32 0xffffffffU
+#define MAX_INT64   0x7FFFFFFFFFFFFFFF
+#define MIN_INT64   0x8000000000000000
+#define MAX_UINT64  0xFFFFFFFFFFFFFFFF
+
+#endif /*ifdef PSL9 */
 
 // PSLSE states
 enum pslse_state {
@@ -127,5 +147,11 @@ void generate_cl_parity(uint8_t * data, uint8_t * parity);
 
 // Gracefully shutdown and close socket connection
 int close_socket(int *sockfd);
+
+//sign extend a 32b integer
+int32_t sign_extend(uint32_t in_op);
+
+//sign extend a 64b integer
+int64_t sign_extend64(uint64_t in_op);
 
 #endif				/* _UTILS_H_ */

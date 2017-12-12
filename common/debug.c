@@ -124,7 +124,7 @@ static void _debug_send_32_32(FILE * fp, DBG_HEADER header, uint32_t value0,
 		value0 = htonl(value0);
 		memcpy(buffer + offset, (char *)&value0, sizeof(value0));
 		offset += sizeof(value0);
-		value0 = htonl(value1);
+		value1 = htonl(value1);
 		memcpy(buffer + offset, (char *)&value1, sizeof(value1));
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
@@ -414,6 +414,23 @@ void debug_cmd_update(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
 	_debug_send_id_8_16_16(fp, DBG_HEADER_CMD_UPDATE, id, tag, context,
 			       resp);
 }
+
+#if defined PSL9 
+void debug_cmd_caia2(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t type)
+{
+	_debug_send_id_8_16_16(fp, DBG_HEADER_CMD_CAIA2, id, tag, context,
+			       type);
+}
+
+void debug_cmd_dma0(FILE * fp, uint8_t id, uint8_t tag, uint16_t context,
+		      uint16_t type)
+{
+	_debug_send_id_8_16_16(fp, DBG_HEADER_CMD_DMA0, id, tag, context,
+			       type);
+}
+
+#endif
 
 void debug_cmd_client(FILE * fp, uint8_t id, uint8_t tag, uint16_t context)
 {

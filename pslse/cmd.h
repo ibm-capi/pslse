@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 International Business Machines
+ * Copyright 2014,2016 International Business Machines
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,23 @@ enum cmd_type {
 	CMD_TOUCH,
 	CMD_INTERRUPT,
 	CMD_READ_PE,
+//#ifdef PSL9
+#if defined PSL9lite || defined PSL9
+	CMD_CAS_4B,
+	CMD_CAS_8B,
+	CMD_CAIA2,
+#endif
+#ifdef PSL9
+	CMD_XLAT_RD,
+	CMD_XLAT_WR,
+	CMD_DMA_RD,
+	CMD_DMA_WR,
+	CMD_DMA_WR_AMO,
+	CMD_ITAG_ABRT_RD,
+	CMD_ITAG_ABRT_WR,
+	CMD_XLAT_RD_TOUCH,
+	CMD_XLAT_WR_TOUCH,
+#endif /* ifdef PSL9 define new cmd type */
 	CMD_OTHER
 };
 
@@ -48,9 +65,27 @@ enum mem_state {
 	MEM_TOUCHED,
 	MEM_BUFFER,
 	MEM_REQUEST,
+#if defined PSL9 || PSL9lite
+	MEM_CAS_OP,
+	MEM_CAS_RD,
+	MEM_CAS_WR,
+#endif
 	MEM_RECEIVED,
+#ifdef PSL9
+	DMA_ITAG_REQ,
+	DMA_ITAG_RET,
+	DMA_PENDING,
+	DMA_PARTIAL,
+	DMA_OP_REQ,
+	DMA_SEND_STS,
+	DMA_MEM_REQ,
+	DMA_MEM_RESP,
+	DMA_CPL_PARTIAL,
+	DMA_CPL_SENT,
+#endif /* ifdef PSL9 */
 	MEM_DONE
 };
+
 
 struct pages {
 	uint64_t entry[PAGE_ENTRIES][PAGE_WAYS];
@@ -68,6 +103,29 @@ struct cmd_event {
 	uint32_t abt;
 	uint32_t size;
 	uint32_t resp;
+#if defined PSL9 || PSL9lite
+	uint64_t cas_op1;
+	uint64_t cas_op2;
+	uint32_t cpagesize;
+	uint32_t resp_r_pgsize;
+	uint32_t resp_extra;
+#endif // defined for both PSL9 & PSL9lite
+#ifdef PSL9  //defined just for PSL9, ie DMA port related
+	uint32_t port;
+	uint32_t itag;
+	uint32_t bus_lock;
+	uint32_t utag;
+	uint32_t dsize;
+	uint32_t dtype;
+	uint32_t dpartial;
+	uint32_t atomic_op;
+	uint32_t sent_sts;
+	uint32_t cpl_type;
+	uint32_t cpl_size;
+	uint32_t cpl_laddr;
+	uint32_t cpl_byte_count;
+	uint32_t cpl_xfers_to_go;
+#endif /*ifdef PSL9 */
 	uint8_t unlock;
 	uint8_t buffer_activity;
 	uint8_t *data;
@@ -95,6 +153,9 @@ struct cmd {
 	uint64_t res_addr;
 	uint32_t credits;
 	int max_clients;
+#if defined PSL9 || PSL9lite
+	uint32_t pagesize;
+#endif
 	uint16_t irq;
 	int locked;
 };
@@ -122,6 +183,16 @@ void handle_mem_return(struct cmd *cmd, struct cmd_event *event, int fd);
 void handle_aerror(struct cmd *cmd, struct cmd_event *event);
 
 void handle_response(struct cmd *cmd);
+
+//#ifdef PSL9
+#if defined PSL9lite || defined PSL9
+void handle_caia2_cmds(struct cmd *cmd);
+void handle_dma0_port(struct cmd *cmd);
+void handle_dma0_read(struct cmd *cmd);
+void handle_dma0_write(struct cmd *cmd);
+void handle_dma0_sent_sts(struct cmd *cmd);
+#endif /* ifdef PSL9 */
+
 
 int client_cmd(struct cmd *cmd, struct client *client);
 
