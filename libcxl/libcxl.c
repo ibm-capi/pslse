@@ -1638,11 +1638,11 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	afu->mmio.type = PSLSE_MMIO_READ64;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
-	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	*data = afu->mmio.data;
+	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	if (!afu->opened)
 		goto read64_fail;
@@ -1789,11 +1789,11 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	afu->mmio.type = PSLSE_MMIO_READ32;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
-	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	*data = (uint32_t) afu->mmio.data;
+	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	if (!afu->opened)
 		goto read32_fail;
