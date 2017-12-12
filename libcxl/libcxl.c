@@ -115,7 +115,7 @@ static int _handle_dsi(struct cxl_afu_h *afu, uint64_t addr)
 		}
 		++i;
 	}
-	assert(i < EVENT_QUEUE_MAX);
+	assert(i < afu->irqs_max);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_data_storage);
@@ -152,16 +152,20 @@ static int _handle_interrupt(struct cxl_afu_h *afu)
 	irq = ntohs(irq);
 
 	// Only track a single interrupt at a time
+	// search list for CXL_EVENT_AFU_INTERRUPT that has a matching irq return 0 if found add if not
 	pthread_mutex_lock(&(afu->event_lock));
 	i = 0;
 	while (afu->events[i] != NULL) {
 		if (afu->events[i]->header.type == CXL_EVENT_AFU_INTERRUPT) {
+		  if (afu->events[i]->irq.irq == irq) {
 			pthread_mutex_unlock(&(afu->event_lock));
 			return 0;
+		  }
 		}
 		++i;
 	}
-	assert(i < EVENT_QUEUE_MAX);
+
+	assert(i < afu->irqs_max);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_afu_interrupt);
@@ -207,7 +211,8 @@ static int _handle_afu_error(struct cxl_afu_h *afu)
 		}
 		++i;
 	}
-	assert(i < EVENT_QUEUE_MAX);
+
+	assert(i < afu->irqs_max);
 
 	size = sizeof(struct cxl_event_header) +
 	    sizeof(struct cxl_event_afu_error);
@@ -1214,24 +1219,36 @@ static void *_psl_loop(void *ptr)
 				_all_idle(afu);
 				break;
 			}
+
 			memcpy((char *)&value, (char *)&(buffer[0]), 2);
 			afu->irqs_min = (long)(value);
+
 			memcpy((char *)&value, (char *)&(buffer[2]), 2);
 			afu->irqs_max = (long)(value);
+			size = sizeof(struct cxl_event *) * afu->irqs_max;
+			afu->events = (struct cxl_event **)calloc(1, size);
+
                 	memcpy((char *)&value, (char *)&(buffer[4]), 2);
 			afu->modes_supported = (long)(value);
+
                 	memcpy((char *)&llvalue, (char *)&(buffer[6]), 8);
 			afu->mmio_len = (long)(llvalue & 0x00ffffffffffffff);
+
                 	memcpy((char *)&llvalue, (char *)&(buffer[14]), 8);
 			afu->mmio_off = (long)(llvalue);
+
                 	memcpy((char *)&llvalue, (char *)&(buffer[22]), 8);
 			afu->eb_len = (long)(llvalue);
+
                 	memcpy((char *)&value, (char *)&(buffer[30]), 2);
 			afu->cr_device = (long)ntohs(value);
+
                         memcpy((char *)&value, (char *)&(buffer[32]), 2);
 			afu->cr_vendor = (long)ntohs(value);
+
                         memcpy((char *)&lvalue, (char *)&(buffer[34]), 4);
 			afu->cr_class = ntohl(lvalue);
+
 			//no better place to put this right now
 			afu->prefault_mode = CXL_PREFAULT_MODE_NONE;
 			break;
@@ -1568,6 +1585,7 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 		return NULL;
 
 	pthread_mutex_init(&(afu->event_lock), NULL);
+	pthread_mutex_init(&(afu->mmio_lock), NULL);
 	afu->fd = fd;
 	afu->map = afu_map;
 	afu->dbg_id = (major << 4) | minor;
@@ -1620,6 +1638,7 @@ static void _release_afus(struct cxl_afu_h *afu)
 		if (afu->id)
 			free(afu->id);
 		pthread_mutex_destroy(&(afu->event_lock));
+		pthread_mutex_destroy(&(afu->mmio_lock));
 		free(afu);
 	}
 }
@@ -1707,6 +1726,7 @@ static struct cxl_afu_h *_pslse_open(int *fd, uint16_t afu_map, uint8_t major,
 
  open_fail:
 	pthread_mutex_destroy(&(afu->event_lock));
+	pthread_mutex_destroy(&(afu->mmio_lock));
 	free(afu);
 	errno = ENODEV;
 	return NULL;
@@ -2027,6 +2047,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 		free(afu->id);
  free_done_no_afu:
 	pthread_mutex_destroy(&(afu->event_lock));
+	pthread_mutex_destroy(&(afu->mmio_lock));
 	free(afu);
 }
 
@@ -2190,9 +2211,9 @@ int cxl_read_event(struct cxl_afu_h *afu, struct cxl_event *event)
 	// Copy event data, free and move remaining events in queue
 	memcpy(event, afu->events[0], afu->events[0]->header.size);
 	free(afu->events[0]);
-	for (i = 1; i < EVENT_QUEUE_MAX; i++)
+	for (i = 1; i < afu->irqs_max; i++)
 		afu->events[i - 1] = afu->events[i];
-	afu->events[EVENT_QUEUE_MAX - 1] = NULL;
+	afu->events[afu->irqs_max - 1] = NULL;
 	pthread_mutex_unlock(&(afu->event_lock));
 	if (read(afu->pipe[0], &type, 1) > 0)
 		return 0;
@@ -2263,11 +2284,21 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	if ((afu == NULL) || !afu->mapped)
 		goto write64_fail;
 
+	// obtain mmio lock before reading and updating mmio structure
+	while (1) {
+	  pthread_mutex_lock( &(afu->mmio_lock) );
+	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
+	  pthread_mutex_unlock( &(afu->mmio_lock) );
+	  _delay_1ms();
+	}
+
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_WRITE64;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.data = data;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
+	pthread_mutex_unlock( &(afu->mmio_lock) );
+
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 
@@ -2290,13 +2321,23 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	if ((afu == NULL) || !afu->mapped)
 		goto read64_fail;
 
+	// obtain mmio lock before reading and updating mmio structure
+	while (1) {
+	  pthread_mutex_lock( &(afu->mmio_lock) );
+	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
+	  pthread_mutex_unlock( &(afu->mmio_lock) );
+	  _delay_1ms();
+	}
+
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_READ64;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
+
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	*data = afu->mmio.data;
+	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	if (!afu->opened)
 		goto read64_fail;
@@ -2394,11 +2435,21 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	if ((afu == NULL) || !afu->mapped)
 		goto write32_fail;
 
+	// obtain mmio lock before reading and updating mmio structure
+	while (1) {
+	  pthread_mutex_lock( &(afu->mmio_lock) );
+	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
+	  pthread_mutex_unlock( &(afu->mmio_lock) );
+	  _delay_1ms();
+	}
+
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_WRITE32;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.data = (uint64_t) data;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
+	pthread_mutex_unlock( &(afu->mmio_lock) );
+
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 
@@ -2421,13 +2472,23 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	if ((afu == NULL) || !afu->mapped)
 		goto read32_fail;
 
+	// obtain mmio lock before reading and updating mmio structure
+	while (1) {
+	  pthread_mutex_lock( &(afu->mmio_lock) );
+	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
+	  pthread_mutex_unlock( &(afu->mmio_lock) );
+	  _delay_1ms();
+	}
+
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_READ32;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
+
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	*data = (uint32_t) afu->mmio.data;
+	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	if (!afu->opened)
 		goto read32_fail;

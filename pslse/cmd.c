@@ -1378,7 +1378,8 @@ void handle_interrupt(struct cmd *cmd)
 
 	// Send interrupt to client
 	buffer[0] = PSLSE_INTERRUPT;
-	irq = htons(cmd->irq);
+	irq = htons(event->addr);  // addr holds the irq during an intreq command
+	// irq = htons(cmd->irq);  // this was the old way and would essentially convert subsequent interrupt irqs to the first one
 	memcpy(&(buffer[1]), &irq, 2);
 	event->abort = &(client->abort);
 	debug_msg("%s:INTERRUPT irq=%d", cmd->afu_name, cmd->irq);
@@ -2313,9 +2314,13 @@ void handle_response(struct cmd *cmd)
 		debug_cmd_response(cmd->dbg_fp, cmd->dbg_id, event->tag);
 		if ( ( client != NULL ) && ( event->command == PSL_COMMAND_RESTART ) )
 			client->flushing = FLUSH_NONE;
+
+    // clear the irq if we just responded to an intreq
+		if ((client != NULL) && (event->command == PSL_COMMAND_INTREQ))
+		        cmd->irq = 0;
 #ifdef PSL9
 		// if this was an xlat cmd, don't want to free the event so add code to check - HMP
-	        if ( ( event->type == CMD_XLAT_RD ) ||
+	  if ( ( event->type == CMD_XLAT_RD ) ||
 		     ( event->type == CMD_XLAT_WR ) ) {
 		  debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", set state dma pending and tag to deadbeef for itag=0x%x",
 			     cmd->afu_name,
@@ -2326,9 +2331,9 @@ void handle_response(struct cmd *cmd)
 		  cmd->credits++;
 		} else {
 #endif /* ifdef PSL9 */
-	          debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event",
-			     cmd->afu_name,
-			     event );
+	     debug_msg( "%s:RESPONSE event @ 0x%016" PRIx64 ", free event",
+		        cmd->afu_name,
+			      event );
 		  *head = event->_next;
 		  free(event->data);
 		  free(event->parity);
