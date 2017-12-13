@@ -1120,12 +1120,15 @@ static void *_psl_loop(void *ptr)
 {
 	struct cxl_afu_h *afu = (struct cxl_afu_h *)ptr;
 	uint8_t buffer[MAX_LINE_CHARS];
-	uint8_t op_size, function_code;
 	uint64_t addr;
 	uint16_t size, value;
 	uint32_t lvalue;
-	uint64_t llvalue, op1, op2;
+	uint64_t llvalue;
 	int rc;
+#ifdef PSL9
+	uint8_t op_size, function_code;
+	uint64_t op1, op2;
+#endif /*ifdef PSL9 */
 
 	if (!afu)
 		fatal_msg("NULL afu passed to libcxl.c:_psl_loop");
