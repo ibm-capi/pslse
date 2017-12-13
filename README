@@ -2,6 +2,18 @@
 | Power Service Layer Simulation Engine |
 +---------------------------------------+
 
+
+*** ATTENTION ATTENTION ATTENTION ATTENTION ***
+
+PSLSE now supports either the Power8 implementation of PSL or the Power9 implementation
+of PSL.  This is controlled by environment variables:
+
+PSL8=1 causes us to compile for the Power8 implementation
+PSL9=1 causes us to compile for the Power9 implementation
+
+You may not set them both at the same time.  This may change in the near future.
+Be sure to review the QUICKSTART file for more detail.
+
 This repository contains code for simulation and testing of a customer designed 
 Accelerated Functional Unit (AFU) and it's accompanying application by
 simulating the connection to the Power Service Layer (PSL) as part of IBM's
