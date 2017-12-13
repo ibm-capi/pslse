@@ -55,7 +55,6 @@ struct mmio_req {
 struct cxl_afu_h {
 	pthread_t thread;
 	pthread_mutex_t event_lock;
-	pthread_mutex_t mmio_lock;
         struct cxl_event **events;
 	int adapter;
 	char *id;

@@ -1585,7 +1585,6 @@ static struct cxl_afu_h *_new_afu(uint16_t afu_map, uint16_t position, int fd)
 		return NULL;
 
 	pthread_mutex_init(&(afu->event_lock), NULL);
-	pthread_mutex_init(&(afu->mmio_lock), NULL);
 	afu->fd = fd;
 	afu->map = afu_map;
 	afu->dbg_id = (major << 4) | minor;
@@ -1638,7 +1637,6 @@ static void _release_afus(struct cxl_afu_h *afu)
 		if (afu->id)
 			free(afu->id);
 		pthread_mutex_destroy(&(afu->event_lock));
-		pthread_mutex_destroy(&(afu->mmio_lock));
 		free(afu);
 	}
 }
@@ -1726,7 +1724,6 @@ static struct cxl_afu_h *_pslse_open(int *fd, uint16_t afu_map, uint8_t major,
 
  open_fail:
 	pthread_mutex_destroy(&(afu->event_lock));
-	pthread_mutex_destroy(&(afu->mmio_lock));
 	free(afu);
 	errno = ENODEV;
 	return NULL;
@@ -2047,7 +2044,6 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 		free(afu->id);
  free_done_no_afu:
 	pthread_mutex_destroy(&(afu->event_lock));
-	pthread_mutex_destroy(&(afu->mmio_lock));
 	free(afu);
 }
 
@@ -2284,21 +2280,11 @@ int cxl_mmio_write64(struct cxl_afu_h *afu, uint64_t offset, uint64_t data)
 	if ((afu == NULL) || !afu->mapped)
 		goto write64_fail;
 
-	// obtain mmio lock before reading and updating mmio structure
-	while (1) {
-	  pthread_mutex_lock( &(afu->mmio_lock) );
-	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
-	  pthread_mutex_unlock( &(afu->mmio_lock) );
-	  _delay_1ms();
-	}
-
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_WRITE64;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.data = data;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
-	pthread_mutex_unlock( &(afu->mmio_lock) );
-
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 
@@ -2321,23 +2307,13 @@ int cxl_mmio_read64(struct cxl_afu_h *afu, uint64_t offset, uint64_t * data)
 	if ((afu == NULL) || !afu->mapped)
 		goto read64_fail;
 
-	// obtain mmio lock before reading and updating mmio structure
-	while (1) {
-	  pthread_mutex_lock( &(afu->mmio_lock) );
-	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
-	  pthread_mutex_unlock( &(afu->mmio_lock) );
-	  _delay_1ms();
-	}
-
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_READ64;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
-
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	*data = afu->mmio.data;
-	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	if (!afu->opened)
 		goto read64_fail;
@@ -2435,21 +2411,11 @@ int cxl_mmio_write32(struct cxl_afu_h *afu, uint64_t offset, uint32_t data)
 	if ((afu == NULL) || !afu->mapped)
 		goto write32_fail;
 
-	// obtain mmio lock before reading and updating mmio structure
-	while (1) {
-	  pthread_mutex_lock( &(afu->mmio_lock) );
-	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
-	  pthread_mutex_unlock( &(afu->mmio_lock) );
-	  _delay_1ms();
-	}
-
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_WRITE32;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.data = (uint64_t) data;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
-	pthread_mutex_unlock( &(afu->mmio_lock) );
-
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 
@@ -2472,23 +2438,13 @@ int cxl_mmio_read32(struct cxl_afu_h *afu, uint64_t offset, uint32_t * data)
 	if ((afu == NULL) || !afu->mapped)
 		goto read32_fail;
 
-	// obtain mmio lock before reading and updating mmio structure
-	while (1) {
-	  pthread_mutex_lock( &(afu->mmio_lock) );
-	  if ( afu->mmio.state == LIBCXL_REQ_IDLE ) break; // it is ok to make the mmio request
-	  pthread_mutex_unlock( &(afu->mmio_lock) );
-	  _delay_1ms();
-	}
-
 	// Send MMIO map to PSLSE
 	afu->mmio.type = PSLSE_MMIO_READ32;
 	afu->mmio.addr = (uint32_t) offset;
 	afu->mmio.state = LIBCXL_REQ_REQUEST;
-
 	while (afu->mmio.state != LIBCXL_REQ_IDLE)	/*infinite loop */
 		_delay_1ms();
 	*data = (uint32_t) afu->mmio.data;
-	pthread_mutex_unlock( &(afu->mmio_lock) );
 
 	if (!afu->opened)
 		goto read32_fail;
