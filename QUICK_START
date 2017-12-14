@@ -5,9 +5,9 @@ Environment Variable Setting:
 This code checkout would run well for PSL8 based AFU verification as well as for PSL9 based verification
 Ensure that the following environment variable setting is done based on the usage
 	for PSL8 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
-	export PSL8=1
+	export PSLVER=8
 	for PSL9 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
-	export PSL9=1
+	export PSLVER=9
 
 	CAUTION:	if we have both PSL8 and PSL9 environment variables set on a window, we will end up with undesired results.
 

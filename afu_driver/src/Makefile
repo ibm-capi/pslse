@@ -27,6 +27,7 @@ ifndef VPI_USER_H_DIR
   $(error Must set VPI_USER_H_DIR to point to include path for the simulator)
 endif
 
+
 all: veriuser.sl libdpi.so \
 	set_env
 
