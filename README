@@ -6,12 +6,12 @@
 *** ATTENTION ATTENTION ATTENTION ATTENTION ***
 
 PSLSE now supports either the Power8 implementation of PSL or the Power9 implementation
-of PSL.  This is controlled by environment variables:
+of PSL.  This is controlled by environment variable PSLVER:
 
-PSL8=1 causes us to compile for the Power8 implementation
-PSL9=1 causes us to compile for the Power9 implementation
+PSLVER=8 causes us to compile for the Power8 implementation
+PSLVER=9 causes us to compile for the Power9 implementation
 
-You may not set them both at the same time.  This may change in the near future.
+You may not set them both at the same time.
 Be sure to review the QUICKSTART file for more detail.
 
 This repository contains code for simulation and testing of a customer designed 

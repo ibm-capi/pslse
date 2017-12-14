@@ -9,8 +9,6 @@ Ensure that the following environment variable setting is done based on the usag
 	for PSL9 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
 	export PSLVER=9
 
-	CAUTION:	if we have both PSL8 and PSL9 environment variables set on a window, we will end up with undesired results.
-
 SETUP:
 
 1) Use "make" to build the code in afu_driver/src.  You will have to first set
