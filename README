@@ -11,7 +11,8 @@ of PSL.  This is controlled by environment variable PSLVER:
 PSLVER=8 causes us to compile for the Power8 implementation
 PSLVER=9 causes us to compile for the Power9 implementation
 
-You may not set them both at the same time.
+You must also pass a define into the verilog compile for top.v!
+
 Be sure to review the QUICKSTART file for more detail.
 
 This repository contains code for simulation and testing of a customer designed 
