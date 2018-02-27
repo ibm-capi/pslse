@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* Description : memcopy.c
+/* Description : dma_memcopy.c
  *
  * This test performs memcopy using the Test AFU for validating pslse
  */
@@ -40,6 +40,7 @@ void usage(char *name)
 
 int main(int argc, char *argv[])
 {
+#ifdef PSL9
 	MachineConfig machine;
 	char *cacheline0, *cacheline1, *name;
 	uint64_t wed;
@@ -323,6 +324,6 @@ done:
 		cxl_afu_free(afu_m);
 	}
        
-
+#endif
 	return 0;
 }

@@ -350,11 +350,13 @@ void psl_bfm(const svLogic       ha_pclock, 		// used as pclock on PLI
 	    printf("%08lld: ", (long long) c_sim_time);
 	    printf("ah_brlat_top has either X or Z value =0x%08llx\n", (long long)c_ah_brlat);
           }
+#ifndef PSL8
           else if(c_ah_brlat > 2)
           {
 	    printf("%08lld: ", (long long) c_sim_time);
 	    printf(" WARNING!! ah_brlat has a value other than what is supported on CAIA2. Current value=0x%02llx\n", (long long)c_ah_brlat);
           }
+#endif             
 #ifdef PSL8
           c_ah_jyield    = (ah_jyield & 0x2) ? 0 : (ah_jyield & 0x1);
 #else

@@ -5,11 +5,9 @@ Environment Variable Setting:
 This code checkout would run well for PSL8 based AFU verification as well as for PSL9 based verification
 Ensure that the following environment variable setting is done based on the usage
 	for PSL8 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
-	export PSL8=1
+	export PSLVER=8
 	for PSL9 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
-	export PSL9=1
-
-	CAUTION:	if we have both PSL8 and PSL9 environment variables set on a window, we will end up with undesired results.
+	export PSLVER=9
 
 SETUP:
 
@@ -29,13 +27,13 @@ SETUP:
 	Verilog.  Build a model as required for your simulator.  You may need to set flags
 	or options to allow SystemVerilog keywords as top.v include references to
 	C code that uses SystemVerilog DPI functionality.
+	The libdpi.so created in the previous step should be pointed to for compile.
+	For ease of operation, suggest creation of a softlink to the $PSLSE_INSTALL_DIR/afu_driver/src/libdpi.so
 	NOTE: when compiling the top.v, ensure that proper "define" is passed on, based on the usage
 	ie, for PSL8 based AFU verification "-define PSL8" must be provided to the compiler
 	for PSL9 based AFU verification "-define PSL9" must be provided.
 
-3) Use "make" to compile the code in the directory pslse. You will have to first
-        set the appropriate #define in common/psl_interface_t.h to select the PSL
-        version you want to work with; be sure to do a "make clean" before your make. 
+3) Use "make" to compile the code in the directory pslse. 
 	This creates a stand-alone executable that mimics the behavior of 
 	PSL/CAPP and the kernel code that supports it.
 
@@ -43,7 +41,10 @@ SETUP:
 	libcxl.a archive library version of libcxl as well as libcxl.so shared
 	object version of libcxl.
 
-5) Look at the Makefiles in sample_app for examples of how to build your
+5) On the Simulation window, ensure that your LD_LIBRARY_PATH env
+	variable has these paths in it - $PSLSE_INSTALL_DIR/libcxl:$PSLSE_INSTALL_DIR/afu_driver/src
+
+6) Look at the Makefiles in sample_app for examples of how to build your
 	application with libcxl.  If you build with libcxl.so then you don't
 	have to re-compile your application if libcxl changes.  You can just
 	re-compile libcxl and libcxl.so is picked up at runtime.  However, this
@@ -51,13 +52,12 @@ SETUP:
 	the libcxl path at runtime.  Alternatively, you can compile with
 	libcxl.a.  When using libcxl.a you don't need to set any environment
 	variables but you do need to recompile your application any time that
-	libcxl is recompiled. for example, ensure that your LD_LIBRARY_PATH env
-	variable has these paths in it - $PSLSE_INSTALL_DIR/libcxl:$PSLSE_INSTALL_DIR/afu_driver/src
+	libcxl is recompiled. 
 
-6) Use sample_app/app.c as an example to start coding your application with
+7) Use sample_app/app.c as an example to start coding your application with
 	libcxl calls using the functions in libcxl.h.
 
-7) Build your application.
+8) Build your application.
 
 
 RUNNING:
