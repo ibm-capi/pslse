@@ -1136,7 +1136,8 @@ void handle_dma0_read(struct cmd *cmd)
 		if (event->cpl_xfers_to_go == 0) {
 			if (event->state == DMA_MEM_RESP)  {  //start of transaction
 				event->cpl_byte_count = event->dsize;
-				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+				event->cpl_laddr = (uint32_t) (event->addr & 0x000000000000007F); //issue #108
 			}
 			debug_msg(" event->state = 0x%x and utag = 0x%x and cpl_byte_count=0x%x", event->state, event->utag, event->cpl_byte_count);
 			if (event->cpl_byte_count <= 128) { // Single cycle single completion flow
@@ -1209,7 +1210,8 @@ void handle_dma0_read(struct cmd *cmd)
 				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
 				//event->cpl_size = event->dsize; <<<<---THIS IS NOT RIGHT
 				//event->cpl_byte_count = event->dsize; <<<<<---THIS MAY NOT BE RIGHT EITHER
-				event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
+				event->cpl_laddr = (uint32_t) (event->addr & 0x000000000000007F);  //issue #108
 				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
@@ -1242,6 +1244,7 @@ void handle_dma0_read(struct cmd *cmd)
 					if (event->cpl_byte_count <= 128)// last transfer will be single cycle
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr += 256;
+					event->cpl_laddr = (event->cpl_laddr & 0x0000007F);  //issue #108
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
 					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x and utag=0x%x", cmd->afu_name,
 						event->cpl_size, event->cpl_laddr, event->cpl_byte_count, event->utag);
