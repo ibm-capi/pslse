@@ -1881,7 +1881,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 		case PSL_COMMAND_XLAT_RD_P0:
 			need_a_tag = 1;
 			done_it = 0;
-			while (need_a_tag == 1)  {
+			do {
 				this_itag = rtag;
 				head = &cmd->list;
 				while (*head != NULL) {
@@ -1910,7 +1910,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 					event->state = MEM_DONE;
 					break;
 					}
-			}
+			} while (need_a_tag == 1);
 
 			event->itag = this_itag;
 			event->port = 0;
@@ -1924,7 +1924,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 		case PSL_COMMAND_XLAT_WR_P0:
 			need_a_tag = 1;
 			done_it = 0;
-			while (need_a_tag == 1)  {
+			do {
 				this_itag = wtag;
 				head = &cmd->list;
 				while (*head != NULL) {
@@ -1953,7 +1953,7 @@ void handle_caia2_cmds(struct cmd *cmd)
 					event->state = MEM_DONE;
 					break;
 					}
-			}
+			} while (need_a_tag == 1);
 			event->itag = this_itag;
 			event->port = 0;
 			//printf("in handle_caia2 for xlat_wr, address is 0x%016"PRIX64 "\n", event->addr);
