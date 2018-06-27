@@ -1783,12 +1783,12 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 
 {
 	//check to be sure rd & wr credits are available, otherwise reject
-	//if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
-	//	printf("AFU IS OUT OF DMA RD CREDITS !!!!!! \n"); 
-	//	return PSL_NO_DMA_PORT_CREDITS; }
-	//if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
-	//	printf("AFU IS OUT OF DMA WR CREDITS !!!!!! \n"); 
-	//	return PSL_NO_DMA_PORT_CREDITS; }
+	if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
+		printf("AFU IS OUT OF DMA RD CREDITS !!!!!! \n"); 
+		return PSL_NO_DMA_PORT_CREDITS; }
+	if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
+		printf("AFU IS OUT OF DMA WR CREDITS !!!!!! \n"); 
+		return PSL_NO_DMA_PORT_CREDITS; }
 	if  (event->dma0_dvalid) {
 		printf("ALREADY A DMA CMD PENDING  !!!!!! \n");
 		return PSL_DOUBLE_DMA0_REQ;
