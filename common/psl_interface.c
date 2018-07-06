@@ -284,7 +284,7 @@ int psl_serv_afu_event(struct AFU_EVENT *event, int port)
 #ifdef PSL9
 	event->dma0_wr_credits = MAX_DMA0_WR_CREDITS;
 	event->dma0_rd_credits = MAX_DMA0_RD_CREDITS;
-        //printf("psl_serv_afu_event: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
+        printf("psl_serv_afu_event: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
 #endif 
 	struct sockaddr_in ssadr, csadr;
 	unsigned int csalen = sizeof(csadr);
@@ -1783,11 +1783,11 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 
 {
 	//check to be sure rd & wr credits are available, otherwise reject
-	if ((event->dma0_req_type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
-		printf("AFU IS OUT OF DMA RD CREDITS !!!!!! \n"); 
+	if ((type == DMA_DTYPE_RD_REQ) && (event->dma0_rd_credits <= 0))  {
+		printf("AFU IS OUT OF DMA RD CREDITS !!!!!! utag= 0x%x itag= 0x%x type= 0x%x \n", utag, itag, type); 
 		return PSL_NO_DMA_PORT_CREDITS; }
-	if ((event->dma0_req_type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
-		printf("AFU IS OUT OF DMA WR CREDITS !!!!!! \n"); 
+	if ((type != DMA_DTYPE_RD_REQ) && (event->dma0_wr_credits == 0)) {
+		printf("AFU IS OUT OF DMA WR CREDITS !!!!!! utag= 0x%x itag= 0x%x type= 0x%x \n", utag, itag, type); 
 		return PSL_NO_DMA_PORT_CREDITS; }
 	if  (event->dma0_dvalid) {
 		printf("ALREADY A DMA CMD PENDING  !!!!!! \n");
@@ -1831,7 +1831,7 @@ psl_afu_dma0_req(struct AFU_EVENT *event,
 		}
 		if (event->dma0_req_type == DMA_DTYPE_RD_REQ)
 			event->dma0_rd_credits--;
-		//printf("psl_afu_dma0_req: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
+		printf("psl_afu_dma0_req: rd_credit count is %d  wr_credit count is %d \n", event->dma0_rd_credits, event->dma0_wr_credits);
 		event->dma0_dvalid = 1;			
 		return PSL_SUCCESS;
 
@@ -1899,7 +1899,7 @@ afu_get_dma0_sent_utag(struct AFU_EVENT *event,
 			//event->dma0_rd_credits++;
 		     }
 
-		//printf("afu_get_dma0_sent_utag: sent_sts is %d  rd_credit count is %d  wr_credit count is %d \n", sent_sts, event->dma0_rd_credits, event->dma0_wr_credits);
+		printf("afu_get_dma0_sent_utag: sent_sts is %d  rd_credit count is %d  wr_credit count is %d \n", sent_sts, event->dma0_rd_credits, event->dma0_wr_credits);
 		return PSL_SUCCESS;
 	}
 }
