@@ -125,6 +125,7 @@ struct cmd_event {
 	uint32_t cpl_laddr;
 	uint32_t cpl_byte_count;
 	uint32_t cpl_xfers_to_go;
+	uint32_t data_offset;
 #endif /*ifdef PSL9 */
 	uint8_t unlock;
 	uint8_t buffer_activity;

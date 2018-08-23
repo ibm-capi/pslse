@@ -994,8 +994,11 @@ debug_msg ("event->atomic_op = 0x%x ", event->atomic_op);
 		event->cpl_laddr = (uint32_t) (event->cpl_laddr & 0x000000000000000C);
 		debug_msg("%s:DMA0 AMO FETCH DATA WB  utag=0x%02x size=%d addr=0x%016"PRIx64 ,
 		  	cmd->afu_name, event->utag, event->dsize, event->addr);
+		//NOTE: expect atomic op data to be located correctly by memory, so data_offset is always going to be 0
+		//psl_dma0_cpl_bus_write will key off cpl_type (4) to send only 16 bytes
 
-		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
+
+		if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, 0, event->cpl_type,
 			event->dsize, event->cpl_laddr, event->cpl_byte_count,
 			event->data) == PSL_SUCCESS) {
 			debug_msg("%s:DMA0 CPL BUS WRITE utag=0x%02x", cmd->afu_name,
@@ -1058,7 +1061,7 @@ void handle_dma0_read(struct cmd *cmd)
 	struct client *client;
 	uint8_t buffer[10];
 	uint64_t *addr;
-	int quadrant, byte;
+	int quadrant, byte, not_128B_aligned;
 
 	// Make sure cmd structure is valid
 	if (cmd == NULL)
@@ -1132,94 +1135,85 @@ void handle_dma0_read(struct cmd *cmd)
 		/*if ((event->state == DMA_MEM_RESP) && (!allow_resp(cmd->parms)))
 			return; */
 		// BAD things happen when we randomly decide not to return data and get deluged with DMA requests from client
-
+//start of new block
 		if (event->cpl_xfers_to_go == 0) {
 			if (event->state == DMA_MEM_RESP)  {  //start of transaction
 				event->cpl_byte_count = event->dsize;
-				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
 				event->cpl_laddr = (uint32_t) (event->addr & 0x000000000000007F); //issue #108
+				if (event->cpl_byte_count <= 128) 
+					event->cpl_size = event->cpl_byte_count;
+				else if (event->cpl_byte_count >= 256)
+					event->cpl_size = 256;
+			     	     else
+					event->cpl_size = 128;
+				if ((event->cpl_laddr & 0x7f) !=0) {
+					not_128B_aligned = 1;
+					event->cpl_size = 0x0080 - event->cpl_laddr;
+				debug_msg("%s:DMA0 CPL BUS WRITE NOT 128B ALIGNED 1ST XFER and cpl_laddr=%03x and cpl_byte_count=0x%03x and utag=0x%x", 
+						cmd->afu_name, event->cpl_laddr, event->cpl_byte_count, event->utag);
+				 } else not_128B_aligned = 0;
+				 event->data_offset = 0;  //set this up @head of data buffer initially
 			}
 			debug_msg(" event->state = 0x%x and utag = 0x%x and cpl_byte_count=0x%x", event->state, event->utag, event->cpl_byte_count);
-			if (event->cpl_byte_count <= 128) { // Single cycle single completion flow
-				event->cpl_type = 0; //always 0 for read up to 128bytes
-				event->cpl_size = event->cpl_byte_count;
-				//event->cpl_byte_count = event->dsize;
-				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
+
+			event->cpl_type = 0; //always 0 for first cpl - could be any size, any alignment 
+			if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->data_offset, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-				                debug_msg( "%s:DMA0 req <= 128 bytes: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr = 0x%8x",
-							   cmd->afu_name,
-							   event->cpl_size,
-							   event->utag,
-							   event->cpl_laddr );
-						int line = 0;
-						for (quadrant = 0; quadrant < 4; quadrant++) {
-							DPRINTF("DEBUG: Q%d 0x", quadrant);
-							for (byte = line; byte < line+32; byte++) {
+				                debug_msg( "%s:DMA0: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr = 0x%8x",
+							   cmd->afu_name, event->cpl_size,event->utag, event->cpl_laddr );
+							DPRINTF("DEBUG: TYPE 0 Data 0x");
+							for (byte = event->data_offset; byte < (event->cpl_size + event-> data_offset); byte++) {
 								DPRINTF("%02x", event->data[byte]);
 							}
 							DPRINTF("\n");
-							line +=32;
-						}
+				}
+			if (not_128B_aligned == 1) { // just do once, now clear flag.
+				event->data_offset += event->cpl_size;
+				event->cpl_laddr += event->cpl_size;
+				event->cpl_byte_count -= event->cpl_size;
+				if (event->cpl_byte_count <= 128)
+					event->cpl_size = event->cpl_byte_count;
+				else if (event->cpl_byte_count >= 256)
+					event->cpl_size = 256;
+				     else
+					event->cpl_size = 128;
+				event->state = DMA_CPL_PARTIAL;
+				debug_msg( "%s:DMA0: AFTER NON_128B ALIGNED BUS WRITE: next cpl_size=0x%04x cpl_byte_count= 0x%4x laddr = 0x%8x",
+							   cmd->afu_name, event->cpl_size,event->cpl_byte_count, event->cpl_laddr );
+				not_128B_aligned = 0;
+				event->bus_lock = 1;
+			} else if (event->cpl_byte_count <= 128) { // Single cycle single completion flow
 					event->resp = PSL_RESPONSE_DONE;
-					//event->state = DMA_CPL_SENT;
 					event->state = MEM_DONE;
 					event->cpl_xfers_to_go = 0; // Make sure this is cleared at end of xfer
-				}
-			} else	if (event->cpl_byte_count <= 512) { //Multi cycle single completion flow
-			                // 128 < dsize <= 256 implies multi cycle single completion
-			                // 256 < dsize <= 512 implies multi cycle multi completion
-			                // there could be up to 4 passes through this code - need to track where we are in data and dsize
-			                // maybe a cpl chunk pointer? or cpl bytes sent counter?
-
-					event->cpl_xfers_to_go = 1; //will stay set to 1 until byte count= cpl_size
-					event->cpl_type = 0; //always 0 for first xfer of 128bytes
-					if (event->cpl_byte_count < 256)
-						event->cpl_size = event->cpl_byte_count;
-					else
+					event->bus_lock = 0;
+					debug_msg("%s:DMAO CPL BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, 
+							cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
+			} else { //Multi cycle single completion flow. 128 < dsize <= 256 or 256 < dsize <= 512
+					if (event->cpl_byte_count  >= 256)  {
 						event->cpl_size = 256;
-					//event->cpl_byte_count = event->dsize;
-					//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-					if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
-						event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
-						event->data) == PSL_SUCCESS) {
-							debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE: cpl_size=0x%04x utag=0x%02x laddr= 0x%8x", cmd->afu_name,
-								   event->cpl_size,
-								   event->utag ,
-							           event->cpl_laddr );
-							int line = 0;
-							uint16_t line_offset = 0 ;
-							if (event->cpl_byte_count == event->cpl_size)
-								line_offset = 0x100;
-							for (quadrant = 0; quadrant < 4; quadrant++) {
-								DPRINTF("DEBUG: Q%d 0x", quadrant);
-								for (byte = line; byte < line+32; byte++) {
-									DPRINTF("%02x", event->data[byte + line_offset]);
-								}
-								DPRINTF("\n");
-								line +=32;
-							}
+						event->cpl_xfers_to_go = 1;  //next xfer will be type 1
+					} else {
+						event->cpl_byte_count -=128;
+						if (event->cpl_byte_count < 128)
+							event->cpl_size = event->cpl_byte_count;
+						event->cpl_laddr += 128; }
+					event->data_offset += 128;
+					// laddr gets incremented after type 1 xfer for bc >= 256
 					event->state = DMA_CPL_PARTIAL;
 					event->bus_lock = 1;
 					}
-			} else
-			        error_msg ("ERROR: REQ FOR DMA xfer > 512B we should not be here!!!");
-		} else  {  //  second pass thru
-				event->cpl_type = 1; //1 for last cycle, nothing valid but cpl_type, data and utag
-				// psl_dma0_cpl_bus_write will make adjustments to correct cpl_size & laddr
-				//event->cpl_size = event->dsize; <<<<---THIS IS NOT RIGHT
-				//event->cpl_byte_count = event->dsize; <<<<<---THIS MAY NOT BE RIGHT EITHER
-				//event->cpl_laddr = (uint32_t) (event->addr & 0x00000000000003FF);
-				event->cpl_laddr = (uint32_t) (event->addr & 0x000000000000007F);  //issue #108
-				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->dsize, event->cpl_type,
+		} else  {  // cpl_xfers_to_go = 1; type 1 pass thru and cpl_size always 128
+				event->cpl_type = 1; //, nothing valid but cpl_type, data and utag
+				event->cpl_laddr = (uint32_t) (event->cpl_laddr & 0x000000000000007F);  //issue #108, not sure its needed here
+				//event->data_offset got incremented by 128 at end of previous type 0 
+				if (psl_dma0_cpl_bus_write(cmd->afu_event, event->utag, event->data_offset, event->cpl_type,
 					event->cpl_size, event->cpl_laddr, event->cpl_byte_count,
 					event->data) == PSL_SUCCESS) {
-						debug_msg( "%s:DMA0  128 bytes < req <= 512 bytes: CPL BUS WRITE B: size=0x%04x utag=0x%02x, laddr= 0x%8x", cmd->afu_name,
-							   event->dsize,
-							   event->utag ,
-							   event->cpl_laddr );
-						int line = 128;
+						debug_msg( "%s:DMA0 128 bytes < req <= 512 bytes: CPL BUS WRITE TYPE 1: cpl_size=0x%04x utag=0x%02x, laddr= 0x%8x", 
+								cmd->afu_name, event->cpl_size, event->utag, event->cpl_laddr );
+						int line = event->data_offset;
 						for (quadrant = 0; quadrant < 4; quadrant++) {
 							DPRINTF("DEBUG: Q%d 0x", quadrant);
 							for (byte = line; byte < line+32; byte++) {
@@ -1231,25 +1225,25 @@ void handle_dma0_read(struct cmd *cmd)
 				}
 				if (event->cpl_byte_count == event->cpl_size) {  //this was last transfer
 					event->resp = PSL_RESPONSE_DONE;
-					//event->state = DMA_CPL_SENT;
 					event->state = MEM_DONE;
 					event->bus_lock = 0;
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
-				// be sure to unlock the DMA bus after this gets loaded into afu_event struct TODO
-					debug_msg("%s:DMAO CPL BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
+					debug_msg("%s:DMAO CPL BUS_WRITE FINISHED for utag=0x%x cpl_byte_cnt=0x%x cpl_size=0x%x addr=0xx%016"PRIx64, 
+							cmd->afu_name, event->utag, event->cpl_byte_count, event->cpl_size, event->addr);
 					}
 				else  { //dec byte count, inc addr for next transfer
-					// event->cpl_xfers_to_go should still be 1 from original setting
 					event->cpl_byte_count -= 256;
+					event->data_offset += 128; 
 					if (event->cpl_byte_count <= 128)// last transfer will be single cycle
 						event->cpl_size = event->cpl_byte_count;
 					event->cpl_laddr += 256;
 					event->cpl_laddr = (event->cpl_laddr & 0x0000007F);  //issue #108
 					event->cpl_xfers_to_go = 0; // Make sure to clear this at end of transfer
-					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x and utag=0x%x", cmd->afu_name,
-						event->cpl_size, event->cpl_laddr, event->cpl_byte_count, event->utag);
+					debug_msg("%s:DMA0 CPL BUS WRITE NEXT XFER cpl_size=0x%02x and cpl_laddr=%03x and cpl_byte_count=0x%03x and utag=0x%x",
+						       	cmd->afu_name, event->cpl_size, event->cpl_laddr, event->cpl_byte_count, event->utag);
 				}
 		}
+		//end of new block
 	}
 
 	if (event->state != DMA_OP_REQ)

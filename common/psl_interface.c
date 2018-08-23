@@ -499,7 +499,7 @@ psl_buffer_write(struct AFU_EVENT *event,
 int
 psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		 uint32_t utag,
-		 uint32_t dsize,
+		 uint32_t data_offset,
 		 uint32_t cpl_type,
 		 uint32_t cpl_size, 
 		 uint32_t cpl_laddr,
@@ -517,25 +517,21 @@ psl_dma0_cpl_bus_write(struct AFU_EVENT *event,
 		event->dma0_completion_laddr = cpl_laddr;
 		event->dma0_completion_byte_count = cpl_byte_count;
 		//printf(" IN PSL_DMA0_CPL_BUS_WRITE and cpl_laddr is ox%3x and cpl_byte_count is 0x%3x\n", cpl_laddr, cpl_byte_count);
-		// is this a multi cycle transaction? check cpl_byte_count
-		if (cpl_byte_count > 128)   {
-			if ((384 < dsize) && (dsize <= 512) && (cpl_size == cpl_byte_count))  { // our second multi cycle completion pass
-				if (cpl_type == 0)
-					memcpy(event->dma0_completion_data, &(write_data[256]), 128);
-				if (cpl_type == 1)
-					memcpy(event->dma0_completion_data, &(write_data[384]), cpl_size - 128);
-			} else {  // our first multi cycle completion (128 < dsize <= 384)
-				if (cpl_type == 0)
-					memcpy(event->dma0_completion_data, write_data, 128);
-				if (cpl_type == 1)
-					memcpy(event->dma0_completion_data, &(write_data[128]), cpl_size - 128);
-				}
-		} else  {	// cpl_byte_count <= 128 so just single cycle (128 <= dsize OR last compl for <= 384B )
-				if (dsize > 256)
-					memcpy(event->dma0_completion_data, &(write_data[256]), cpl_size);
+		switch (cpl_type)
+		{
+			case 4:	memcpy(event->dma0_completion_data, write_data, 16);
+				break;
+			case 3: // TODO we don't yet generate PCI errors, but if we ever do, we'll use this 
+			case 2:
+				break;
+			case 1:
+			case 0:	if (cpl_size < 128) 
+					memcpy(event->dma0_completion_data, &(write_data[data_offset]), cpl_size);
 				else
-					memcpy(event->dma0_completion_data, write_data, cpl_size);
-			}
+					memcpy(event->dma0_completion_data, &(write_data[data_offset]), 128);
+				break;
+		}
+
 		return PSL_SUCCESS;
 	}
 }
@@ -757,13 +753,9 @@ int psl_signal_afu_model(struct AFU_EVENT *event)
 		event->tbuf[bp++] = ((event->dma0_completion_byte_count >> 8) | 
 					((event->dma0_completion_laddr & 0x0300) >> 4));
 		//printf("event->tbuf[%x] is 0x%2x \n", bp-1, event->tbuf[bp-1]);
-		if (event->dma0_completion_byte_count > 128)   {
-			if (event->dma0_completion_type == 0)
-				bytes_to_xfer = 128;
-			if (event->dma0_completion_type == 1)
-				bytes_to_xfer = (event->dma0_completion_size - 128);
-		} else  // cpl_byte_count <= 128 so just single cycle
-			bytes_to_xfer = event->dma0_completion_size;
+		if (event->dma0_completion_size == 256)  
+	       		bytes_to_xfer = 128;
+		else	bytes_to_xfer = event->dma0_completion_size;
 		for (i = 0; i < bytes_to_xfer; i++) {
 			event->tbuf[bp++] = event->dma0_completion_data[i];
 		//printf("x%2x ",  event->tbuf[bp-1]);
