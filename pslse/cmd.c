@@ -456,6 +456,25 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 	case PSL_COMMAND_INTREQ:
 		_add_interrupt(cmd, handle, tag, command, abort, irq);
 		break;
+#ifdef PSL9D
+	case PSL_COMMAND_READ_PE:	
+		_add_read_pe(cmd, handle, tag, command, abort, addr, size);
+		break;
+
+	case PSL_COMMAND_XLAT_RD_P0:
+	case PSL_COMMAND_XLAT_WR_P0:
+	case PSL_COMMAND_XLAT_RD_TOUCH:
+	case PSL_COMMAND_XLAT_WR_TOUCH:
+	case PSL_COMMAND_ITAG_ABRT_RD:
+	case PSL_COMMAND_ITAG_ABRT_WR:
+		_add_caia2(cmd, handle, tag, command, abort,addr);
+		break;
+
+	default:error_msg("parse_cmd: FATAL ERROR - Unsupported command 0x%04x", command);
+
+#endif
+#ifndef PSL9D
+
 		// Restart
 	case PSL_COMMAND_RESTART:
 		_add_other(cmd, handle, tag, command, abort, PSL_RESPONSE_DONE);
@@ -570,10 +589,11 @@ static void _parse_cmd(struct cmd *cmd, uint32_t command, uint32_t tag,
 		break;
 #endif /* ifdef PSL9 */
 	default:
-		warn_msg("parse_cmd: Unsupported command 0x%04x", cmd);
+		warn_msg("parse_cmd: Unsupported command 0x%04x", command);
 		_add_other(cmd, handle, tag, command, abort,
 			   PSL_RESPONSE_FAILED);
 		break;
+#endif /*ifndef PSL9D */
 	}
 }
 

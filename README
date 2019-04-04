@@ -5,11 +5,13 @@
 
 *** ATTENTION ATTENTION ATTENTION ATTENTION ***
 
-PSLSE now supports either the Power8 implementation of PSL or the Power9 implementation
+PSLSE now supports either the Power8 implementation of PSL or TWO versions of the Power9 implementation
 of PSL.  This is controlled by environment variable PSLVER:
 
 PSLVER=8 causes us to compile for the Power8 implementation
 PSLVER=9 causes us to compile for the Power9 implementation
+PSLVER=D causes us to compile for the Power9 implementation with ONLY
+	the DMA interface for data transfers (ie, no data buffer interface)
 
 You must also pass a define into the verilog compile for top.v!
 

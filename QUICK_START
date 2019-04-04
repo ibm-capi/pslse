@@ -8,6 +8,9 @@ Ensure that the following environment variable setting is done based on the usag
 	export PSLVER=8
 	for PSL9 based AFU verification, ensure that (for kshell windows) all xterms have this setting:
 	export PSLVER=9
+	for PSL9 based AFU verification with ONLY DMA data transfer interface (ie, buffer interface isn't
+	available for data transfers), ensure that (for kshell windows) all xterms have this setting:
+	export PSLVER=D
 
 SETUP:
 
