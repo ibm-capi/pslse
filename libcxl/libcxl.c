@@ -283,6 +283,7 @@ static void _handle_write(struct cxl_afu_h *afu, uint64_t addr, uint16_t size,
 	memcpy((void *)addr, data, size);
 	buffer = PSLSE_MEM_SUCCESS;
 	if (put_bytes_silent(afu->fd, 1, &buffer) != 1) {
+		warn_msg("ERROR: _handle_write: memory write acknowledgement for addr @ 0x%016" PRIx64, addr);
 		afu->opened = 0;
 		afu->attached = 0;
 	}
