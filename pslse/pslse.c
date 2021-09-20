@@ -582,15 +582,19 @@ int main(int argc, char **argv)
 	if (!shim_host_path) shim_host_path = "shim_host.dat";
 	afu_map = parse_host_data(&psl_list, parms, shim_host_path, &lock, fp);
 	if (psl_list == NULL) {
+		pthread_mutex_unlock(&lock);
 		free(parms);
 		fclose(fp);
+		pthread_mutex_destroy(&lock);
 		warn_msg("Unable to connect to any simulators");
 		return -1;
 	}
 	// Start server
 	if ((listen_fd = _start_server()) < 0) {
+		pthread_mutex_unlock(&lock);
 		free(parms);
 		fclose(fp);
+		pthread_mutex_destroy(&lock);
 		return -1;
 	}
 	// Watch for client connections
