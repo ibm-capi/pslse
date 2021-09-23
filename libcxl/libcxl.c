@@ -2039,7 +2039,7 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 	rc = put_bytes_silent(afu->fd, 1, &buffer);
 	if (rc == 1) {
 	        debug_msg("detach request sent from from host on socket %d", afu->fd);
-		while ((afu->attached) && (loop_count < 180000)) {	/*infinite loop changed to a 10minute timeout */
+		while ((afu->attached) && (loop_count < 180000)) {	/*infinite loop changed to a 3 minute timeout */
 			_delay_1ms();
 			loop_count = loop_count + 1;
 		}
