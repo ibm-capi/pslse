@@ -2043,6 +2043,8 @@ void cxl_afu_free(struct cxl_afu_h *afu)
 			_delay_1ms();
 			loop_count = loop_count + 1;
 		}
+                if(loop_count == 180000)
+		   fatal_msg("_afu_free: time out of 3s reached");
 	}
 	debug_msg("closing host side socket %d", afu->fd);
 	close_socket(&(afu->fd));
